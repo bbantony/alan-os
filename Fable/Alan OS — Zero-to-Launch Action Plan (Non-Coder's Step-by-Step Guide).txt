@@ -1,0 +1,164 @@
+# ALAN OS — ZERO-TO-LAUNCH ACTION PLAN
+
+**The complete, standalone guide for a non-programmer. Companion to "Alan OS — Master Handoff Document" (= your SPEC.md). Follow top to bottom. No further consulting needed.**
+
+* * *
+
+## STEP 0 — Understand the model (5 min)
+
+You are not going to write code. You are going to be the **project manager** of an AI employee (a "coding agent") that writes, tests, and deploys all code. Your job: give it the spec, approve its work phase by phase, test on your phone, and keep it disciplined. The two documents you own:
+
+*   **SPEC.md** = the Master Handoff Document (what to build)
+    
+*   **This plan** = how you personally get from nothing to launched
+    
+
+* * *
+
+## STEP 1 — Choose your coding agent (Day 0)
+
+Ranked for a non-coder, best bang for buck:
+
+1.  **Claude Code + Claude Pro subscription (~$27 CAD/mo)** ← RECOMMENDED. Terminal-based agent: it creates files, installs software, runs tests, fixes its own errors, and walks you through every manual step. Best instruction-following for a strict spec like yours. **Treat it as a temporary build expense: subscribe for ~2 months, build everything, cancel. Total ≈ $55 CAD one-time.**
+    
+2.  **Gemini CLI (free tier)** — genuinely capable and $0, but expect more errors you'll have to paste back to it. Good fallback or for post-launch tweaks after you cancel Claude Pro.
+    
+3.  Avoid for this project: Lovable/Replit/Bolt (costs balloon on multi-phase apps), and plain chat models where you copy-paste code by hand (misery for a non-coder).
+    
+
+* * *
+
+## STEP 2 — Create your accounts (Day 1, ~30 min, all free)
+
+Do in this order. Save every password/key in a password manager (Bitwarden is free).
+
+1.  **GitHub** (github.com) — code backup/history.
+    
+2.  **Supabase** (supabase.com) → New project → name `alan-os` → strong DB password → region: US East or Central. Then Project Settings → API → copy the **Project URL**, **anon key**, and **service_role key** somewhere safe.
+    
+3.  **Vercel** (vercel.com) → sign up **using your GitHub account** (this links them automatically).
+    
+4.  **AI API key** for the app's in-app AI features (receipts, briefings): Google AI Studio (aistudio.google.com — Gemini Flash, has a free tier, cheapest) or Anthropic console (Haiku). **Immediately set a $10/month spending cap in the billing settings.** This key is separate from your coding agent subscription.
+    
+
+## STEP 3 — Set up your computer (Day 1, ~30 min)
+
+Pick ONE machine to build on (the Mac is slightly easier; Windows works fine too).
+
+1.  Install **Node.js** (nodejs.org — LTS version, click through installer).
+    
+2.  Install **Git** (git-scm.com — accept all defaults).
+    
+3.  Install your coding agent per its website instructions (Claude Code: one terminal command shown on its docs page).
+    
+4.  Make a folder, e.g. `Documents/alan-os`.
+    
+5.  Copy the ENTIRE Master Handoff Document into a file named `SPEC.md` inside that folder. (Open TextEdit/Notepad → paste → save as SPEC.md, plain text.)
+    
+
+## STEP 4 — Kick off Phase 0 (Day 1–2)
+
+Open the terminal in your folder, start the agent, and paste the Part I prompt from SPEC.md:
+
+> Read SPEC.md in this folder completely before doing anything. I am non-technical — explain every step in plain English and never assume I can read code. Execute Phase 0 only... [full prompt in SPEC.md Part I]  
+> The agent will build, then pause to ask you for the Supabase keys and to click things in dashboards — it gives numbered instructions; just follow them. Phase 0 ends with a live URL and the app installed on your phone.
+
+## STEP 5 — Repeat for every phase (Weeks 1–8)
+
+Start every session with exactly:
+
+> Read SPEC.md. Phase N is complete and deployed. Execute Phase N+1 only. Do not modify completed features.  
+> After each phase: test on your phone → tell the agent "commit this to GitHub with a clear message" → confirm the live URL updated → stop for the day.
+
+* * *
+
+## REALISTIC TIMELINE (5–8 hrs/week alongside a new job)
+
+| When | What | Milestone |
+| --- | --- | --- |
+| Weekend 1 | Phase 0 (foundation/design) + Phase 1 (shopping, tasks, dashboard) | App on your phone; using it Monday |
+| Week 2 | Phase 2 (workout module) | The boys onboarded; WhatsApp screenshots dead |
+| Week 3 | Phase 3 (reminders + Google Calendar + day planner) | Alan OS wakes you up to a plan |
+| Weeks 4–5 | Phase 4 (finance core: logging, budgets, goals, debts, INR) | Every dollar tracked from first paychecks |
+| Week 6 | Phase 5 (receipt scanning + CSV import) | Flagship AI feature live |
+| Week 7 | Phase 6 (journal, vinyl, /frame wall display) | Photo-a-day habit starts |
+| Week 8 | Phase 7 (quick capture, briefings, month-in-review) | Full Alan OS. Cancel Claude Pro. |
+| Buffer honestly: expect some phases to take 2 sessions. **Total: 6–10 weeks.** Phase 8 (Polar/Fitbit sync, friends' full instances) is whenever-you-feel-like-it, doable on Gemini CLI free. |  |  |
+
+## FULL COST PICTURE (CAD)
+
+**One-time build:** Claude Pro ~$27 × 2 months ≈ **$55** (or $0 with Gemini CLI + patience)  
+**Monthly forever:** Vercel $0 + Supabase $0 + AI API $3–6 + domain optional ~$1.50 ≈ **$5–8/mo** ✅ under your $10–15 ceiling  
+**Optional hardware later:** used Android tablets for wall displays, ~$40–60 each.
+
+* * *
+
+## TIPS & TRICKS (the consultant's cheat sheet)
+
+**Talking to the agent**
+
+*   When anything errors: copy the ENTIRE error message, paste it, say "fix this." That's it. That's debugging.
+    
+*   Never say "improve it" or "make it better" — vague requests cause rewrites that break things. Say exactly what you see: "the save button does nothing on my phone."
+    
+*   Design feedback: take a screenshot, describe precisely ("too cramped, headings should be bigger, more whitespace like Swiss posters"). Agents follow visual critique well.
+    
+*   If it asks you to choose between technical options and you don't understand: reply "choose whatever best matches SPEC.md and explain your choice in one sentence."
+    
+*   If a session goes sideways (it's confused, going in circles): stop, say "roll back to the last git commit," close, start a fresh session. Fresh sessions fix 90% of agent weirdness.
+    
+
+**Discipline (protects you from the #1 failure mode)**
+
+*   ONE phase per session. When the agent offers extras — "want me to also add analytics?" — the answer is **no**.
+    
+*   Never let it "temporarily disable RLS" or "simplify auth for now." Those are security holes in disguise. Reply: "No. Follow SPEC.md Part B2."
+    
+*   Commit to GitHub after EVERY working feature. It's your undo button for life.
+    
+*   Don't polish Phase 1 pixels while Phase 4 doesn't exist. Ship the whole loop first, beautify forever after.
+    
+
+**Habits that make the app stick (the real point)**
+
+*   Start using each module the DAY it ships, even half-finished. Usage reveals what to fix.
+    
+*   Get the boys in immediately after Phase 2 — their reactions/streaks become YOUR motivation engine.
+    
+*   Log expenses at the till, not at night. Set the photo-diary reminder for a time you're actually home.
+    
+*   After your first paycheck, set the budget anchor day and build your first weekly budget that same day.
+    
+
+**Ops & safety**
+
+*   Set spending caps on the AI API billing page ($10/mo) — do this before anything else.
+    
+*   Supabase free projects pause after ~1 week of inactivity; daily use prevents it (SPEC.md includes a keep-alive ping anyway).
+    
+*   Once a month: Supabase dashboard → Database → Backups → download one. Two minutes for total peace of mind.
+    
+*   If the live site breaks: Vercel dashboard → Deployments → three-dot menu on the last working one → "Promote to Production." Instant rollback, no agent needed.
+    
+*   Never share the `service_role` key or commit keys to GitHub — the agent knows this, but if it ever prints a key in code, tell it "move that to environment variables."
+    
+
+**When you need AI help post-launch (without expensive models)**
+
+*   Small fixes/tweaks: Gemini CLI free tier with the same "Read SPEC.md first" opener.
+    
+*   Keep SPEC.md updated: after any meaningful change, tell the agent "update SPEC.md to reflect this change" — so ANY future model can pick up where the last left off. Your spec is the institutional memory, not any particular AI.
+    
+
+## COMMON PITFALLS (ranked by likelihood)
+
+1.  **Scope creep** — new ideas mid-phase. Write them in a `LATER.md` file instead; revisit after Phase 7.
+    
+2.  **Skipping phone testing** — the desktop preview lies; always test the installed PWA on Android.
+    
+3.  **Marathon sessions** — agents degrade in very long sessions. 1–2 hours, commit, quit while ahead.
+    
+4.  **Forgetting why** — this isn't a coding project; it's a life-habits project with an app attached. The streaks, the budget, the photo-a-day only work if YOU show up daily. The app is the easy part.
+    
+
+**Definition of done:** you wake up, Alan OS tells you your day, you log a coffee in 5 seconds, the boys have reacted to your push day, your budget bar is green, and tonight you'll snap a photo and rate a record. Ship that. 🟢

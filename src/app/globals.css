@@ -1,0 +1,247 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ---------- Palettes (generated from src/lib/palettes.ts via scripts/gen-palette-css.mjs) ---------- */
+
+:root, :root[data-palette="british-racing-green"] {
+  --background: #FAF7F2;
+  --surface: #FFFFFF;
+  --foreground: #14140F;
+  --primary: #004225;
+  --primary-foreground: #FAF7F2;
+  --accent: #C1662F;
+  --accent-foreground: #FAF7F2;
+  --muted: #EFE9DE;
+  --muted-foreground: #5B5C51;
+  --border: #E2DACB;
+}
+
+.dark, .dark[data-palette="british-racing-green"] {
+  --background: #0B120E;
+  --surface: #121A15;
+  --foreground: #F3F1E9;
+  --primary: #2E7D52;
+  --primary-foreground: #0B120E;
+  --accent: #D98A50;
+  --accent-foreground: #0B120E;
+  --muted: #1B241D;
+  --muted-foreground: #9CA69B;
+  --border: #233028;
+}
+
+:root[data-palette="navy-cream"] {
+  --background: #FAF6EC;
+  --surface: #FFFFFF;
+  --foreground: #161A24;
+  --primary: #1B2A4A;
+  --primary-foreground: #FAF6EC;
+  --accent: #D9A441;
+  --accent-foreground: #161A24;
+  --muted: #EFE7D3;
+  --muted-foreground: #5B5F6B;
+  --border: #E1D7BC;
+}
+
+.dark[data-palette="navy-cream"] {
+  --background: #0B0E16;
+  --surface: #121728;
+  --foreground: #F2EFE3;
+  --primary: #4A6491;
+  --primary-foreground: #0B0E16;
+  --accent: #E0B15C;
+  --accent-foreground: #0B0E16;
+  --muted: #1A2032;
+  --muted-foreground: #9AA0AE;
+  --border: #232B41;
+}
+
+:root[data-palette="burgundy-sand"] {
+  --background: #F7EFE3;
+  --surface: #FFFFFF;
+  --foreground: #1E1416;
+  --primary: #6B1E2B;
+  --primary-foreground: #F7EFE3;
+  --accent: #C99A5B;
+  --accent-foreground: #1E1416;
+  --muted: #EEE1CB;
+  --muted-foreground: #645449;
+  --border: #E2CFA9;
+}
+
+.dark[data-palette="burgundy-sand"] {
+  --background: #150B0D;
+  --surface: #1E1215;
+  --foreground: #F5ECE0;
+  --primary: #9C4655;
+  --primary-foreground: #150B0D;
+  --accent: #D4AD70;
+  --accent-foreground: #150B0D;
+  --muted: #271A1D;
+  --muted-foreground: #AE9A8E;
+  --border: #33242A;
+}
+
+:root[data-palette="charcoal-ice"] {
+  --background: #F3F6F8;
+  --surface: #FFFFFF;
+  --foreground: #171A1C;
+  --primary: #2B2E33;
+  --primary-foreground: #F3F6F8;
+  --accent: #5FA8D3;
+  --accent-foreground: #0E1216;
+  --muted: #E6EBEF;
+  --muted-foreground: #565D64;
+  --border: #D8E0E6;
+}
+
+.dark[data-palette="charcoal-ice"] {
+  --background: #0D0F11;
+  --surface: #16191C;
+  --foreground: #EDF1F4;
+  --primary: #9AA0A8;
+  --primary-foreground: #0D0F11;
+  --accent: #7EC1E8;
+  --accent-foreground: #0D0F11;
+  --muted: #1D2124;
+  --muted-foreground: #9BA3AA;
+  --border: #262B2F;
+}
+
+:root[data-palette="forest-moss"] {
+  --background: #F5F3EA;
+  --surface: #FFFFFF;
+  --foreground: #16190F;
+  --primary: #2F4F3E;
+  --primary-foreground: #F5F3EA;
+  --accent: #8A9A5B;
+  --accent-foreground: #16190F;
+  --muted: #E9E6D6;
+  --muted-foreground: #5B5F4D;
+  --border: #DCD7BE;
+}
+
+.dark[data-palette="forest-moss"] {
+  --background: #0C1210;
+  --surface: #141C17;
+  --foreground: #F0F1E6;
+  --primary: #5C8069;
+  --primary-foreground: #0C1210;
+  --accent: #A3B478;
+  --accent-foreground: #0C1210;
+  --muted: #1C2620;
+  --muted-foreground: #9AA491;
+  --border: #25302A;
+}
+
+:root[data-palette="terracotta-bone"] {
+  --background: #F6F1EA;
+  --surface: #FFFFFF;
+  --foreground: #1B1613;
+  --primary: #A64B2A;
+  --primary-foreground: #F6F1EA;
+  --accent: #1F6F6B;
+  --accent-foreground: #F6F1EA;
+  --muted: #ECE2D5;
+  --muted-foreground: #63584F;
+  --border: #DFD0BE;
+}
+
+.dark[data-palette="terracotta-bone"] {
+  --background: #140F0C;
+  --surface: #1D1613;
+  --foreground: #F4ECE3;
+  --primary: #C97A54;
+  --primary-foreground: #140F0C;
+  --accent: #4FA39E;
+  --accent-foreground: #140F0C;
+  --muted: #271E19;
+  --muted-foreground: #AB9C8F;
+  --border: #33261F;
+}
+
+/* ---------- Typography, density & other tokens shared by every palette ---------- */
+
+:root {
+  --radius: 0.625rem;
+  --font-scale: 1;
+  --density-scale: 1;
+
+  /* shadcn-style aliases mapped onto our own token names above */
+  --card: var(--surface);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --input: var(--border);
+  --ring: var(--primary);
+  --destructive: #B3261E;
+  --destructive-foreground: #FAF7F2;
+}
+
+.dark {
+  --destructive: #E2564B;
+  --destructive-foreground: #0B120E;
+}
+
+:root[data-font-size="sm"] { --font-scale: 0.9375; }
+:root[data-font-size="md"] { --font-scale: 1; }
+:root[data-font-size="lg"] { --font-scale: 1.0625; }
+
+:root[data-density="compact"] { --density-scale: 0.8; }
+:root[data-density="comfortable"] { --density-scale: 1; }
+
+:root[data-heading-font="space-grotesk"] { --font-heading: var(--font-space-grotesk); }
+:root[data-heading-font="archivo"] { --font-heading: var(--font-archivo); }
+:root[data-heading-font="fraunces"] { --font-heading: var(--font-fraunces); }
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: var(--font-inter);
+  --font-heading: var(--font-space-grotesk);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  font-size: calc(16px * var(--font-scale));
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), var(--font-sans), ui-sans-serif, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

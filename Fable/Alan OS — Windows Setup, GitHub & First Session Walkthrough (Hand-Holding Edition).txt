@@ -1,0 +1,187 @@
+# ALAN OS — WINDOWS SETUP & FIRST SESSION WALKTHROUGH
+
+**For a total non-coder. Read once fully, then follow top to bottom. Companion to: "Master Handoff Document" (your SPEC.md) and "Zero-to-Launch Action Plan".**
+
+* * *
+
+## PART 1 — MEET YOUR SOFTWARE STACK (what each thing is and does)
+
+Think of building Alan OS like constructing a house:
+| Software | What it actually is | House analogy | You interact with it? |
+| --- | --- | --- | --- |
+| **Windows Terminal / PowerShell** | A text window where you type commands. Already on your PC. | The job site where you talk to your builder | Yes — you type ~3 commands ever |
+| **Node.js** | The engine that runs JavaScript on your computer. Next.js needs it. | Power supply for the tools | No — install once, forget |
+| **Git** | Version-control: takes "snapshots" (commits) of your code so you can rewind anytime | A time machine for the blueprints | No — the agent uses it for you |
+| **GitHub** | Website that stores your Git snapshots in the cloud | Fireproof safe for the blueprints | Rarely — mostly to admire history |
+| **GitHub Desktop** | A friendly visual app to SEE your Git history without commands | A window into the safe | Yes — this is your progress viewer |
+| **Claude Code (agent)** | The AI builder. Lives in the terminal. Writes/tests/fixes all code | The contractor who does everything | Yes — this is who you talk to |
+| **VS Code** (optional) | A code editor. You won't edit code, but it's a nice way to open the folder and read SPEC.md / PROGRESS.md | A viewing gallery | Optional |
+| **Supabase** | Cloud service holding your DATABASE (all data), user LOGINS, and FILE STORAGE (photos/receipts) | The vault + filing system | Sometimes — to peek at your data in tables |
+| **Vercel** | Cloud service that RUNS the live app 24/7 and gives you the URL. Auto-updates whenever GitHub gets new code | The land the house sits on, with self-rebuilding walls | Sometimes — dashboard shows deployments |
+| **AI API key** (Google AI Studio or Anthropic) | Pay-per-use brain the APP itself calls for receipt scanning/briefings. Separate from Claude Code | The house's smart-home brain | Once — get key, set $10 cap |
+| **Your browser (Chrome)** | Where Alan OS runs; "Add to Home screen" installs it as an app | The finished house | Daily 🟢 |
+
+**The flow of everything:**  
+You talk to **Claude Code** → it writes code in your folder → saves snapshots with **Git** → pushes them to **GitHub** → **Vercel** sees the new code and redeploys the live app in ~1 min → the app talks to **Supabase** for all data → you use it at your URL on any device.
+
+* * *
+
+## PART 2 — SET UP YOUR WINDOWS PC (one time, ~45 min)
+
+Do these in order. Accept default options in every installer unless told otherwise.
+
+### 2.1 Install the tools
+
+1.  **Node.js** → nodejs.org → big green **LTS** button → run installer → Next-Next-Finish.
+    
+2.  **Git for Windows** → git-scm.com/download/win → run installer → accept ALL defaults (many screens; just keep clicking Next).
+    
+3.  **GitHub Desktop** → desktop.github.com → install → sign in with the GitHub account you'll create in 2.2.
+    
+4.  **VS Code** (optional but nice) → code.visualstudio.com.
+    
+5.  **Claude Code** → open the **Terminal** app (press Windows key, type "Terminal", open it) and type:  
+    `npm install -g @anthropic-ai/claude-code`  
+    then press Enter. (If this command fails, check docs.anthropic.com/claude-code for the current Windows install command — it changes occasionally.) You'll also need a **Claude Pro subscription** (claude.ai → upgrade) — the agent logs in with it.
+    
+
+### 2.2 Create your cloud accounts (all free)
+
+1.  **GitHub** → github.com → Sign up. Pick a username you like (e.g., `alan-winnipeg`).
+    
+2.  **Supabase** → supabase.com → sign up (easiest: "Continue with GitHub") → **New project** → name: `alan-os` → generate a strong database password and SAVE IT → Region: **US East** → Create. Wait ~2 min. Then: **Project Settings (gear) → API** → keep this page bookmarked; you'll copy the _Project URL_, _anon public key_, and _service_role key_ when the agent asks.
+    
+3.  **Vercel** → vercel.com → **"Continue with GitHub"** (critical — this links them so deploys are automatic).
+    
+4.  **AI key for the app's features** → aistudio.google.com → Get API key → save it → in billing settings set a **$10/month cap**.
+    
+
+### 2.3 Create the project folder + SPEC.md
+
+1.  Open File Explorer → Documents → make a folder: `alan-os`.
+    
+2.  Open the note "Alan OS — Master Handoff Document", copy ALL of it.
+    
+3.  Open **Notepad** → paste → File → Save As → navigate to `Documents\alan-os` → File name: `SPEC.md` → "Save as type": **All Files** (not .txt!) → Save.
+    
+4.  (Recommended) Same way, create `LATER.md` containing just: "Ideas for after Phase 7:" — your scope-creep parking lot.
+    
+
+* * *
+
+## PART 3 — CONNECT GITHUB (the exact process)
+
+You do NOT create the repository manually — the agent does it. Here's what will happen and your part:
+
+1.  In your first session (Part 4), the agent will run `git init` in your folder (starts the time machine locally).
+    
+2.  It will ask to connect to GitHub. Easiest path: it will have you install/use the **GitHub CLI** and run `gh auth login` — a browser window opens, you click "Authorize", done. (If it offers alternatives, say: "use the simplest method and walk me through each click.")
+    
+3.  The agent then creates a **private repository** called `alan-os` under your account and pushes the code. Tell it explicitly: **"Make the GitHub repo PRIVATE."**
+    
+4.  Verify: go to github.com → your profile → Repositories → you should see `alan-os (Private)`.
+    
+5.  Open **GitHub Desktop** → File → Clone/Add existing repository → point it at `Documents\alan-os`. Now GitHub Desktop shows every snapshot the agent makes — this becomes your progress dashboard (see Part 5).
+    
+
+**Connecting Vercel to GitHub (after Phase 0 code exists):** the agent usually handles it via the Vercel CLI. If it asks you to do it manually: vercel.com → **Add New → Project** → Import `alan-os` from the GitHub list → Framework: Next.js (auto-detected) → add the environment variables the agent gives you (Settings → Environment Variables: SUPABASE_URL, SUPABASE_ANON_KEY, etc.) → **Deploy**. From then on, every GitHub push = automatic live update. You never repeat this.
+
+* * *
+
+## PART 4 — YOUR FIRST SESSION, SCRIPTED (kickstarting Claude Code)
+
+**Have ready before you start:** Supabase URL + anon key + service_role key (from the bookmarked API page), your AI API key, ~2 hours of time.
+
+1.  Open **Terminal**.
+    
+2.  Type: `cd Documents\alan-os` → Enter. (This means "go into my project folder.")
+    
+3.  Type: `claude` → Enter. First time: it walks you through logging in with your Claude account.
+    
+4.  Paste this kickoff message (your ONLY job is writing good instructions — here it is, ready-made):
+    
+
+> Read the file SPEC.md in this folder COMPLETELY before doing anything — it is the full specification for an app called Alan OS.  
+> About me: I am completely non-technical. I cannot read or write code. Explain everything in plain English, give me numbered click-by-click instructions for anything I must do manually, and never assume I can debug. Test everything yourself before telling me it works.  
+> Your tasks for this session, in order:
+> 
+> 1.  Initialize git in this folder and create a PRIVATE GitHub repository called alan-os, walking me through authentication.
+>     
+> 2.  Create a file called PROGRESS.md that lists all build phases from SPEC.md Part G as a checklist. After every completed feature, update it and commit to GitHub. This file is how I track the project.
+>     
+> 3.  Execute PHASE 0 ONLY as defined in SPEC.md Part G: project setup, Supabase connection (I have my keys ready — ask me when needed), auth with invite-code signup, roles, RLS baseline, PWA setup, the full design system from Part C, app shell with navigation, the Settings appearance editor, and deployment to Vercel.
+>     
+> 4.  Do NOT build any Phase 1+ features, even if easy. If you finish early, improve Phase 0 polish only.
+>     
+> 5.  When done: commit everything, confirm the live Vercel URL works, update PROGRESS.md, and give me numbered steps to install the app on my Android phone from Chrome.
+>     
+
+5.  **During the session, your three magic responses:**
+    *   It asks for keys → paste them.
+        
+    *   It shows an error or something looks broken → paste/describe the whole error, say **"fix this."**
+        
+    *   It asks a technical question you don't understand → **"Choose whatever best matches SPEC.md and explain your choice in one sentence."**
+        
+6.  Session end checklist: ✅ live URL opens on your phone ✅ app installed via Chrome → Add to Home screen ✅ GitHub Desktop shows commits ✅ PROGRESS.md shows Phase 0 checked.
+    
+
+**Every later session starts with exactly:**
+
+> Read SPEC.md and PROGRESS.md. Phase N is complete and deployed. Execute Phase N+1 ONLY. Same rules: plain English, test everything, update PROGRESS.md, commit to GitHub when done.
+
+* * *
+
+## PART 5 — HOW YOU TRACK EVERYTHING (non-coder's mission control)
+
+Your four dashboards — check them, never manage them:
+
+1.  **PROGRESS.md** (open in VS Code or Notepad, or view on github.com) — the master checklist the agent maintains. Your single source of "where are we."
+    
+2.  **GitHub Desktop → History tab** — every snapshot with plain-English messages ("Add workout PR detection"). Scrolling this = watching the house get built. If disaster strikes, this is where a rollback returns to.
+    
+3.  **Vercel dashboard** (vercel.com) — every deployment, timestamps, and a one-click "Promote to Production" on any older working version = instant undo for the live site.
+    
+4.  **Supabase dashboard → Table Editor** — SEE your actual data in spreadsheet form (your transactions, workouts, friends' accounts). Reassuring and occasionally useful. (Look, don't edit, unless the agent instructs.)  
+    Plus: **LATER.md** — every mid-build idea goes here instead of derailing a session. Review after Phase 7.
+    
+
+**Weekly 10-minute ritual (Sundays):** open PROGRESS.md → glance at GitHub Desktop history → open the app on your phone and test the newest feature → once a month, Supabase → Database → Backups → download one.
+
+* * *
+
+## PART 6 — GOLDEN RULES RECAP (print this bit mentally)
+
+1.  One phase per session. New ideas → LATER.md.
+    
+2.  Errors: paste the whole thing + "fix this."
+    
+3.  Never "improve it" — describe exactly what you see/want.
+    
+4.  Agent going in circles? → "Roll back to the last git commit." Close. Fresh session.
+    
+5.  Never allow: disabling RLS, "simplifying auth", public repo, keys written into code. Response: "No. Follow SPEC.md."
+    
+6.  Test on the PHONE after every phase, not just the computer preview.
+    
+7.  Keep sessions ≤2 hours. Commit and quit while you're ahead.
+    
+8.  After any design/feature change, tell the agent: "Update SPEC.md and PROGRESS.md to reflect this" — so any future (cheaper) AI can take over seamlessly.
+    
+
+## PART 7 — IF THINGS GO WRONG (triage card)
+
+*   **Live app broken:** Vercel → Deployments → previous good one → Promote to Production. Then tell the agent to fix at leisure.
+    
+*   **Agent hopelessly confused:** "roll back to the last git commit" → new session → re-give the phase instruction.
+    
+*   **Terminal command not found:** close and reopen Terminal (installs need a fresh window), retry.
+    
+*   **Supabase project paused (free tier, ~1 week inactivity):** dashboard → Restore. Daily use prevents it; SPEC.md includes a keep-alive ping.
+    
+*   **Costs creep:** check AI billing page; your $10 cap makes runaway spending impossible.
+    
+*   **Totally stuck and I'm gone:** open a FREE agent (Gemini CLI) in the same folder: "Read SPEC.md and PROGRESS.md, then help me fix: [problem]." The documents ARE the project's memory — any competent model can resume from them.
+    
+
+**You're set.** Terminal open → `cd Documents\alan-os` → `claude` → paste the kickoff prompt. That's the whole ignition sequence. 🟢🏁
