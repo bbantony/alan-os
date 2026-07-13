@@ -10,7 +10,7 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const dir = new URL("../supabase/migrations", import.meta.url);
+const dir = new URL("../supabase/migrations/", import.meta.url);
 const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
 
 const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
