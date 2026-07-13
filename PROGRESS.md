@@ -8,16 +8,16 @@ See `SPEC.md` for the full specification.
 ## Phase 0 — Foundation
 - [x] Repo initialized (Next.js App Router + TypeScript)
 - [x] Private GitHub repo created and pushed (github.com/bbantony/alan-os)
-- [ ] Supabase project connected
-- [ ] Auth: email/password + invite-code signup
-- [ ] `profiles` table + roles (owner | workout_member | full_user)
-- [ ] RLS baseline enabled
-- [ ] PWA: manifest, service worker, installable
+- [x] Supabase project connected (profiles table, RLS, migration via scripts/run-migration.mjs)
+- [x] Auth: email/password + invite-code signup
+- [x] `profiles` table + roles (owner | workout_member | full_user)
+- [x] RLS baseline enabled
+- [x] PWA: manifest, service worker, installable
 - [x] Full design system (Part C): colors, fonts, dark mode, motion, empty states
-- [ ] App shell + navigation (mobile bottom tabs, desktop sidebar, role gating)
-- [ ] Settings → Appearance editor (palette picker, fonts, density)
-- [ ] Deployed to Vercel with live URL
-- [ ] Tested on Android phone (installed to home screen)
+- [x] App shell + navigation (mobile bottom tabs, desktop sidebar, role gating)
+- [x] Settings → Appearance editor (palette picker, fonts, density)
+- [x] Deployed to Vercel with live URL (https://alan-os-nine.vercel.app)
+- [ ] Tested on Android phone (installed to home screen) — up to you, see handoff notes
 
 ## Phase 1 — Warm-up
 - [ ] Shopping list (complete, incl. staples logic + offline)
@@ -74,4 +74,5 @@ See `SPEC.md` for the full specification.
 - [ ] Work-phone/sales workflow refinements
 
 ---
-**Current status:** Starting Phase 0.
+**Current status:** Phase 0 complete and deployed. Live at https://alan-os-nine.vercel.app.
+Next session: "Read SPEC.md. Phase 0 is complete and deployed. Execute Phase 1 only."
