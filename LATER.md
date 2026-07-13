@@ -3,6 +3,29 @@
 Ideas, scope creep, and ambitions that come up mid-build but are out of scope for the
 current phase. Review this list after Phase 7 is complete.
 
+## Systems-thinking feature brainstorm (logged after Phase 1)
+
+Not built yet — ideas for later phases, roughly grouped by which module they'd extend:
+
+- **Subscription sniffer** (Finance): scan CSV/receipt imports for recurring
+  merchant charges, auto-flag as subscriptions with renewal reminders.
+- **Errand batching** (Tasks ↔ Shopping): cross-reference "errand" category
+  tasks with an active shopping trip — "you're already out for groceries,
+  also on your list: dry cleaning."
+- **Price memory** (Finance ↔ receipts): remember the usual price paid per
+  item from receipt history, flag when something's unusually expensive.
+- **Weekly recap** (cross-module): a lighter, weekly version of Month in
+  Review — money/workouts/tasks-done/photos from the past 7 days on one
+  screen.
+- **Adaptive streak urgency** (Workout ↔ Today): dashboard gets louder about
+  a workout streak specifically when it's actually at risk (evening,
+  nothing logged yet), not a static icon regardless of time of day.
+- **"Own your data" export**: one-tap full JSON/CSV export in Settings.
+- **Smart staple timing** (Shopping): learn each staple's real average
+  days-between-purchases from history instead of a fixed 14-day window.
+- **Recently-bought quick re-add** (Shopping): a "recently purchased" shelf
+  for fast one-tap re-adds of common one-off items.
+
 ## Today dashboard — full vision (owner request, logged after Phase 0)
 
 Also now reflected in `SPEC.md` Part G's Phase 7 description and the new Part B4

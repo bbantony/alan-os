@@ -346,10 +346,13 @@ new ones surface, don't remove — this is a living checklist for "did we wire
 this up yet"):
 - Shopping list ↔ Finance: remaining budget for the relevant category visible
   while adding/checking off items (from Phase 4 onward).
-- Shopping list ↔ Finance (receipts): approved receipt line items fuzzy-match
-  and auto-check shopping list items, updating staple timers (Phase 5, already
-  specified in Part E2 — just flagging it here too since it's the canonical
-  example of this principle).
+- Shopping list ↔ Finance ↔ Fridge (receipts): approved receipt line items
+  fuzzy-match and auto-check shopping list items, updating staple timers
+  (Phase 5, per Part E2); unmatched line items become their own extra
+  purchases, not errors; every line item then feeds the Fridge/Pantry
+  inventory (Phase 8.5) and the receipt total posts to Finance split per
+  line item's category, not as one lump sum. This is the canonical
+  three-module example of this principle.
 - Today dashboard ↔ every module: the dashboard is the one place all modules'
   signal surfaces at once — build its widgets so each one lights up with real
   data the moment its module ships, rather than treating the dashboard as its
@@ -852,6 +855,34 @@ Phase 4 — Finance core: accounts, categories, ≤5s manual logging, budgets (p
 
 
 Phase 5 — Finance AI: receipt scanning pipeline + review UI + shopping cross-check hook + CSV import w/ AI categorization.
+  Full multi-store trip flow (owner spec, added after Phase 1 — see Part B4):
+  the owner builds one big shopping list over the course of a week, then
+  shops across multiple stores in one outing (e.g. 40% of the list at store
+  A, the rest at store B). Checking off items and hitting Finish Trip is
+  already per-store-safe as of Phase 1 (it only processes checked items,
+  leaving the rest on the list untouched for the next store) — no rework
+  needed there. What Phase 5 adds on top: after each store, scanning that
+  store's receipt should (a) fuzzy-match line items against the shopping
+  list and reconcile them (already spec'd), (b) treat any receipt line item
+  that does NOT match a list item as a legitimate extra purchase — not an
+  error state, just create it as its own record, (c) once a receipt is
+  approved, every line item (matched or extra) should be pushed into the
+  Phase 8+ fridge/pantry inventory (see note below), and (d) the receipt
+  total should be split across Finance categories by each line item's own
+  category and posted as transactions there — not as one lump sum. This is
+  the canonical example of Part B4's interconnectivity principle: one
+  receipt scan should ripple through Shopping, Fridge, and Finance at once.
+
+Phase 8.5 — Fridge/Pantry inventory (owner request, added after Phase 1): a
+  simple inventory of what's actually in the fridge/freezer/pantry right
+  now (name, quantity, category, added date) — fed automatically by
+  Phase 5's receipt approval flow once that exists. Deliberately built
+  without AI first (just CRUD tracking), THEN in Phase 7's AI layer add
+  "what can I cook with what's in my fridge" as a quick-capture-style
+  prompt that reads current inventory. Do not build this before Phase 5,
+  since it depends on the receipt approval hook for real data to be useful
+  — building it earlier means either fake data or manual-only entry that
+  gets thrown away once receipts exist.
 
 
 
