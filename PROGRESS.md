@@ -17,7 +17,7 @@ See `SPEC.md` for the full specification.
 - [x] App shell + navigation (mobile bottom tabs, desktop sidebar, role gating)
 - [x] Settings → Appearance editor (palette picker, fonts, density)
 - [x] Deployed to Vercel with live URL (https://alan-os-nine.vercel.app)
-- [ ] Tested on Android phone (installed to home screen) — up to you, see handoff notes
+- [x] Tested on Android phone (installed to home screen) — confirmed working by owner
 
 ## Phase 1 — Warm-up
 - [ ] Shopping list (complete, incl. staples logic + offline)
