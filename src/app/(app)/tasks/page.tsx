@@ -1,5 +1,8 @@
-import { ModulePlaceholder } from "@/components/module-placeholder";
+import { getTasks, getWeeklyDoneCount } from "./actions";
+import { TaskList } from "./task-list";
 
-export default function TasksPage() {
-  return <ModulePlaceholder title="Tasks" phase="Phase 1 (Warm-up)" />;
+export default async function TasksPage() {
+  const [tasks, weeklyDoneCount] = await Promise.all([getTasks(), getWeeklyDoneCount()]);
+
+  return <TaskList initialTasks={tasks} weeklyDoneCount={weeklyDoneCount} />;
 }

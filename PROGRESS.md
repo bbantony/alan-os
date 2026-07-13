@@ -20,9 +20,11 @@ See `SPEC.md` for the full specification.
 - [x] Tested on Android phone (installed to home screen) — confirmed working by owner
 
 ## Phase 1 — Warm-up
-- [ ] Shopping list (complete, incl. staples logic + offline)
-- [ ] Tasks (horizons, subtasks, work category)
-- [ ] Basic Today dashboard (static widgets, no AI yet)
+- [x] Shopping list (complete, incl. staples logic + real offline write-queue/sync)
+- [x] Tasks (horizons, subtasks, work-hours collapsible group, quick chips, archive)
+- [x] Today dashboard — full widget layout (real Tasks/Shopping widgets now;
+      Money/Workout/Calendar/Journal/Weather/News widgets show styled
+      "arrives in Phase N" placeholders until those modules ship)
 
 ## Phase 2 — Workout
 - [ ] Exercise master list (crew-shared, seeded ~40 PPL exercises)
@@ -74,5 +76,7 @@ See `SPEC.md` for the full specification.
 - [ ] Work-phone/sales workflow refinements
 
 ---
-**Current status:** Phase 0 complete and deployed. Live at https://alan-os-nine.vercel.app.
-Next session: "Read SPEC.md. Phase 0 is complete and deployed. Execute Phase 1 only."
+**Current status:** Phase 1 complete, built and verified locally (build/lint/typecheck
+clean, RLS verified under real auth context). Live at https://alan-os-nine.vercel.app
+once pushed and deployed — test on your phone to confirm before starting Phase 2.
+Next session: "Read SPEC.md. Phase 1 is complete and deployed. Execute Phase 2 only."

@@ -1,0 +1,35 @@
+export type TaskHorizon = "now" | "today" | "this_week" | "this_month" | "someday";
+export type TaskCategory = "personal" | "work" | "errand" | "pr_application" | "french" | "other";
+
+export const TASK_HORIZONS: TaskHorizon[] = ["now", "today", "this_week", "this_month", "someday"];
+
+export const TASK_HORIZON_LABELS: Record<TaskHorizon, string> = {
+  now: "Now",
+  today: "Today",
+  this_week: "This Week",
+  this_month: "This Month",
+  someday: "Someday",
+};
+
+export const TASK_CATEGORY_LABELS: Record<TaskCategory, string> = {
+  personal: "Personal",
+  work: "Work",
+  errand: "Errand",
+  pr_application: "PR Application",
+  french: "French",
+  other: "Other",
+};
+
+export interface Task {
+  id: string;
+  user_id: string;
+  parent_task_id: string | null;
+  title: string;
+  notes: string | null;
+  horizon: TaskHorizon;
+  due_at: string | null;
+  category: TaskCategory;
+  completed_at: string | null;
+  sort_order: number;
+  created_at: string;
+}

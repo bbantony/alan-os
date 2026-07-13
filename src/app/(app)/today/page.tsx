@@ -1,18 +1,93 @@
+import {
+  Sparkles,
+  ListChecks,
+  ShoppingCart,
+  Wallet,
+  Dumbbell,
+  CalendarDays,
+  BookImage,
+  CloudSun,
+  Newspaper,
+  MapPin,
+} from "lucide-react";
 import { getCurrentProfile } from "@/lib/supabase/profile";
-import { EmptyState } from "@/components/empty-state";
+import { getTasks, getWeeklyDoneCount } from "@/app/(app)/tasks/actions";
+import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
 import { todayInAppTimezone } from "@/lib/time";
+import { DashboardWidget } from "@/components/dashboard/widget";
 
 export default async function TodayPage() {
-  const profile = await getCurrentProfile();
+  const [profile, tasks, weeklyDoneCount, shoppingItems, suggestions] = await Promise.all([
+    getCurrentProfile(),
+    getTasks(),
+    getWeeklyDoneCount(),
+    getShoppingItems(),
+    getStapleSuggestions(),
+  ]);
+
   const name = profile?.displayName?.split(" ")[0] ?? "there";
+  const dueToday = tasks.filter((t) => t.horizon === "today").length;
+  const uncheckedShopping = shoppingItems.filter((i) => !i.checked).length;
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-12">
-      <p className="mb-6 text-sm text-muted-foreground">{todayInAppTimezone()}</p>
-      <EmptyState
-        title={`Good to see you, ${name}.`}
-        description="Your morning briefing, budget pulse, and streaks land here in Phase 1 and Phase 7. For now, this is just your front door."
-      />
+    <div className="mx-auto max-w-3xl px-4 py-8">
+      <p className="text-sm text-muted-foreground">{todayInAppTimezone()}</p>
+      <h1 className="mb-6 font-heading text-2xl font-semibold">Good to see you, {name}.</h1>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DashboardWidget
+          title="Your AI briefing"
+          icon={Sparkles}
+          comingInPhase={7}
+          className="sm:col-span-2 border-accent/40 bg-accent/5"
+        >
+          Once every module below is live, this card becomes a one-paragraph
+          morning summary — tasks due, budget pulse, workout streak, weather,
+          and news — written fresh each day.
+        </DashboardWidget>
+
+        <DashboardWidget title="Tasks" icon={ListChecks} href="/tasks">
+          <div className="tabular text-2xl font-semibold">{dueToday}</div>
+          <p className="text-muted-foreground">due today · {weeklyDoneCount} done this week</p>
+        </DashboardWidget>
+
+        <DashboardWidget title="Shopping" icon={ShoppingCart} href="/shopping">
+          <div className="tabular text-2xl font-semibold">{uncheckedShopping}</div>
+          <p className="text-muted-foreground">
+            {suggestions.length > 0
+              ? `on your list · ${suggestions.length} running low`
+              : "on your list"}
+          </p>
+        </DashboardWidget>
+
+        <DashboardWidget title="Money" icon={Wallet} comingInPhase={4}>
+          Budget pulse and &ldquo;safe to spend&rdquo; will live here.
+        </DashboardWidget>
+
+        <DashboardWidget title="Workout" icon={Dumbbell} comingInPhase={2}>
+          Your streak flame and the crew&apos;s activity will live here.
+        </DashboardWidget>
+
+        <DashboardWidget title="Calendar & Reminders" icon={CalendarDays} comingInPhase={3}>
+          Your next event and reminders due today will live here.
+        </DashboardWidget>
+
+        <DashboardWidget title="Journal" icon={BookImage} comingInPhase={6}>
+          A nudge to post today&apos;s photo will live here.
+        </DashboardWidget>
+
+        <DashboardWidget title="Weather" icon={CloudSun} comingInPhase={7}>
+          Today&apos;s conditions for Winnipeg.
+        </DashboardWidget>
+
+        <DashboardWidget title="World news" icon={Newspaper} comingInPhase={7}>
+          A handful of top headlines.
+        </DashboardWidget>
+
+        <DashboardWidget title="Local news" icon={MapPin} comingInPhase={7}>
+          Headlines for a region you choose in Settings.
+        </DashboardWidget>
+      </div>
     </div>
   );
 }

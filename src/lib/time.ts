@@ -21,3 +21,21 @@ export function todayInAppTimezone(): string {
     day: "2-digit",
   }).format(new Date());
 }
+
+const WEEKEND_DAYS = new Set(["Sat", "Sun"]);
+
+// Work tasks collapse before 8am/after 6pm and on weekends, America/Winnipeg time.
+export function isOutsideWorkHours(date: Date = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: APP_TIMEZONE,
+    hour: "numeric",
+    hour12: false,
+    weekday: "short",
+  }).formatToParts(date);
+
+  const rawHour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const hour = rawHour === 24 ? 0 : rawHour;
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+
+  return WEEKEND_DAYS.has(weekday) || hour < 8 || hour >= 18;
+}

@@ -105,4 +105,69 @@ about this now — it's just good to know the system already has it built in.
 
 ---
 
-*(Phase 1 section will be added here once its checklist is complete.)*
+## Phase 1 — Warm-up
+
+What Phase 1 adds: a real Shopping list, a real Tasks module, and the Today
+dashboard now shows real widgets for both — plus a preview of every other
+module as a "coming soon" card, so you can see the shape of the full app
+even though most of it isn't built yet.
+
+### Shopping list
+
+1. Tap **Shopping** (in the bottom tabs/sidebar, or via More).
+2. Type an item name and tap the **+** button (or press Enter). The app
+   guesses a category for common groceries automatically (e.g. "milk" →
+   Dairy) — you can leave it or fix it later.
+3. Tap the **star** next to an item to mark it a **staple** — something you
+   buy regularly. Staples are the ones that come back automatically:
+   once you buy one, it goes quiet for about 2 weeks and then reappears
+   as a "Running low?" suggestion chip at the top of the list.
+4. Tap an item's checkbox as you put it in your cart. Checked items sink to
+   a "Checked" section at the bottom.
+5. When you're done shopping, tap **Finish trip**. Staple items reset and
+   go dormant (ready to resurface later); one-off items are cleared for
+   good.
+6. **Works with no signal.** Add, check off, or delete items with your
+   phone in airplane mode or in a dead zone — you'll see a small "Offline —
+   changes will sync" badge. The moment you're back online, everything you
+   did quietly syncs to your account. Nothing is lost, nothing needs to be
+   redone.
+
+### Tasks
+
+1. Tap **Tasks**.
+2. Type a task and tap **+**. Pick which section it belongs in — **Now,
+   Today, This Week, This Month,** or **Someday** — and a category.
+3. For sales-call tasks, tap the **"Follow up with ___"** or **"Call ___"**
+   chip above the input — it fills in the phrase and sets the category to
+   Work for you; just type the name and add it.
+4. Tap the small **+** next to any task to add a subtask underneath it
+   (one level — subtasks can't have their own subtasks).
+5. Tap a task's empty checkbox to complete it. If it still has unfinished
+   subtasks, you'll be asked to confirm first.
+6. To move a task to a different section later, use the small dropdown next
+   to it on the row.
+7. **Work tasks** are pulled into their own collapsible "Work" section near
+   the bottom, so your personal list isn't cluttered by day-job to-dos.
+   It's collapsed automatically before 8am, after 6pm, and on weekends —
+   tap the header to expand it any time you want to peek anyway.
+8. Tap **Completed** near the bottom to see everything you've finished
+   (and undo one if you tapped it by mistake). Your weekly "done" count
+   shows at the top of the page and on the Today dashboard.
+
+### Today dashboard
+
+The Today page now shows a full grid of cards:
+- **Tasks** and **Shopping** show real numbers pulled from your actual data
+  — tap either to jump straight into that module.
+- Everything else (**Money, Workout, Calendar & Reminders, Journal,
+  Weather, World news, Local news**) shows a dashed "Phase N" card — a
+  placeholder for what's coming, not a bug. Each one lights up with real
+  data the moment its phase is built.
+- The **"Your AI briefing"** card at the top is the eventual home of a
+  one-paragraph daily summary pulling from everything below it — that's
+  Phase 7's job.
+
+---
+
+*(Phase 2 section will be added here once its checklist is complete.)*
