@@ -327,6 +327,46 @@ Explain any required manual step (getting API keys, clicking things in dashboard
 
 
 
+B4. Cross-Module Interconnectivity (standing principle — added after Phase 0)
+
+This is Alan's lifelong "second brain," not a folder of separate tools. Whenever a
+new module is built and it could reasonably surface data from an already-built
+module, wire that connection in — even if Part E's per-module spec doesn't spell
+it out explicitly. This principle overrides the letter of Part E when the two
+conflict; Part E describes each module in isolation for clarity, but modules
+should never actually feel isolated from each other once more than one exists.
+
+Concrete example the owner gave: when adding an item to the grocery shopping
+list, once the Finance module exists, show how much of the month's grocery
+budget remains right there in the Shopping module — don't make him tab over to
+Money to find out.
+
+Other standing hooks to keep in mind as later phases land (add to this list as
+new ones surface, don't remove — this is a living checklist for "did we wire
+this up yet"):
+- Shopping list ↔ Finance: remaining budget for the relevant category visible
+  while adding/checking off items (from Phase 4 onward).
+- Shopping list ↔ Finance (receipts): approved receipt line items fuzzy-match
+  and auto-check shopping list items, updating staple timers (Phase 5, already
+  specified in Part E2 — just flagging it here too since it's the canonical
+  example of this principle).
+- Today dashboard ↔ every module: the dashboard is the one place all modules'
+  signal surfaces at once — build its widgets so each one lights up with real
+  data the moment its module ships, rather than treating the dashboard as its
+  own isolated Phase 1/7 feature. See the expanded Phase 7 scope in Part G.
+- Tasks ↔ Calendar/Reminders: a task with a due date/time should be visible
+  from the Calendar agenda view once Phase 3 exists, not force a second lookup.
+- Workout ↔ Today: streak flame and "logged today?" status feed the dashboard
+  once Phase 2 exists.
+- Journal ↔ Today: "posted your photo today?" nudge feeds the dashboard once
+  Phase 6 exists.
+
+When in doubt about whether a cross-module hook is worth building now vs.
+later: if the dependency module doesn't exist yet, don't fake it — note the
+hook here (or in LATER.md) and wire it for real once that module ships.
+
+
+
 PART C — DESIGN SYSTEM (extremely important to the owner)
 
 C1. Style: Swiss / International Typographic
@@ -820,6 +860,15 @@ Phase 6 — Journal & Vinyl: photo-a-day + reminder + gallery, vinyl log + iTune
 
 
 Phase 7 — AI everywhere: quick-capture parser + confirm chips, morning briefing cron, weekly reviews, Month in Review.
+  Also the Today dashboard's full "everything relevant, AI-summarized" form (added after Phase 0
+  per owner request — see Part B4): weather widget (free API, e.g. Open-Meteo, no key needed),
+  world news headlines widget, local news widget with a user-selectable region, and a single AI
+  narrative summary that pulls signal from every module that exists by then (tasks due, budget
+  pulse, workout streak, reminders, calendar, journal nudge) into one morning briefing. Each
+  dashboard widget should already be wired to real data from its own module the moment that
+  module ships in an earlier phase — Phase 7's job is the AI narrative layer + weather/news on
+  top, not building the widgets from scratch. Cap news/weather calls same as other AI features
+  (Part F cost guardrails apply — cache, don't refetch on every page load).
 
 
 
