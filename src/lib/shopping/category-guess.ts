@@ -1,6 +1,9 @@
-import type { ShoppingCategory } from "./types";
+import type { ShoppingCategoryRow } from "./types";
 
-const KEYWORD_MAP: Record<string, ShoppingCategory> = {
+// Falls back to a canonical category NAME (not id) since categories are now
+// per-user rows — the id gets resolved against that user's actual category
+// list at guess time, in guessCategoryId() below.
+const KEYWORD_MAP: Record<string, string> = {
   milk: "dairy",
   cheese: "dairy",
   yogurt: "dairy",
@@ -95,13 +98,47 @@ const KEYWORD_MAP: Record<string, ShoppingCategory> = {
   scarf: "clothes",
 };
 
-export function guessCategory(name: string): ShoppingCategory {
+function guessCategoryName(name: string): string | null {
   const key = name.trim().toLowerCase();
+  if (!key) return null;
   if (KEYWORD_MAP[key]) return KEYWORD_MAP[key];
 
   for (const [word, category] of Object.entries(KEYWORD_MAP)) {
     if (key.includes(word)) return category;
   }
 
-  return "other";
+  return null;
+}
+
+export function buildKnownItemsMap(
+  categoryItems: { item_name: string; category_id: string }[]
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const entry of categoryItems) {
+    map.set(entry.item_name.trim().toLowerCase(), entry.category_id);
+  }
+  return map;
+}
+
+// Resolution order: (1) this user's own learned/known items, (2) the static
+// keyword dictionary resolved against this user's actual category names,
+// (3) that user's protected "Other" category, (4) null if even that is missing.
+export function guessCategoryId(
+  name: string,
+  categories: ShoppingCategoryRow[],
+  knownItems: Map<string, string>
+): string | null {
+  const key = name.trim().toLowerCase();
+  if (!key) return categories.find((c) => c.is_protected)?.id ?? null;
+
+  const known = knownItems.get(key);
+  if (known) return known;
+
+  const guessedName = guessCategoryName(key);
+  if (guessedName) {
+    const match = categories.find((c) => c.name.toLowerCase() === guessedName);
+    if (match) return match.id;
+  }
+
+  return categories.find((c) => c.is_protected)?.id ?? categories[0]?.id ?? null;
 }

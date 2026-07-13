@@ -1,5 +1,5 @@
 import { openDB, type IDBPDatabase } from "idb";
-import type { ShoppingCategory, ShoppingItem, ShoppingUnit } from "@/lib/shopping/types";
+import type { ShoppingItem, ShoppingUnit } from "@/lib/shopping/types";
 
 const DB_NAME = "alan-os-shopping";
 const DB_VERSION = 1;
@@ -11,14 +11,16 @@ export type OutboxMutation =
       payload: {
         id: string;
         name: string;
-        category: ShoppingCategory;
+        categoryId: string;
         isStaple: boolean;
         quantity?: number | null;
         quantityUnit?: ShoppingUnit | null;
+        learnCategory?: boolean;
       };
     }
   | { id: string; type: "setChecked"; payload: { id: string; checked: boolean } }
   | { id: string; type: "setStaple"; payload: { id: string; isStaple: boolean } }
+  | { id: string; type: "setCategory"; payload: { id: string; name: string; categoryId: string } }
   | { id: string; type: "delete"; payload: { id: string } }
   | { id: string; type: "addFromSuggestion"; payload: { id: string } }
   | { id: string; type: "finishTrip"; payload: Record<string, never> };

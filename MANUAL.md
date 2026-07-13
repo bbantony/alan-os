@@ -115,23 +115,36 @@ even though most of it isn't built yet.
 ### Shopping list
 
 1. Tap **Shopping** (in the bottom tabs/sidebar, or via More).
-2. Type an item name and tap the **+** button (or press Enter). The app
-   guesses a category for common groceries automatically (e.g. "milk" →
-   Dairy) — you can leave it or fix it later.
-3. Tap the **star** next to an item to mark it a **staple** — something you
+2. Type an item name — a category dropdown next to it auto-guesses as you
+   type (e.g. "milk" → Dairy). Leave it, or pick a different one yourself;
+   the moment you touch it manually, your choice sticks instead of the
+   guess. **The app remembers your correction** — next time you type that
+   same item name, it'll auto-pick the category you chose, not just the
+   generic guess.
+3. Optionally enter a quantity (count, g, kg, mL, or L) next to the
+   category — leave it blank for a plain item.
+4. Tap the **star** next to an item to mark it a **staple** — something you
    buy regularly. Staples are the ones that come back automatically:
    once you buy one, it goes quiet for about 2 weeks and then reappears
    as a "Running low?" suggestion chip at the top of the list.
-4. Tap an item's checkbox as you put it in your cart. Checked items sink to
-   a "Checked" section at the bottom.
-5. When you're done shopping, tap **Finish trip**. Staple items reset and
-   go dormant (ready to resurface later); one-off items are cleared for
-   good.
-6. **Works with no signal.** Add, check off, or delete items with your
+5. Tap an item's checkbox as you put it in your cart. Checked items sink to
+   a "Checked" section at the bottom. Shopping across multiple stores in
+   one trip works naturally — only check off what you actually bought at
+   each store; everything else stays on the list untouched.
+6. When you're done at a store, tap **Finish trip** — you'll see a
+   confirmation of exactly what happened (how many items were cleared, how
+   many staples will resurface later). Staple items go dormant (ready to
+   resurface later); one-off items are cleared for good.
+7. **Works with no signal.** Add, check off, or delete items with your
    phone in airplane mode or in a dead zone — you'll see a small "Offline —
    changes will sync" badge. The moment you're back online, everything you
    did quietly syncs to your account. Nothing is lost, nothing needs to be
    redone.
+8. **Managing categories:** tap "Manage categories" on the Shopping page
+   (or **More → Settings → Shopping**) to rename or delete categories, add
+   your own (e.g. "Electronics"), and see/edit the list of item names each
+   category has learned. Deleting a category moves its items to "Other,"
+   which can't itself be deleted.
 
 ### Tasks
 

@@ -20,7 +20,10 @@ See `SPEC.md` for the full specification.
 - [x] Tested on Android phone (installed to home screen) — confirmed working by owner
 
 ## Phase 1 — Warm-up
-- [x] Shopping list (complete, incl. staples logic + real offline write-queue/sync)
+- [x] Shopping list (complete, incl. staples logic + real offline write-queue/sync;
+      user-owned/editable categories with learned corrections, optional
+      quantity+unit, Settings → Shopping category management, Finish Trip
+      confirmation, custom vector illustrations)
 - [x] Tasks (horizons, subtasks, work-hours collapsible group, quick chips, archive)
 - [x] Today dashboard — full widget layout (real Tasks/Shopping widgets now;
       Money/Workout/Calendar/Journal/Weather/News widgets show styled

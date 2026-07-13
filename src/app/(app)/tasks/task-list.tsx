@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
+import { TasksIllustration } from "@/components/illustrations";
 import { cn } from "@/lib/utils";
 import { isOutsideWorkHours } from "@/lib/time";
 import {
@@ -222,6 +223,7 @@ export function TaskList({
         <EmptyState
           title="Nothing on your plate"
           description="Add a task above to get started."
+          icon={<TasksIllustration className="size-8" />}
         />
       )}
 

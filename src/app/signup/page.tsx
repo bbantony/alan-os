@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { AuthIllustration } from "@/components/illustrations";
 
 export default async function SignupPage({
   searchParams,
@@ -16,6 +17,7 @@ export default async function SignupPage({
     <div className="flex min-h-full items-center justify-center bg-background px-4 py-16">
       <Card className="w-full max-w-sm">
         <CardHeader>
+          <AuthIllustration className="mb-2 size-10 text-primary" />
           <CardTitle className="font-heading text-2xl">Create your account</CardTitle>
           <CardDescription>You&apos;ll need the invite code to continue.</CardDescription>
         </CardHeader>

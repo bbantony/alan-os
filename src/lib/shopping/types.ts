@@ -1,38 +1,3 @@
-export type ShoppingCategory =
-  | "produce"
-  | "dairy"
-  | "meat"
-  | "frozen"
-  | "pantry"
-  | "household"
-  | "pharmacy"
-  | "clothes"
-  | "other";
-
-export const SHOPPING_CATEGORIES: ShoppingCategory[] = [
-  "produce",
-  "dairy",
-  "meat",
-  "frozen",
-  "pantry",
-  "household",
-  "pharmacy",
-  "clothes",
-  "other",
-];
-
-export const SHOPPING_CATEGORY_LABELS: Record<ShoppingCategory, string> = {
-  produce: "Produce",
-  dairy: "Dairy",
-  meat: "Meat",
-  frozen: "Frozen",
-  pantry: "Pantry",
-  household: "Household",
-  pharmacy: "Pharmacy",
-  clothes: "Clothes",
-  other: "Other",
-};
-
 export type ShoppingUnit = "count" | "g" | "kg" | "ml" | "l";
 
 export const SHOPPING_UNITS: ShoppingUnit[] = ["count", "g", "kg", "ml", "l"];
@@ -45,11 +10,29 @@ export const SHOPPING_UNIT_LABELS: Record<ShoppingUnit, string> = {
   l: "L",
 };
 
+export interface ShoppingCategoryRow {
+  id: string;
+  user_id: string;
+  name: string;
+  icon: string;
+  sort_order: number;
+  is_protected: boolean;
+  created_at: string;
+}
+
+export interface ShoppingCategoryItem {
+  id: string;
+  user_id: string;
+  category_id: string;
+  item_name: string;
+  created_at: string;
+}
+
 export interface ShoppingItem {
   id: string;
   user_id: string;
   name: string;
-  category: ShoppingCategory;
+  category_id: string;
   is_staple: boolean;
   checked: boolean;
   on_list: boolean;

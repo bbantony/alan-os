@@ -30,7 +30,7 @@ const OWNER_NAV: NavItem[] = [
 
 const WORKOUT_MEMBER_NAV: NavItem[] = [
   { label: "Workout", href: "/workout", icon: Dumbbell },
-  { label: "Settings", href: "/settings/appearance", icon: Settings },
+  { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function getNavItems(role: Role): NavItem[] {
@@ -43,5 +43,5 @@ export const MORE_LINKS: NavItem[] = [
   { label: "Journal", href: "/journal", icon: BookImage },
   { label: "Vinyl", href: "/vinyl", icon: Disc3 },
   { label: "Shopping", href: "/shopping", icon: ShoppingCart },
-  { label: "Settings", href: "/settings/appearance", icon: Settings },
+  { label: "Settings", href: "/settings", icon: Settings },
 ];

@@ -4,6 +4,7 @@ import {
   deleteShoppingItem,
   finishTrip,
   setChecked,
+  setItemCategory,
   setStaple,
 } from "@/app/(app)/shopping/actions";
 import { getOutbox, removeFromOutbox, type OutboxMutation } from "./shopping-db";
@@ -16,6 +17,8 @@ async function applyMutation(mutation: OutboxMutation) {
       return setChecked(mutation.payload);
     case "setStaple":
       return setStaple(mutation.payload);
+    case "setCategory":
+      return setItemCategory(mutation.payload);
     case "delete":
       return deleteShoppingItem(mutation.payload);
     case "addFromSuggestion":

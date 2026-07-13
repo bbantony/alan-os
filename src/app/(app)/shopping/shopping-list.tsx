@@ -1,28 +1,32 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Star, Trash2, WifiOff, Check } from "lucide-react";
+import { Plus, Star, Trash2, WifiOff, Check, PartyPopper } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
+import { ShoppingIllustration } from "@/components/illustrations";
+import { getShoppingIcon } from "@/lib/shopping/icon-registry";
 import {
-  SHOPPING_CATEGORIES,
-  SHOPPING_CATEGORY_LABELS,
   SHOPPING_UNITS,
   SHOPPING_UNIT_LABELS,
-  type ShoppingCategory,
+  type ShoppingCategoryItem,
+  type ShoppingCategoryRow,
   type ShoppingItem,
   type ShoppingUnit,
 } from "@/lib/shopping/types";
-import { guessCategory } from "@/lib/shopping/category-guess";
+import { buildKnownItemsMap, guessCategoryId } from "@/lib/shopping/category-guess";
 import {
   getShoppingItems,
   getStapleSuggestions,
+  getKnownItems,
   addShoppingItem,
   setChecked,
   setStaple,
+  setItemCategory,
   deleteShoppingItem,
   addFromSuggestion,
   finishTrip,
@@ -56,31 +60,42 @@ async function runOnlineFirst(mutation: OutboxMutation, action: () => Promise<un
 export function ShoppingList({
   initialItems,
   initialSuggestions,
+  categories,
+  initialKnownItems,
 }: {
   initialItems: ShoppingItem[];
   initialSuggestions: ShoppingItem[];
+  categories: ShoppingCategoryRow[];
+  initialKnownItems: ShoppingCategoryItem[];
 }) {
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
   const [suggestions, setSuggestions] = useState<ShoppingItem[]>(initialSuggestions);
+  const [knownItems, setKnownItems] = useState<ShoppingCategoryItem[]>(initialKnownItems);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine
   );
   const [name, setName] = useState("");
-  const [category, setCategory] = useState<ShoppingCategory>("other");
+  const otherCategoryId = categories.find((c) => c.is_protected)?.id ?? categories[0]?.id ?? "";
+  const [category, setCategory] = useState<string>(otherCategoryId);
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [isStapleDraft, setIsStapleDraft] = useState(false);
   const [quantity, setQuantity] = useState("");
   const [quantityUnit, setQuantityUnit] = useState<ShoppingUnit>("count");
+  const [tripToast, setTripToast] = useState<string | null>(null);
   const hydrated = useRef(false);
+
+  const knownItemsMap = useMemo(() => buildKnownItemsMap(knownItems), [knownItems]);
 
   const refreshFromServer = useCallback(async () => {
     try {
-      const [freshItems, freshSuggestions] = await Promise.all([
+      const [freshItems, freshSuggestions, freshKnown] = await Promise.all([
         getShoppingItems(),
         getStapleSuggestions(),
+        getKnownItems(),
       ]);
       setItems(freshItems);
       setSuggestions(freshSuggestions);
+      setKnownItems(freshKnown);
       await cacheItems(freshItems);
     } catch {
       // stay on cached/local state
@@ -116,7 +131,9 @@ export function ShoppingList({
 
   function handleNameChange(value: string) {
     setName(value);
-    if (!categoryTouched) setCategory(guessCategory(value));
+    if (!categoryTouched) {
+      setCategory(guessCategoryId(value, categories, knownItemsMap) ?? otherCategoryId);
+    }
   }
 
   async function handleAdd() {
@@ -130,7 +147,7 @@ export function ShoppingList({
       id,
       user_id: "",
       name: trimmed,
-      category,
+      category_id: category,
       is_staple: isStapleDraft,
       checked: false,
       on_list: true,
@@ -141,8 +158,20 @@ export function ShoppingList({
     };
 
     setItems((prev) => [...prev, item]);
+    if (categoryTouched) {
+      setKnownItems((prev) => [
+        ...prev.filter((k) => k.item_name.toLowerCase() !== trimmed.toLowerCase()),
+        {
+          id: crypto.randomUUID(),
+          user_id: "",
+          category_id: category,
+          item_name: trimmed,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+    }
     setName("");
-    setCategory("other");
+    setCategory(otherCategoryId);
     setCategoryTouched(false);
     setIsStapleDraft(false);
     setQuantity("");
@@ -155,20 +184,22 @@ export function ShoppingList({
         payload: {
           id,
           name: trimmed,
-          category,
+          categoryId: category,
           isStaple: isStapleDraft,
           quantity: parsedQuantity,
           quantityUnit: finalQuantityUnit,
+          learnCategory: categoryTouched,
         },
       },
       () =>
         addShoppingItem({
           id,
           name: trimmed,
-          category,
+          categoryId: category,
           isStaple: isStapleDraft,
           quantity: parsedQuantity,
           quantityUnit: finalQuantityUnit,
+          learnCategory: categoryTouched,
         })
     );
   }
@@ -193,6 +224,26 @@ export function ShoppingList({
     await runOnlineFirst(
       { id: crypto.randomUUID(), type: "setStaple", payload: { id: item.id, isStaple: updated.is_staple } },
       () => setStaple({ id: item.id, isStaple: updated.is_staple })
+    );
+  }
+
+  async function handleRecategorize(item: ShoppingItem, categoryId: string) {
+    const updated = { ...item, category_id: categoryId };
+    setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
+    setKnownItems((prev) => [
+      ...prev.filter((k) => k.item_name.toLowerCase() !== item.name.toLowerCase()),
+      {
+        id: crypto.randomUUID(),
+        user_id: "",
+        category_id: categoryId,
+        item_name: item.name,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    await putCachedItem(updated);
+    await runOnlineFirst(
+      { id: crypto.randomUUID(), type: "setCategory", payload: { id: item.id, name: item.name, categoryId } },
+      () => setItemCategory({ id: item.id, name: item.name, categoryId })
     );
   }
 
@@ -222,19 +273,19 @@ export function ShoppingList({
     const checkedItems = items.filter((i) => i.checked);
     if (checkedItems.length === 0) return;
 
-    const remaining: ShoppingItem[] = [];
-    for (const item of items) {
-      if (!item.checked) {
-        remaining.push(item);
-        continue;
-      }
-      if (item.is_staple) {
-        await deleteCachedItem(item.id);
-      } else {
-        await deleteCachedItem(item.id);
-      }
+    const staples = checkedItems.filter((i) => i.is_staple).length;
+    const oneOff = checkedItems.filter((i) => !i.is_staple).length;
+
+    for (const item of checkedItems) {
+      await deleteCachedItem(item.id);
     }
-    setItems(remaining);
+    setItems((prev) => prev.filter((i) => !i.checked));
+
+    const parts = [];
+    if (oneOff > 0) parts.push(`${oneOff} cleared`);
+    if (staples > 0) parts.push(`${staples} staple${staples > 1 ? "s" : ""} will resurface later`);
+    setTripToast(`Trip finished — ${parts.join(", ")}.`);
+    setTimeout(() => setTripToast(null), 5000);
 
     await runOnlineFirst(
       { id: crypto.randomUUID(), type: "finishTrip", payload: {} },
@@ -243,10 +294,14 @@ export function ShoppingList({
     refreshFromServer();
   }
 
-  const uncheckedByCategory = SHOPPING_CATEGORIES.map((cat) => ({
-    category: cat,
-    items: items.filter((i) => i.category === cat && !i.checked),
-  })).filter((group) => group.items.length > 0);
+  const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+
+  const uncheckedByCategory = categories
+    .map((cat) => ({
+      category: cat,
+      items: items.filter((i) => i.category_id === cat.id && !i.checked),
+    }))
+    .filter((group) => group.items.length > 0);
 
   const checkedItems = items.filter((i) => i.checked);
 
@@ -254,19 +309,39 @@ export function ShoppingList({
     <div className="mx-auto max-w-lg px-4 py-8 pb-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="font-heading text-2xl font-semibold">Shopping</h1>
-        {!online && (
-          <span className="flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-            <WifiOff className="size-3.5" />
-            Offline — changes will sync
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {!online && (
+            <span className="flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+              <WifiOff className="size-3.5" />
+              Offline — changes will sync
+            </span>
+          )}
+          <Link
+            href="/settings/shopping"
+            className="text-xs font-medium text-muted-foreground underline underline-offset-2"
+          >
+            Manage categories
+          </Link>
+        </div>
       </div>
+
+      <AnimatePresence>
+        {tripToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mb-4 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
+          >
+            <PartyPopper className="size-4 shrink-0" />
+            {tripToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {suggestions.length > 0 && (
         <div className="mb-4 rounded-xl border border-dashed border-accent/50 bg-accent/10 p-3">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Running low?
-          </p>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Running low?</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((s) => (
               <button
@@ -314,15 +389,15 @@ export function ShoppingList({
           <select
             value={category}
             onChange={(e) => {
-              setCategory(e.target.value as ShoppingCategory);
+              setCategory(e.target.value);
               setCategoryTouched(true);
             }}
             className="h-8 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
             aria-label="Category"
           >
-            {SHOPPING_CATEGORIES.map((cat) => (
-              <option key={cat} value={cat}>
-                {SHOPPING_CATEGORY_LABELS[cat]}
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
               </option>
             ))}
           </select>
@@ -353,30 +428,37 @@ export function ShoppingList({
         <EmptyState
           title="Nothing on your list"
           description="Add your first item above — mark it with a star if it's something you buy regularly."
+          icon={<ShoppingIllustration className="size-8" />}
         />
       )}
 
       <div className="space-y-6">
-        {uncheckedByCategory.map((group) => (
-          <div key={group.category}>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {SHOPPING_CATEGORY_LABELS[group.category]}
-            </h2>
-            <ul className="space-y-1">
-              <AnimatePresence initial={false}>
-                {group.items.map((item) => (
-                  <ShoppingRow
-                    key={item.id}
-                    item={item}
-                    onToggle={() => handleToggle(item)}
-                    onToggleStaple={() => handleToggleStaple(item)}
-                    onDelete={() => handleDelete(item)}
-                  />
-                ))}
-              </AnimatePresence>
-            </ul>
-          </div>
-        ))}
+        {uncheckedByCategory.map((group) => {
+          const Icon = getShoppingIcon(group.category.icon);
+          return (
+            <div key={group.category.id}>
+              <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <Icon className="size-3.5" />
+                {group.category.name}
+              </h2>
+              <ul className="space-y-1">
+                <AnimatePresence initial={false}>
+                  {group.items.map((item) => (
+                    <ShoppingRow
+                      key={item.id}
+                      item={item}
+                      categories={categories}
+                      onToggle={() => handleToggle(item)}
+                      onToggleStaple={() => handleToggleStaple(item)}
+                      onDelete={() => handleDelete(item)}
+                      onRecategorize={(categoryId) => handleRecategorize(item, categoryId)}
+                    />
+                  ))}
+                </AnimatePresence>
+              </ul>
+            </div>
+          );
+        })}
       </div>
 
       {checkedItems.length > 0 && (
@@ -390,9 +472,12 @@ export function ShoppingList({
                 <ShoppingRow
                   key={item.id}
                   item={item}
+                  categories={categories}
+                  categoryLabel={categoriesById.get(item.category_id)?.name}
                   onToggle={() => handleToggle(item)}
                   onToggleStaple={() => handleToggleStaple(item)}
                   onDelete={() => handleDelete(item)}
+                  onRecategorize={(categoryId) => handleRecategorize(item, categoryId)}
                 />
               ))}
             </AnimatePresence>
@@ -409,14 +494,20 @@ export function ShoppingList({
 
 function ShoppingRow({
   item,
+  categories,
+  categoryLabel,
   onToggle,
   onToggleStaple,
   onDelete,
+  onRecategorize,
 }: {
   item: ShoppingItem;
+  categories: ShoppingCategoryRow[];
+  categoryLabel?: string;
   onToggle: () => void;
   onToggleStaple: () => void;
   onDelete: () => void;
+  onRecategorize: (categoryId: string) => void;
 }) {
   return (
     <motion.li
@@ -445,10 +536,22 @@ function ShoppingRow({
           </span>
         )}
       </span>
-      {item.checked && (
-        <span className="text-xs text-muted-foreground">
-          {SHOPPING_CATEGORY_LABELS[item.category]}
-        </span>
+      {item.checked && categoryLabel && (
+        <span className="text-xs text-muted-foreground">{categoryLabel}</span>
+      )}
+      {!item.checked && (
+        <select
+          value={item.category_id}
+          onChange={(e) => onRecategorize(e.target.value)}
+          className="h-6 max-w-24 rounded-md border border-input bg-transparent px-1 text-xs"
+          aria-label="Category"
+        >
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.name}
+            </option>
+          ))}
+        </select>
       )}
       <button
         onClick={onToggleStaple}
