@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import type { ShoppingCategory, ShoppingItem } from "@/lib/shopping/types";
+import type { ShoppingCategory, ShoppingItem, ShoppingUnit } from "@/lib/shopping/types";
 
 const STAPLE_RESURFACE_DAYS = 14;
 
@@ -47,6 +47,8 @@ export async function addShoppingItem(input: {
   name: string;
   category: ShoppingCategory;
   isStaple: boolean;
+  quantity?: number | null;
+  quantityUnit?: ShoppingUnit | null;
 }) {
   const { supabase, user } = await requireUser();
   await supabase.from("shopping_items").insert({
@@ -55,6 +57,8 @@ export async function addShoppingItem(input: {
     name: input.name,
     category: input.category,
     is_staple: input.isStaple,
+    quantity: input.quantity ?? null,
+    quantity_unit: input.quantityUnit ?? null,
     checked: false,
     on_list: true,
   });

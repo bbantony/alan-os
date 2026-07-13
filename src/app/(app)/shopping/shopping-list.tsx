@@ -10,8 +10,11 @@ import { EmptyState } from "@/components/empty-state";
 import {
   SHOPPING_CATEGORIES,
   SHOPPING_CATEGORY_LABELS,
+  SHOPPING_UNITS,
+  SHOPPING_UNIT_LABELS,
   type ShoppingCategory,
   type ShoppingItem,
+  type ShoppingUnit,
 } from "@/lib/shopping/types";
 import { guessCategory } from "@/lib/shopping/category-guess";
 import {
@@ -63,8 +66,11 @@ export function ShoppingList({
     typeof navigator === "undefined" ? true : navigator.onLine
   );
   const [name, setName] = useState("");
-  const [category, setCategory] = useState<ShoppingCategory | null>(null);
+  const [category, setCategory] = useState<ShoppingCategory>("other");
+  const [categoryTouched, setCategoryTouched] = useState(false);
   const [isStapleDraft, setIsStapleDraft] = useState(false);
+  const [quantity, setQuantity] = useState("");
+  const [quantityUnit, setQuantityUnit] = useState<ShoppingUnit>("count");
   const hydrated = useRef(false);
 
   const refreshFromServer = useCallback(async () => {
@@ -91,8 +97,8 @@ export function ShoppingList({
 
     async function handleOnline() {
       setOnline(true);
-      const { flushed } = await flushOutbox();
-      if (flushed > 0 || true) refreshFromServer();
+      await flushOutbox();
+      refreshFromServer();
     }
     function handleOffline() {
       setOnline(false);
@@ -108,32 +114,62 @@ export function ShoppingList({
     };
   }, [refreshFromServer]);
 
+  function handleNameChange(value: string) {
+    setName(value);
+    if (!categoryTouched) setCategory(guessCategory(value));
+  }
+
   async function handleAdd() {
     const trimmed = name.trim();
     if (!trimmed) return;
     const id = crypto.randomUUID();
-    const finalCategory = category ?? guessCategory(trimmed);
+    const parsedQuantity = quantity.trim() ? Number(quantity) : null;
+    const finalQuantityUnit = parsedQuantity !== null ? quantityUnit : null;
+
     const item: ShoppingItem = {
       id,
       user_id: "",
       name: trimmed,
-      category: finalCategory,
+      category,
       is_staple: isStapleDraft,
       checked: false,
       on_list: true,
+      quantity: parsedQuantity,
+      quantity_unit: finalQuantityUnit,
       last_purchased_at: null,
       created_at: new Date().toISOString(),
     };
 
     setItems((prev) => [...prev, item]);
     setName("");
-    setCategory(null);
+    setCategory("other");
+    setCategoryTouched(false);
     setIsStapleDraft(false);
+    setQuantity("");
     await putCachedItem(item);
 
     await runOnlineFirst(
-      { id: crypto.randomUUID(), type: "add", payload: { id, name: trimmed, category: finalCategory, isStaple: isStapleDraft } },
-      () => addShoppingItem({ id, name: trimmed, category: finalCategory, isStaple: isStapleDraft })
+      {
+        id: crypto.randomUUID(),
+        type: "add",
+        payload: {
+          id,
+          name: trimmed,
+          category,
+          isStaple: isStapleDraft,
+          quantity: parsedQuantity,
+          quantityUnit: finalQuantityUnit,
+        },
+      },
+      () =>
+        addShoppingItem({
+          id,
+          name: trimmed,
+          category,
+          isStaple: isStapleDraft,
+          quantity: parsedQuantity,
+          quantityUnit: finalQuantityUnit,
+        })
     );
   }
 
@@ -251,27 +287,66 @@ export function ShoppingList({
           e.preventDefault();
           handleAdd();
         }}
-        className="mb-6 flex gap-2"
+        className="mb-6 space-y-2"
       >
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Add an item…"
-          className="flex-1"
-        />
-        <Button
-          type="button"
-          variant={isStapleDraft ? "default" : "outline"}
-          size="icon"
-          onClick={() => setIsStapleDraft((v) => !v)}
-          aria-label="Mark as staple"
-          title="Staple item (resurfaces when you're running low)"
-        >
-          <Star className="size-4" fill={isStapleDraft ? "currentColor" : "none"} />
-        </Button>
-        <Button type="submit" size="icon" aria-label="Add item">
-          <Plus className="size-4" />
-        </Button>
+        <div className="flex gap-2">
+          <Input
+            value={name}
+            onChange={(e) => handleNameChange(e.target.value)}
+            placeholder="Add an item…"
+            className="flex-1"
+          />
+          <Button
+            type="button"
+            variant={isStapleDraft ? "default" : "outline"}
+            size="icon"
+            onClick={() => setIsStapleDraft((v) => !v)}
+            aria-label="Mark as staple"
+            title="Staple item (resurfaces when you're running low)"
+          >
+            <Star className="size-4" fill={isStapleDraft ? "currentColor" : "none"} />
+          </Button>
+          <Button type="submit" size="icon" aria-label="Add item">
+            <Plus className="size-4" />
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <select
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value as ShoppingCategory);
+              setCategoryTouched(true);
+            }}
+            className="h-8 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
+            aria-label="Category"
+          >
+            {SHOPPING_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>
+                {SHOPPING_CATEGORY_LABELS[cat]}
+              </option>
+            ))}
+          </select>
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            placeholder="Qty"
+            className="w-20"
+          />
+          <select
+            value={quantityUnit}
+            onChange={(e) => setQuantityUnit(e.target.value as ShoppingUnit)}
+            className="h-8 w-20 rounded-lg border border-input bg-transparent px-2 text-sm"
+            aria-label="Unit"
+          >
+            {SHOPPING_UNITS.map((unit) => (
+              <option key={unit} value={unit}>
+                {SHOPPING_UNIT_LABELS[unit]}
+              </option>
+            ))}
+          </select>
+        </div>
       </form>
 
       {items.length === 0 && (
@@ -364,6 +439,11 @@ function ShoppingRow({
       </button>
       <span className={cn("flex-1 text-sm", item.checked && "text-muted-foreground line-through")}>
         {item.name}
+        {item.quantity !== null && item.quantity_unit !== null && (
+          <span className="ml-1.5 text-xs text-muted-foreground">
+            {item.quantity} {SHOPPING_UNIT_LABELS[item.quantity_unit]}
+          </span>
+        )}
       </span>
       {item.checked && (
         <span className="text-xs text-muted-foreground">
