@@ -6,14 +6,14 @@ See `SPEC.md` for the full specification.
 ---
 
 ## Phase 0 — Foundation
-- [ ] Repo initialized (Next.js App Router + TypeScript)
-- [ ] Private GitHub repo created and pushed
+- [x] Repo initialized (Next.js App Router + TypeScript)
+- [x] Private GitHub repo created and pushed (github.com/bbantony/alan-os)
 - [ ] Supabase project connected
 - [ ] Auth: email/password + invite-code signup
 - [ ] `profiles` table + roles (owner | workout_member | full_user)
 - [ ] RLS baseline enabled
 - [ ] PWA: manifest, service worker, installable
-- [ ] Full design system (Part C): colors, fonts, dark mode, motion, empty states
+- [x] Full design system (Part C): colors, fonts, dark mode, motion, empty states
 - [ ] App shell + navigation (mobile bottom tabs, desktop sidebar, role gating)
 - [ ] Settings → Appearance editor (palette picker, fonts, density)
 - [ ] Deployed to Vercel with live URL
