@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import type { Account, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
@@ -69,6 +70,7 @@ export function ReceiptReviewDialog({
       setError(result.error ?? "Something went wrong saving this receipt.");
       return;
     }
+    toast.success("Receipt approved");
     onApproved(receipt.id, result.transactions, accountId, result.updatedAccountBalanceCents);
   }
 
@@ -76,6 +78,7 @@ export function ReceiptReviewDialog({
     setSaving(true);
     await discardReceipt({ id: receipt.id });
     setSaving(false);
+    toast.success("Receipt discarded");
     onDiscarded(receipt.id);
   }
 

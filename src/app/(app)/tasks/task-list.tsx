@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { TasksIllustration } from "@/components/illustrations";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone, isOutsideWorkHours } from "@/lib/time";
 import { createReminderFromTask } from "@/app/(app)/calendar/actions";
@@ -99,6 +100,7 @@ export function TaskList({
   async function handleRemindMe(task: Task) {
     setRemindedIds((prev) => new Set(prev).add(task.id));
     await createReminderFromTask({ taskId: task.id });
+    toast.success("Reminder set");
   }
 
   async function handleAddSubtask(parent: Task) {
@@ -148,6 +150,7 @@ export function TaskList({
   async function handleDelete(task: Task) {
     setTasks((prev) => prev.filter((t) => t.id !== task.id && t.parent_task_id !== task.id));
     await deleteTask({ id: task.id });
+    toast.success("Task deleted");
   }
 
   async function handleMoveHorizon(task: Task, next: TaskHorizon) {

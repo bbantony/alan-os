@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
@@ -51,10 +52,12 @@ export function GoalsView({
 
   async function handleCreate() {
     if (!name.trim() || !target) return;
+    const trimmedName = name.trim();
+    const targetCents = dollarsToCents(Number(target));
     setSaving(true);
     await createSavingsGoal({
-      name: name.trim(),
-      targetCents: dollarsToCents(Number(target)),
+      name: trimmedName,
+      targetCents,
       deadline: deadline || null,
       icon: "PiggyBank",
     });
@@ -63,12 +66,13 @@ export function GoalsView({
     setName("");
     setTarget("");
     setDeadline("");
+    toast.success(`"${trimmedName}" goal created`);
     onChanged((prev) => [
       {
         id: crypto.randomUUID(),
         user_id: "",
-        name: name.trim(),
-        target_cents: dollarsToCents(Number(target)),
+        name: trimmedName,
+        target_cents: targetCents,
         saved_cents: 0,
         deadline: deadline || null,
         icon: "PiggyBank",
@@ -83,6 +87,7 @@ export function GoalsView({
     if (!addingTo || !addAmount) return;
     const amountCents = dollarsToCents(Number(addAmount));
     const id = addingTo.id;
+    const goalName = addingTo.name;
     onChanged((prev) =>
       prev.map((g) =>
         g.id === id
@@ -92,6 +97,7 @@ export function GoalsView({
     );
     setAddingTo(null);
     setAddAmount("");
+    toast.success(`${formatCents(amountCents)} added to "${goalName}"`);
     await addToGoal({ id, amountCents });
   }
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "@/components/ui/toast";
 import { createCrew, deleteCrew, renameCrew, type AdminCrewRow } from "./actions";
 
 export function AdminCrews({ initialCrews }: { initialCrews: AdminCrewRow[] }) {
@@ -28,6 +29,7 @@ export function AdminCrews({ initialCrews }: { initialCrews: AdminCrewRow[] }) {
     }
     setNewName("");
     setCrews((prev) => [...prev, { id: crypto.randomUUID(), name: trimmed, member_count: 0, created_at: new Date().toISOString() }]);
+    toast.success(`"${trimmed}" created`);
   }
 
   function startRename(crew: AdminCrewRow) {
@@ -51,6 +53,7 @@ export function AdminCrews({ initialCrews }: { initialCrews: AdminCrewRow[] }) {
       return;
     }
     setCrews((prev) => prev.filter((c) => c.id !== id));
+    toast.success("Crew deleted");
   }
 
   return (

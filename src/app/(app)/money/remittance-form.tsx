@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { todayInAppTimezone } from "@/lib/time";
-import { dollarsToCents } from "@/lib/finance/money";
+import { dollarsToCents, formatCents } from "@/lib/finance/money";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import type { Account } from "@/lib/finance/types";
 import { getFxRate, logRemittance } from "./actions";
@@ -62,6 +63,7 @@ export function RemittanceForm({
       return;
     }
     const delta = balanceDeltaCents(cadCents, false, account.type);
+    toast.success(`${formatCents(cadCents, "CAD")} remittance logged`);
     onLogged({ ...account, current_balance_cents: account.current_balance_cents + delta });
   }
 

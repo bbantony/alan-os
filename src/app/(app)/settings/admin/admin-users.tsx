@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Flame } from "lucide-react";
 import { MODULE_IDS, MODULE_LABELS } from "@/lib/permissions";
 import { formatInAppTimezone } from "@/lib/time";
+import { toast } from "@/components/ui/toast";
 import { assignUserCrew, getAdminUserWorkoutSummary, setUserModuleAccess, type AdminCrewRow, type AdminUserRow, type AdminUserWorkoutSummary } from "./actions";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -21,16 +22,24 @@ export function AdminUsers({ initialUsers, crews }: { initialUsers: AdminUserRow
   async function handleToggleModule(userId: string, moduleId: (typeof MODULE_IDS)[number]) {
     const user = users.find((u) => u.id === userId);
     if (!user) return;
-    const nextAccess = { ...user.module_access, [moduleId]: !user.module_access[moduleId] };
+    const nextEnabled = !user.module_access[moduleId];
+    const nextAccess = { ...user.module_access, [moduleId]: nextEnabled };
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, module_access: nextAccess } : u)));
     await setUserModuleAccess({ userId, access: nextAccess });
+    toast.success(`${MODULE_LABELS[moduleId]} ${nextEnabled ? "enabled" : "disabled"} for ${user.display_name ?? "this user"}`);
   }
 
   async function handleCrewChange(userId: string, crewId: string) {
+    const user = users.find((u) => u.id === userId);
     const resolvedCrewId = crewId === "" ? null : crewId;
     const crewName = crews.find((c) => c.id === resolvedCrewId)?.name ?? null;
     setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, crew_id: resolvedCrewId, crew_name: crewName } : u)));
     await assignUserCrew({ userId, crewId: resolvedCrewId });
+    toast.success(
+      crewName
+        ? `${user?.display_name ?? "User"} moved to ${crewName}`
+        : `${user?.display_name ?? "User"} removed from their crew`
+    );
   }
 
   async function handleExpand(userId: string) {

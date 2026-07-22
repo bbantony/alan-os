@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { dollarsToCents } from "@/lib/finance/money";
 import type { Debt } from "@/lib/finance/types";
 import { createDebt } from "./actions";
@@ -36,6 +37,7 @@ export function DebtForm({ onClose, onSaved }: { onClose: () => void; onSaved: (
       setError(result.error);
       return;
     }
+    toast.success(`${name.trim()} added`);
     onSaved({
       id: crypto.randomUUID(),
       user_id: "",

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { todayInAppTimezone } from "@/lib/time";
 import { dollarsToCents } from "@/lib/finance/money";
 import { BUDGET_PERIOD_LABELS, type BudgetPeriod, type Category } from "@/lib/finance/types";
@@ -42,6 +43,7 @@ export function BudgetForm({
       setError(result.error);
       return;
     }
+    toast.success("Budget created");
     onSaved();
   }
 

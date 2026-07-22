@@ -5,6 +5,7 @@ import { Delete } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { todayInAppTimezone } from "@/lib/time";
 import { formatCents } from "@/lib/finance/money";
@@ -103,6 +104,7 @@ export function QuickLogForm({
       created_at: new Date().toISOString(),
     };
     const delta = balanceDeltaCents(amountCents, isIncome, account.type);
+    toast.success(`${formatCents(amountCents)} logged`);
     onLogged(optimisticTxn, { ...account, current_balance_cents: account.current_balance_cents + delta });
   }
 

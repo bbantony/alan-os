@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import { formatCents } from "@/lib/finance/money";
 import { parseCsv, guessColumns, normalizeCsvDate, type ColumnGuess } from "@/lib/finance/csv-parser";
 import type { Account, Category } from "@/lib/finance/types";
@@ -138,6 +139,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
     }
     setImportedCount(result.imported ?? 0);
     setStep("done");
+    toast.success(`Imported ${result.imported ?? 0} transactions`);
   }
 
   function categoriesFor(isIncome: boolean) {
