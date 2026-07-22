@@ -1,9 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import { CalendarDays, ExternalLink, ListTodo, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { EmptyState } from "@/components/empty-state";
+import { toast } from "@/components/ui/toast";
+import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone } from "@/lib/time";
 import { getAgenda, type AgendaItem } from "./actions";
@@ -43,20 +48,15 @@ export function AgendaView({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex gap-1 rounded-lg border border-border p-0.5">
-          {(["today", "week"] as const).map((r) => (
-            <button
-              key={r}
-              onClick={() => handleRangeChange(r)}
-              className={cn(
-                "tap-press rounded-md px-3 py-1 text-xs font-semibold capitalize",
-                range === r ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              {r}
-            </button>
-          ))}
-        </div>
+        <Segmented
+          className="w-32"
+          options={[
+            { value: "today", label: "Today" },
+            { value: "week", label: "Week" },
+          ]}
+          value={range}
+          onChange={handleRangeChange}
+        />
         {gcalConnected && (
           <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => setShowNewEvent(true)}>
             <Plus className="size-3.5" />
@@ -75,27 +75,62 @@ export function AgendaView({
         />
       ) : (
         <ul className="space-y-1.5">
-          {agenda.map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5"
-            >
-              <div className="w-14 shrink-0 text-xs text-muted-foreground">
-                {item.allDay ? "All day" : formatInAppTimezone(item.time, { hour: "numeric", minute: "2-digit" })}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm">{item.title}</p>
-              </div>
-              <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", SOURCE_STYLES[item.source])}>
-                {SOURCE_LABELS[item.source]}
-              </span>
-              {item.source === "gcal" && item.htmlLink && (
-                <a href={item.htmlLink} target="_blank" rel="noreferrer" className="tap-press shrink-0 text-muted-foreground/50">
-                  <ExternalLink className="size-3.5" />
-                </a>
-              )}
-            </li>
-          ))}
+          <AnimatePresence initial={false}>
+            {agenda.map((item) => (
+              <motion.li
+                key={item.id}
+                layout
+                variants={listItemVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                transition={LIST_ITEM_TRANSITION}
+                className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2.5"
+              >
+                {(() => {
+                  const content = (
+                    <>
+                      <div className="w-14 shrink-0 text-xs text-muted-foreground">
+                        {item.allDay ? "All day" : formatInAppTimezone(item.time, { hour: "numeric", minute: "2-digit" })}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm">{item.title}</p>
+                      </div>
+                      <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold", SOURCE_STYLES[item.source])}>
+                        {SOURCE_LABELS[item.source]}
+                      </span>
+                    </>
+                  );
+                  // Tapping a reminder or task jumps straight to where you'd
+                  // act on it, instead of the agenda being read-only display.
+                  if (item.source === "reminder") {
+                    return (
+                      <Link href="/calendar?tab=reminders" className="flex flex-1 items-center gap-3">
+                        {content}
+                      </Link>
+                    );
+                  }
+                  if (item.source === "task") {
+                    return (
+                      <Link href="/tasks" className="flex flex-1 items-center gap-3">
+                        {content}
+                      </Link>
+                    );
+                  }
+                  return (
+                    <>
+                      {content}
+                      {item.htmlLink && (
+                        <a href={item.htmlLink} target="_blank" rel="noreferrer" className="tap-press shrink-0 text-muted-foreground/50">
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      )}
+                    </>
+                  );
+                })()}
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
       )}
 
@@ -112,6 +147,7 @@ export function AgendaView({
           onClose={() => setShowNewEvent(false)}
           onCreated={async () => {
             setShowNewEvent(false);
+            toast.success("Event added to Google Calendar");
             setAgenda(await getAgenda(range));
           }}
         />

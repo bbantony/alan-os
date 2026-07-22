@@ -4,6 +4,8 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, Flame } from "lucide-react";
 import { MODULE_IDS, MODULE_LABELS } from "@/lib/permissions";
 import { formatInAppTimezone } from "@/lib/time";
+import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
 import { assignUserCrew, getAdminUserWorkoutSummary, setUserModuleAccess, type AdminCrewRow, type AdminUserRow, type AdminUserWorkoutSummary } from "./actions";
 
@@ -90,10 +92,10 @@ export function AdminUsers({ initialUsers, crews }: { initialUsers: AdminUserRow
                       <>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-muted-foreground">Crew</label>
-                          <select
+                          <Select
                             value={user.crew_id ?? ""}
                             onChange={(e) => handleCrewChange(user.id, e.target.value)}
-                            className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                            className="h-8"
                           >
                             <option value="">No crew</option>
                             {crews.map((c) => (
@@ -101,22 +103,21 @@ export function AdminUsers({ initialUsers, crews }: { initialUsers: AdminUserRow
                                 {c.name}
                               </option>
                             ))}
-                          </select>
+                          </Select>
                         </div>
 
                         <div>
                           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                             Can open these modules
                           </label>
-                          <div className="grid grid-cols-2 gap-1.5">
+                          <div className="grid grid-cols-2 gap-2">
                             {MODULE_IDS.map((id) => (
-                              <label key={id} className="flex items-center gap-2 text-xs">
-                                <input
-                                  type="checkbox"
-                                  checked={user.module_access[id]}
-                                  onChange={() => handleToggleModule(user.id, id)}
-                                />
+                              <label key={id} className="flex items-center justify-between gap-2 text-xs">
                                 {MODULE_LABELS[id]}
+                                <Switch
+                                  checked={user.module_access[id]}
+                                  onCheckedChange={() => handleToggleModule(user.id, id)}
+                                />
                               </label>
                             ))}
                           </div>

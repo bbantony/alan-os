@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { AlarmClock, Pause, Play, Plus, Repeat, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { toast } from "@/components/ui/toast";
+import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone } from "@/lib/time";
 import { describeRRule } from "@/lib/reminders/rrule";
@@ -43,6 +46,7 @@ export function RemindersView({
   async function handleDelete(r: Reminder) {
     setReminders((prev) => prev.filter((x) => x.id !== r.id));
     await deleteReminder({ id: r.id });
+    toast.success("Reminder deleted");
   }
 
   async function handleSnooze(r: Reminder, minutes: number) {
@@ -86,8 +90,18 @@ export function RemindersView({
               {group.label}
             </h2>
             <ul className="space-y-1.5">
-              {group.items.map((r) => (
-                <li key={r.id} className="rounded-lg border border-border bg-surface px-3 py-2.5">
+              <AnimatePresence initial={false}>
+                {group.items.map((r) => (
+                  <motion.li
+                    key={r.id}
+                    layout
+                    variants={listItemVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={LIST_ITEM_TRANSITION}
+                    className="rounded-lg border border-border bg-surface px-3 py-2.5"
+                  >
                   <div className="flex items-center gap-3">
                     <button onClick={() => setEditing(r)} className="min-w-0 flex-1 text-left">
                       <p className={cn("truncate text-sm", r.status === "paused" && "text-muted-foreground line-through")}>
@@ -143,8 +157,9 @@ export function RemindersView({
                       ))}
                     </div>
                   )}
-                </li>
-              ))}
+                  </motion.li>
+                ))}
+              </AnimatePresence>
             </ul>
           </div>
         ))

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { todayInAppTimezone } from "@/lib/time";
 import { RECURRENCE_PRESET_LABELS, type Reminder } from "@/lib/reminders/types";
@@ -82,6 +83,7 @@ export function ReminderForm({
       setError(result.error ?? "Couldn't save that reminder.");
       return;
     }
+    toast.success(existing ? "Reminder updated" : "Reminder created");
     onSaved(result.reminder);
   }
 
