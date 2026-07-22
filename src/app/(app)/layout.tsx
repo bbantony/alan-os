@@ -9,7 +9,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ThemeProvider initialTheme={profile.themeSettings}>
-      <AppShell role={profile.role}>{children}</AppShell>
+      <AppShell moduleAccess={profile.moduleAccess}>{children}</AppShell>
     </ThemeProvider>
   );
 }

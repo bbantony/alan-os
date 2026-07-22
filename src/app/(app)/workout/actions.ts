@@ -417,12 +417,6 @@ export async function deleteTemplate(input: { id: string }) {
 
 // ---------- Feed & reactions ----------
 
-export async function getCrewProfiles(): Promise<CrewProfile[]> {
-  const { supabase } = await requireUser();
-  const { data } = await supabase.rpc("crew_profiles");
-  return (data as CrewProfile[]) ?? [];
-}
-
 export async function getFeed(limit = 30): Promise<FeedWorkout[]> {
   const { supabase } = await requireUser();
 

@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { getNavItems, type Role } from "./nav-items";
+import { getNavItems } from "./nav-items";
+import type { ModuleAccess } from "@/lib/permissions";
 
-export function SidebarNav({ role }: { role: Role }) {
+export function SidebarNav({ moduleAccess }: { moduleAccess: ModuleAccess }) {
   const pathname = usePathname();
-  const items = getNavItems(role);
+  const items = getNavItems(moduleAccess);
 
   return (
     <aside className="hidden w-56 shrink-0 border-r border-border bg-surface md:flex md:flex-col md:gap-1 md:p-4">

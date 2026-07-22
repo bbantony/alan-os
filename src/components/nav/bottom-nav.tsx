@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { getNavItems, type Role } from "./nav-items";
+import { getNavItems } from "./nav-items";
+import type { ModuleAccess } from "@/lib/permissions";
 
-export function BottomNav({ role }: { role: Role }) {
+export function BottomNav({ moduleAccess }: { moduleAccess: ModuleAccess }) {
   const pathname = usePathname();
-  const items = getNavItems(role);
+  const items = getNavItems(moduleAccess);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface/95 backdrop-blur supports-backdrop-blur:bg-surface/80 md:hidden">

@@ -499,3 +499,86 @@ waiting for the key (owner said yes — build the non-AI scaffolding now).
   (a budget alert, not just "add a card"), plus how to scan a receipt and import a CSV.
 - `npm run build`/lint clean; every non-AI piece verified against the live database with
   real inserts/rollback, exactly as in every prior phase.
+
+## 12. Admin/Permissions Overhaul + App-Wide Design Polish — Part 1 (Admin & Permissions)
+
+**Requested:** "Analyze the whole app... I am the only admin user and the others will be
+all ordinary users. I want user management rights where I can manage what each user can
+see and use, and also see what users can see [in] workout of other users." Plus a full
+UI beautification pass across every module ("refine refine refine"), built "bottom-up,
+nothing breaks, no jerry-rigging," planned in plan mode first. Two architecture questions
+were asked and answered before any code was written: per-user custom module toggles
+(not more fixed roles), and real owner-managed crew groups for Workout (not the existing
+fully-global model, and not a bigger multi-crew-per-user system than needed).
+
+**Changes made:**
+- Audited the existing role/permission architecture (via a research pass) before
+  designing anything: found `role` checks had already drifted across three independent
+  places (`proxy.ts`, `nav-items.ts`, `settings/page.tsx`), and — more importantly — that
+  workout's "crew-readable" RLS policies had **no group concept at all**: literally
+  `auth.uid() is not null`, meaning any authenticated user (including a hypothetical
+  future `full_user`) sees every workout in the whole project. This was the real thing
+  needing a redesign, not a guess.
+- Migration `0018_admin_permissions.sql`: a `crews` table, `profiles.crew_id` (one crew
+  per user — a deliberate scope call, flagged rather than silently assumed, since a
+  many-to-many membership model would have been a bigger change than what was asked
+  for), `profiles.module_access` jsonb (a fully-resolved per-user access grid, not
+  sparse — avoids "missing key means what?" ambiguity everywhere it's read), two new
+  security-definer helpers (`is_admin()`, `same_crew()`), and 8 new owner-only
+  `admin_*` RPCs (list/create/rename/delete crews, assign a user to a crew, set a
+  user's module access, set a user's role) — each checks `is_admin()` internally and
+  raises rather than silently no-op-ing, matching this app's existing RPC-gating
+  discipline (no service-role client anywhere, same as every phase so far).
+- **Caught and fixed a real regression before it ever shipped**: the first backfill
+  draft assigned every *non-owner* profile to the new default crew, which would have
+  made the owner's own workouts invisible to his 3 existing friends (since the owner
+  wasn't a crew member and the new same-crew RLS check has no other path to see
+  someone outside your crew). Caught this via the actual verification pass (a friend's
+  visible-workout count dropped to 0 after the rewrite) rather than after deploying —
+  fixed by putting the owner in the default crew too, while `is_admin()` separately and
+  independently still grants him visibility into *any other* crew regardless.
+- Verified the whole migration against the live database, not just read over: a real
+  regression check (existing friend sees the exact same workout count before/after),
+  a real isolation check (a second test crew's member sees only their own workout, the
+  original crew is unaffected), a real admin-override check (owner sees both crews), and
+  real rejection checks for every `admin_*` RPC called by a non-owner — using the same
+  `SET ROLE authenticated` + `request.jwt.claims` simulation proven earlier this session
+  for the Storage RLS check. Hit and fixed two bugs in the verification script itself
+  along the way (a nested-transaction bug where an inner helper's rollback was wiping
+  the outer transaction's own test data before a later check ran, and a false failure
+  from comparing jsonb objects by naive string equality instead of per-key) — both
+  caught by the checks actually running, not assumed correct.
+- **A second, real finding, surfaced rather than silently touched**: discovered two
+  profiles with `role = 'owner'` in the live database (the real owner's account and a
+  second one, both created the same day Phase 0 shipped, before the signup default was
+  changed away from `owner`). Left both untouched — deciding who should and shouldn't be
+  an admin isn't this agent's call to make unilaterally on real account data — flagged
+  clearly in `PROGRESS.md` and the plain-English summary instead.
+- `src/lib/permissions.ts`: the one shared resolver (`resolveModuleAccess`,
+  `canAccessPath`) now used by all three previously-drifting call sites —
+  `proxy.ts` (redirects to `/today` instead of the old hardcoded `/workout` target,
+  since Today is now universally reachable), `nav-items.ts` (bottom nav and the More
+  menu now build themselves from module_access instead of a hardcoded 2-branch role
+  switch), and `settings/page.tsx` (module settings links filtered the same way, plus a
+  new owner-only Admin section). Hand-verified with a standalone script covering owner
+  override, restricted defaults, a custom per-user override (the actual point of this
+  whole feature — a `full_user` with Money on and Workout off), null/missing
+  module_access defaulting safely to false rather than true, and settings sub-page
+  routing.
+- Since `/today` is now reachable by every account (previously `workout_member` was
+  blocked from it entirely), made the Today dashboard itself module_access-aware — a
+  restricted account no longer sees dashboard tiles or fetches data for modules it can't
+  open, avoiding dead-end widgets that would otherwise link nowhere for them.
+- New `Settings → Admin` page (`src/app/(app)/settings/admin/`): Crews (create/rename/
+  delete, member counts) and Users (role badge, crew reassignment, a module-access
+  toggle grid per person, and an expandable per-user workout summary — streak, recent
+  PRs, last logged session — reusing the existing streak-computation helper, now able to
+  query any user thanks to `is_admin()`'s RLS override) — replacing the old
+  `/workout/invite` page entirely (its invite-code card moved here; the standalone page
+  and its `getCrewProfiles()` helper, both now fully dead code, were deleted rather than
+  left around).
+- `npm run build`/lint clean (including a stale Next.js typed-route cache from the
+  deleted `/workout/invite` page, cleared by removing `.next`).
+- Part 2 (design system foundation: motion, shadow tokens, new Select/Switch/
+  SegmentedControl/Toast primitives) and Part 3 (module-by-module polish pass) are next,
+  continuing without further check-ins per the owner's explicit standing instruction.

@@ -1,12 +1,17 @@
 import Link from "next/link";
-import { MORE_LINKS } from "@/components/nav/nav-items";
+import { getMoreLinks } from "@/components/nav/nav-items";
+import { getCurrentProfile } from "@/lib/supabase/profile";
+import { NO_MODULES_ACCESS } from "@/lib/permissions";
 
-export default function MorePage() {
+export default async function MorePage() {
+  const profile = await getCurrentProfile();
+  const links = getMoreLinks(profile?.moduleAccess ?? NO_MODULES_ACCESS);
+
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
       <h1 className="mb-6 font-heading text-2xl font-semibold">More</h1>
       <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
-        {MORE_LINKS.map((item) => {
+        {links.map((item) => {
           const Icon = item.icon;
           return (
             <li key={item.href}>

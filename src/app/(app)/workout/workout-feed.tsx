@@ -91,8 +91,8 @@ export function WorkoutFeed({
         </div>
         <div className="flex items-center gap-2">
           {isOwner && (
-            <Link href="/workout/invite">
-              <Button variant="outline" size="icon" aria-label="Invite crew">
+            <Link href="/settings/admin">
+              <Button variant="outline" size="icon" aria-label="Manage users and crews">
                 <UserPlus className="size-4" />
               </Button>
             </Link>

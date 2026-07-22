@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { canAccessPath } from "@/lib/permissions";
 
 // /api/cron and /api/reminders/*/complete|snooze authenticate themselves
 // (a bearer secret, and a signed per-reminder token respectively — see
@@ -46,16 +47,21 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // workout_member (a friend, not the owner) must never reach any module besides
-  // Workout + Settings — SPEC.md Part B2/C3. This is the server-side enforcement;
-  // the nav already hides other links, but a typed-in URL must be blocked too.
+  // Per-account module access (SPEC.md Part B2/C3, extended by the admin/
+  // permissions overhaul — see supabase/migrations/0018_admin_permissions.sql):
+  // this is the server-side enforcement; the nav already hides inaccessible
+  // links, but a typed-in URL must be blocked too. canAccessPath is the single
+  // shared resolver also used by nav-items.ts and settings/page.tsx.
   if (user && !isPublic) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, module_access")
+      .eq("id", user.id)
+      .single();
     const pathname = request.nextUrl.pathname;
-    const allowed = pathname.startsWith("/workout") || pathname.startsWith("/settings");
-    if (profile?.role === "workout_member" && !allowed) {
+    if (profile && !canAccessPath({ role: profile.role, moduleAccess: profile.module_access }, pathname)) {
       const url = request.nextUrl.clone();
-      url.pathname = "/workout";
+      url.pathname = "/today";
       return NextResponse.redirect(url);
     }
   }

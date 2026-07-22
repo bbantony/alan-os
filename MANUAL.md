@@ -573,4 +573,51 @@ in the background whenever you approve a receipt.
 
 ---
 
+## Admin — Users & Crews
+
+This isn't one of the numbered phases above — you asked for it directly: a way to
+control exactly what each person you invite can see and use, and to manage real
+"crews" for the Workout module instead of everyone being lumped into one shared feed
+forever.
+
+### Managing users and crews
+
+1. Tap **More → Settings**. Since you're the owner, you'll see a new **Admin** section
+   at the bottom with a **Users & Crews** link — this section only ever appears for you,
+   never for anyone else, no matter what you toggle for them.
+2. At the top, your **invite code** is there to copy and send to someone new (same as
+   before) — anyone who signs up with it lands as a "Friend" who can only open Workout,
+   in your default crew, until you change that.
+3. Under **Crews**, create as many separate friend-groups as you want (e.g. "Gym
+   Buddies", "Family"). Members of different crews don't see each other's workouts at
+   all — only you can see everyone's, regardless of which crew you're managing.
+4. Under **Users**, tap anyone's name to expand their card. From there you can:
+   - Move them into a different crew (or take them out of one entirely).
+   - Tick or untick exactly which parts of the app they're allowed to open — Tasks,
+     Shopping, Workout, Calendar, Money, Journal, Vinyl — one by one. Unticking
+     something takes effect immediately; if they're using the app right now and you
+     turn off, say, Money, they'll be sent back to the Today page the next time they
+     try to open it or tap anything inside it.
+   - See their workout activity — current streak, how many workouts logged in total,
+     and their most recent personal records — without needing to be in their crew
+     yourself.
+
+### What this changed for existing accounts
+
+Nothing changed for anyone by itself. Your account and your 3 existing friends were all
+placed into one crew ("The Crew") automatically, so their shared workout feed looks
+exactly the same as before — the new controls just exist now for you to use whenever
+you want to split people up or restrict what they can open.
+
+**One thing worth your attention**: while building this, a second account with full
+owner-level access turned up in the database — `antonyalbert03@gmail.com` — created the
+same day this app first went live, before the very first signup default was changed
+away from "owner." It was left exactly as-is rather than changed without asking, since
+only you know whether that's an account you actually meant to have full admin rights.
+If it shouldn't be an admin, open **Settings → Admin → Users**, find it, and just leave
+its module toggles as you'd like a normal account to have — a full role-demotion option
+isn't in the Users screen yet, so say the word if you want that added too.
+
+---
+
 *(Phase 6 section will be added here once its checklist is complete.)*

@@ -1,0 +1,82 @@
+// The one shared source of truth for "can this account open this module" —
+// replaces three independently-drifting checks that used to live in
+// src/proxy.ts, src/components/nav/nav-items.ts, and settings/page.tsx.
+// module_access is always a FULLY RESOLVED grid by the time it reaches here
+// (see supabase/migrations/0018_admin_permissions.sql — handle_new_user and
+// the admin_set_module_access RPC always write every key), so a missing key
+// is a genuine anomaly, not "default to true" — resolveModuleAccess treats it
+// as false rather than guessing.
+
+export const MODULE_IDS = ["tasks", "shopping", "workout", "calendar", "money", "journal", "vinyl"] as const;
+
+export type ModuleId = (typeof MODULE_IDS)[number];
+export type ModuleAccess = Record<ModuleId, boolean>;
+
+export const MODULE_LABELS: Record<ModuleId, string> = {
+  tasks: "Tasks",
+  shopping: "Shopping",
+  workout: "Workout",
+  calendar: "Calendar & Reminders",
+  money: "Money",
+  journal: "Journal",
+  vinyl: "Vinyl",
+};
+
+export const ALL_MODULES_ACCESS: ModuleAccess = {
+  tasks: true,
+  shopping: true,
+  workout: true,
+  calendar: true,
+  money: true,
+  journal: true,
+  vinyl: true,
+};
+
+export const NO_MODULES_ACCESS: ModuleAccess = {
+  tasks: false,
+  shopping: false,
+  workout: false,
+  calendar: false,
+  money: false,
+  journal: false,
+  vinyl: false,
+};
+
+export interface PermissionProfile {
+  role: "owner" | "workout_member" | "full_user";
+  moduleAccess: Partial<Record<string, unknown>> | null | undefined;
+}
+
+export function resolveModuleAccess(profile: PermissionProfile): ModuleAccess {
+  if (profile.role === "owner") return ALL_MODULES_ACCESS;
+  const raw = profile.moduleAccess ?? {};
+  const resolved = { ...NO_MODULES_ACCESS };
+  for (const id of MODULE_IDS) {
+    resolved[id] = raw[id] === true;
+  }
+  return resolved;
+}
+
+// Maps a pathname to the module it belongs to. Returns null for paths that
+// aren't module-gated at all (/today, /more, /settings and its
+// Appearance/Password sub-pages, /settings/admin) — those are handled by
+// their own separate rule in canAccessPath below.
+function moduleForPath(pathname: string): ModuleId | null {
+  for (const id of MODULE_IDS) {
+    if (pathname.startsWith(`/${id}`) || pathname.startsWith(`/settings/${id}`)) return id;
+  }
+  return null;
+}
+
+export function canAccessPath(profile: PermissionProfile, pathname: string): boolean {
+  if (profile.role === "owner") return true;
+  // /settings/admin can never be reached by a non-owner regardless of any
+  // module_access toggle — there is no toggle for it, this is the one
+  // hardcoded exception, same as the old workout/invite owner-only gate.
+  if (pathname.startsWith("/settings/admin")) return false;
+
+  const moduleId = moduleForPath(pathname);
+  if (moduleId === null) return true; // /today, /more, /settings, /settings/appearance, /settings/password
+
+  return resolveModuleAccess(profile)[moduleId];
+}

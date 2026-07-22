@@ -2,16 +2,16 @@ import type { ReactNode } from "react";
 import { BottomNav } from "./bottom-nav";
 import { SidebarNav } from "./sidebar-nav";
 import { QuickCaptureButton } from "@/components/quick-capture/quick-capture-button";
-import type { Role } from "./nav-items";
+import type { ModuleAccess } from "@/lib/permissions";
 
-export function AppShell({ role, children }: { role: Role; children: ReactNode }) {
+export function AppShell({ moduleAccess, children }: { moduleAccess: ModuleAccess; children: ReactNode }) {
   return (
     <div className="flex min-h-full">
-      <SidebarNav role={role} />
+      <SidebarNav moduleAccess={moduleAccess} />
       <div className="flex flex-1 flex-col">
         <main className="flex-1 pb-20 md:pb-8">{children}</main>
       </div>
-      <BottomNav role={role} />
+      <BottomNav moduleAccess={moduleAccess} />
       <QuickCaptureButton />
     </div>
   );

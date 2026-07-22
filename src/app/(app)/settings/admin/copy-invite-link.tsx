@@ -9,7 +9,7 @@ export function CopyInviteLink({ inviteCode, signupPath }: { inviteCode: string;
 
   async function handleCopy() {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const message = `Join my Alan OS workout crew! Sign up at ${origin}${signupPath} — invite code: ${inviteCode}`;
+    const message = `Join my Alan OS crew! Sign up at ${origin}${signupPath} — invite code: ${inviteCode}`;
     await navigator.clipboard.writeText(message);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

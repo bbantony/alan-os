@@ -159,8 +159,46 @@ upload into their own folder and is blocked from writing into anyone else's
 — plus a full receipt→transaction→shopping-cross-check round trip, and that
 the transactions.receipt_id foreign key genuinely rejects a bogus id.
 
+---
+
+## Admin & Permissions Overhaul + App-Wide Design Polish (not a numbered
+SPEC.md phase — a cross-cutting initiative requested directly by the owner)
+
+### Part 1 — Admin & Permissions Foundation
+- [x] Real crew groups (`crews` table) the owner creates/renames/deletes and
+      assigns any user to — replacing the old "every authenticated user sees
+      every workout" model with actual group boundaries.
+- [x] Per-user `module_access` grid (Tasks/Shopping/Workout/Calendar/Money/
+      Journal/Vinyl, each independently toggle-able) replacing the rigid
+      3-role gate — the owner decides exactly what each account can open.
+- [x] Owner always sees every crew's activity regardless of his own crew
+      membership (`is_admin()` override), on top of normal same-crew
+      visibility for everyone else.
+- [x] `src/lib/permissions.ts` — one shared resolver, replacing 3
+      independently-drifting checks that used to live in `proxy.ts`,
+      `nav-items.ts`, and `settings/page.tsx`.
+- [x] New Settings → Admin (Users &amp; Crews) page, owner-only, replacing
+      the old read-only `/workout/invite` page entirely.
+- [x] Today dashboard widgets and nav now respect module_access — a
+      restricted account never sees a dashboard tile or nav link for a
+      module it can't open.
+- [ ] Design system foundation + module-by-module polish pass (Parts 2/3) —
+      in progress.
+
+### Found during this work, not fixed (flagged, not silently changed)
+Two profiles exist with `role = 'owner'` — the real owner's account
+(`antonyalan99@gmail.com`) and a second one (`antonyalbert03@gmail.com`),
+both created the same day Phase 0 first shipped, before the signup default
+was changed away from `owner`. Both currently have unconditional admin
+access under the new system. Left untouched since only the owner knows
+whether that second account is intentional — see the plain-English summary
+for what to do about it.
+
+---
+
 Next session: "Read SPEC.md. Phase 5 is complete and deployed. Execute
 Phase 6 only" (once the owner actions from Phases 3 and 5 — Google OAuth
 credentials, the cron-job.org pinger, and the Gemini API key — are done,
 since none of Phase 6's Journal/Vinyl work depends on them, but full
-reminders/calendar delivery and AI receipt scanning still do).
+reminders/calendar delivery and AI receipt scanning still do) — though the
+Admin/Design overhaul above takes priority per the owner's latest request.
