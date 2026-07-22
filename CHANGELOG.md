@@ -625,3 +625,46 @@ fully-global model, and not a bigger multi-crew-per-user system than needed).
   replaces every place a tab bar was needed.
 - `npm run build`/lint clean. Part 3 (wiring these primitives into every module, plus
   motion and toast feedback throughout) is next.
+
+## 14. Admin/Permissions Overhaul + App-Wide Design Polish — Part 3 (Module Polish Pass)
+
+**Requested:** Continuation of #12/#13 — actually applying the new primitives to the app
+instead of leaving them unused.
+
+**Changes made:**
+- Replaced the 3 genuinely-duplicated hand-rolled tab bars (`money-shell.tsx`,
+  `calendar-shell.tsx`, `workout-feed.tsx`) with the new `Segmented` control.
+  Deliberately did **not** force `reminder-form.tsx`'s recurrence-preset picker onto it —
+  that's a 7-option wrapping grid, not a single-row tab bar, and squeezing it into a
+  one-row segmented control would have made it worse, not more consistent. Consolidating
+  everything that fits the pattern and leaving what doesn't is the actual judgment call
+  here, not "replace every button group with Segmented."
+- Today dashboard: the 5 "coming soon" placeholder tiles (the single blandest, most-seen
+  thing in the app per the earlier audit) now show the existing `ComingSoonIllustration`
+  instead of a plain dashed border + faded pill — that illustration already existed and
+  was only ever used on whole-page module placeholders, not here. `DashboardWidget`
+  became a client component using the new `fadeInUpVariants`, and a new
+  `DashboardGrid` wrapper gives the whole grid (plus `DayPlannerCard`, in all three of
+  its return branches) a staggered entrance via Framer Motion's variant propagation.
+- Toast feedback added everywhere a save/delete/approve action previously gave zero
+  visible confirmation: every Money form (account, budget, goal, debt, quick-log,
+  remittance), receipt approve/discard, CSV import completion, Tasks' delete and
+  remind-me actions, and the brand-new Admin page's crew/module-access mutations
+  (particularly valuable there since they're security-relevant and previously
+  completely silent). Deliberately did **not** touch two things: Shopping's existing
+  "Trip finished" banner (a bespoke `PartyPopper`-icon celebration already built well —
+  replacing it with a generic corner toast would have been a downgrade, not a fix), and
+  routine high-frequency actions like completing a task (already has its own
+  check-off animation; a toast on every tap would be noise, not polish).
+- Workout: a small "your crew logged N sessions this week" stat strip, computed from
+  the feed data already being fetched (now correctly crew-scoped after Part 1's RLS
+  rewrite) — a natural, concrete feature that only makes sense now that crews are real
+  groups instead of "everyone in the project."
+- `npm run build`/lint clean throughout, each logical unit committed separately
+  (tab-bar consolidation + dashboard animation; toast wiring) rather than one giant diff.
+- **Honestly scoped, not oversold**: Shopping, Calendar, and Settings' own forms still
+  use plain `<select>`/ad-hoc markup rather than the new primitives, and Settings has no
+  two-column desktop layout yet — logged in `PROGRESS.md` as not done rather than
+  glossed over. The admin system, the design foundation, and the app's most-used module
+  (Money) came first as the highest-value work; the remaining polish is a smaller,
+  lower-risk follow-up whenever picked back up.

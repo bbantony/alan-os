@@ -182,8 +182,37 @@ SPEC.md phase — a cross-cutting initiative requested directly by the owner)
 - [x] Today dashboard widgets and nav now respect module_access — a
       restricted account never sees a dashboard tile or nav link for a
       module it can't open.
-- [ ] Design system foundation + module-by-module polish pass (Parts 2/3) —
-      in progress.
+
+### Part 2 — Design System Foundation
+- [x] `src/lib/motion.ts` — shared Framer Motion variants (list stagger,
+      fade-in-up, dialog pop-in) extracted from the one place they were
+      already done well, so every module gets the same 150-250ms feel.
+- [x] `--shadow-sm/md/lg` elevation scale in `globals.css` (light + dark
+      tuned separately), wired into Tailwind as real `shadow-*` utilities.
+- [x] New primitives: `segmented.tsx` (animated sliding active-pill),
+      `switch.tsx`, a lightweight native-`<select>` wrapper (`select.tsx`),
+      and `toast.tsx` (sonner, palette-aware, wired into the root layout).
+- [x] Deleted the broken/unused `tabs.tsx`; fixed `money/goals-view.tsx`'s
+      two hand-rolled sheets to use the real `Dialog` primitive.
+
+### Part 3 — Module-by-Module Polish Pass
+- [x] Consolidated the 3 genuinely-duplicated single-row tab bars (Money,
+      Calendar, Workout feed) onto the new `Segmented` control.
+- [x] Today dashboard: the 5 "coming soon" tiles now show the existing
+      `ComingSoonIllustration` instead of a plain dashed border; the whole
+      grid + `DayPlannerCard` get a subtle staggered entrance.
+- [x] Toast feedback wired into every previously-silent save/delete/approve
+      action in Money (accounts, budgets, goals, debts, quick-log,
+      remittances, receipt approve/discard, CSV import), Tasks (delete,
+      remind-me), and the new Admin page (crew/module-access changes).
+- [x] Workout: a small "your crew logged N sessions this week" stat strip,
+      a natural fit now that crews are real groups instead of "everyone."
+- [ ] Not yet touched: Shopping/Calendar/Settings' own forms still use
+      plain `<select>`/ad-hoc markup rather than the new primitives, and
+      Settings doesn't yet have a two-column desktop layout. Left for a
+      future pass rather than claimed as done — the highest-value items
+      (the admin system itself, the design foundation, and the most-used
+      module) came first.
 
 ### Found during this work, not fixed (flagged, not silently changed)
 Two profiles exist with `role = 'owner'` — the real owner's account

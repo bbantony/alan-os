@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/empty-state";
 import { WorkoutIllustration } from "@/components/illustrations";
 import { createClient } from "@/lib/supabase/client";
 import { celebratePr } from "@/lib/workout/celebrate";
+import { startOfWeek } from "@/lib/workout/streaks";
 import type { FeedWorkout, WeightUnit } from "@/lib/workout/types";
 import { getFeed, getLeaderboard, type LeaderboardEntry } from "./actions";
 import { FeedCard } from "./feed-card";
@@ -81,6 +82,15 @@ export function WorkoutFeed({
     return feed;
   }, [feed, view, currentUserId]);
 
+  // Now that crews are real (not "everyone in the project"), this reflects
+  // just your own crew's activity — feed is already crew-scoped by RLS.
+  const weekStats = useMemo(() => {
+    const weekStart = startOfWeek(new Date().toISOString().slice(0, 10));
+    const thisWeek = feed.filter((f) => f.workout.workout_date >= weekStart);
+    const activeMembers = new Set(thisWeek.map((f) => f.workout.user_id));
+    return { sessions: thisWeek.length, members: activeMembers.size };
+  }, [feed]);
+
   return (
     <div className="mx-auto max-w-lg px-4 py-8 pb-4">
       <div className="mb-4 flex items-center justify-between">
@@ -105,6 +115,14 @@ export function WorkoutFeed({
           </Link>
         </div>
       </div>
+
+      {weekStats.sessions > 0 && (
+        <p className="mb-4 text-xs text-muted-foreground">
+          Your crew logged <span className="font-medium text-foreground">{weekStats.sessions}</span> session
+          {weekStats.sessions === 1 ? "" : "s"} this week
+          {weekStats.members > 1 && ` across ${weekStats.members} people`}.
+        </p>
+      )}
 
       <Segmented
         className="mb-4"
