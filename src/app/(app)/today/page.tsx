@@ -15,18 +15,20 @@ import { getCurrentProfile } from "@/lib/supabase/profile";
 import { getTasks, getWeeklyDoneCount } from "@/app/(app)/tasks/actions";
 import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
 import { getWorkoutDashboardSummary } from "@/app/(app)/workout/actions";
+import { getFinanceDashboardSummary } from "@/app/(app)/money/actions";
 import {
   getCalendarDashboardSummary,
   getTodayFocus,
   getYesterdayReflection,
 } from "@/app/(app)/calendar/actions";
+import { formatCents } from "@/lib/finance/money";
 import { formatInAppTimezone, isEveningPlanningTime, todayInAppTimezone } from "@/lib/time";
 import { DashboardWidget } from "@/components/dashboard/widget";
 import { SunriseIllustration } from "@/components/illustrations";
 import { DayPlannerCard } from "./day-planner-card";
 
 export default async function TodayPage() {
-  const [profile, tasks, weeklyDoneCount, shoppingItems, suggestions, workout, calendar, focus, yesterdayReflection] =
+  const [profile, tasks, weeklyDoneCount, shoppingItems, suggestions, workout, money, calendar, focus, yesterdayReflection] =
     await Promise.all([
       getCurrentProfile(),
       getTasks(),
@@ -34,6 +36,7 @@ export default async function TodayPage() {
       getShoppingItems(),
       getStapleSuggestions(),
       getWorkoutDashboardSummary(),
+      getFinanceDashboardSummary(),
       getCalendarDashboardSummary(),
       getTodayFocus(),
       getYesterdayReflection(),
@@ -80,8 +83,12 @@ export default async function TodayPage() {
           </p>
         </DashboardWidget>
 
-        <DashboardWidget title="Money" icon={Wallet} comingInPhase={4}>
-          Budget pulse and &ldquo;safe to spend&rdquo; will live here.
+        <DashboardWidget title="Money" icon={Wallet} href="/money">
+          <div className="tabular text-2xl font-semibold">{formatCents(money.safeToSpendCents)}</div>
+          <p className="text-muted-foreground">
+            safe to spend
+            {money.overCount > 0 && ` · ${money.overCount} budget${money.overCount > 1 ? "s" : ""} over`}
+          </p>
         </DashboardWidget>
 
         <DashboardWidget title="Workout" icon={Dumbbell} href="/workout">

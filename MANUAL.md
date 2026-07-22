@@ -393,4 +393,106 @@ the Agenda.
 
 ---
 
-*(Phase 4 section will be added here once its checklist is complete.)*
+## Phase 4 — Finance core
+
+What Phase 4 adds: a full Money module for tracking accounts, logging
+expenses in under 5 seconds, budgets that tell you what's safe to spend,
+savings goals, a debt payoff planner, sending money home to India with the
+real exchange rate, and spending reports. Nothing here needs any one-time
+setup — it all works the moment you open it.
+
+### Accounts
+
+1. Tap **More → Money → Overview** tab.
+2. Tap **New account** — give it a name (e.g. "Scene+ Visa"), pick which
+   bank it's at, its type (Chequing/Credit Card/Investment/Cash), its
+   currency (CAD or INR), and its current balance.
+3. For a credit card, also enter the credit limit — the card's tile then
+   shows a color-coded bar (green → amber → red) for how much of the limit
+   is used.
+4. Every account you add shows up as a tile on the Overview tab with its
+   live balance.
+
+### Logging an expense in under 5 seconds
+
+1. Tap **Log** at the top of the Money page (works from any tab).
+2. Type the amount using the keypad — digits go right to left like a
+   calculator (typing "1234" makes $12.34). Toggle between **Expense** and
+   **Income** above it.
+3. Tap **Next**, pick a category (the icon grid), pick which account it came
+   out of, and optionally type a merchant name and a note.
+4. If you've bought from that merchant before, its usual category fills in
+   automatically — you can still change it.
+5. Tap **Save**. The transaction appears instantly and the account balance
+   updates right away, before the save even finishes on the server.
+
+### Budgets
+
+1. Tap the **Budgets** tab.
+2. Tap **New budget**, pick a category, an amount, and how often it resets —
+   **Weekly, Biweekly,** or **Monthly** — plus the date it should reset on
+   (e.g. your payday). Short months are handled automatically (a budget
+   anchored to the 31st resets on the 28th in February).
+3. The big number at the top, **Safe to spend**, is the total of every
+   budget's remaining room added together — the one number to glance at
+   before making a purchase.
+4. Each budget shows a progress bar that turns amber past 80% and red once
+   you've gone over.
+
+### Savings goals
+
+1. Tap the **Goals** tab → **New goal** — name it, set a target amount, and
+   optionally a deadline.
+2. Tap **Add** on any goal to log money toward it — the ring around its icon
+   fills in as you get closer, and it celebrates once you hit the target.
+
+### Debts
+
+1. Tap the **Debts** tab → **New debt** — name it, its current balance, its
+   interest rate, and its minimum monthly payment.
+2. Below your debts, a **payoff plan** shows how long you'll take to be
+   debt-free and how much interest you'll pay, under two strategies:
+   **Avalanche** (attacks the highest interest rate first — saves the most
+   money) and **Snowball** (attacks the smallest balance first — clears
+   individual debts faster, which some people find more motivating).
+3. Type an extra monthly amount you could put toward debt to see how much
+   time and interest that would save, under either strategy.
+
+### Sending money home (remittances)
+
+1. From the Overview tab, tap **+ Send** on the remittance card.
+2. Pick which account the money left from, type the CAD amount you sent,
+   then tap **Use today's rate** to auto-fill the INR amount received (or
+   type it yourself if you already know the exact number from your transfer
+   receipt).
+3. Save — it logs as an expense and the remittance card keeps a running
+   total of everything sent and received.
+
+### Reports
+
+1. Tap the **Reports** tab. Use the arrows to move between months (you can't
+   go past the current month).
+2. The donut chart shows what you spent on this month, biggest category
+   first; anything past the top 6 categories folds into "Other" so the chart
+   stays readable.
+3. Below it, a 6-month bar chart shows your total spending trend, and (for
+   the current month) a list of the merchants you've spent the most at.
+
+### Categories
+
+Categories are yours to edit — tap **More → Settings → Money** to add new
+ones or remove old ones (13 are already set up for you: Groceries, Takeout,
+Entertainment, Rent, Utilities, Transport, Subscriptions, Health/Gym,
+Remittance, Work, Vinyl/Music, Misc, and Income: Salary). Removing a
+category doesn't touch past transactions — it just stops showing up for
+new ones.
+
+### Today dashboard
+
+The **Money** card now shows your real "safe to spend" number and how many
+budgets (if any) are over their limit, and tapping it jumps straight to
+Money.
+
+---
+
+*(Phase 5 section will be added here once its checklist is complete.)*

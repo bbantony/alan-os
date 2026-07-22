@@ -382,3 +382,56 @@ autonomously overnight, without pausing for plan approval or further check-ins
   a browser and an account the agent has no access to. Everything else was built,
   verified against the live database and real HTTP requests (not just read over), and
   deployed without waiting for those two steps.
+
+## 10. Phase 4 — Finance core, continuing the same autonomous overnight build
+
+**Requested:** Continuation of the standing "build the next phase without stopping to
+ask" permission from entry 9 — no new user message, this is Phase 4 (Finance core)
+per `SPEC.md`.
+
+**Changes made:**
+- Migration `0016_finance_core.sql`: `accounts`, `categories` (unique per user+name),
+  `transactions`, `budgets` (unique per user+category), `savings_goals`, `debts` — all
+  with the same strict `auth.uid() = user_id` RLS pattern used everywhere else in this
+  app (no service-role client, no new architecture needed here). `seed_default_categories()`
+  seeds the 13 categories SPEC.md names, wired into `handle_new_user()` plus a backfill
+  for the already-existing owner account.
+- Money math kept deliberately boring and testable: `formatCents`/`dollarsToCents` for
+  cents-as-integers everywhere, `balanceDeltaCents` (income/expense × account type,
+  credit cards flip sign) extracted into its own file specifically so it could be unit
+  tested in isolation, `currentPeriodBounds` for payday-anchored weekly/biweekly/monthly
+  budgets with short-month-end clamping (a budget anchored to the 31st correctly resets
+  on the 28th in February), and `projectPayoff` (avalanche/snowball debt simulation,
+  monthly compounding, 600-month safety cap against a payment too small to ever finish).
+  Hand-verified all of these with throwaway `tsx` scripts before trusting them — the
+  debt-payoff one caught a wrong assumption in my own test (expected the higher-APR debt
+  to numerically finish first under avalanche, but a smaller low-APR balance can still
+  clear first off its own minimum payment alone; the real signal is total interest paid,
+  which avalanche correctly minimizes).
+- Full `/money` module UI: Overview (account tiles with credit-utilization bars,
+  remittance summary, recent transactions), a 2-step quick-log flow (amount keypad →
+  category/account/merchant with autocomplete from transaction history) reachable from
+  a **Log** button (not a floating button — a global quick-capture FAB is reserved for
+  Phase 7's AI capture), Budgets (safe-to-spend banner + per-category progress bars),
+  Goals (progress rings, add-to-goal), Debts (avalanche/snowball payoff plan with an
+  extra-payment input), Reports (spend-by-category donut chart and 6-month trend bar
+  chart built per the `dataviz` skill's validated categorical palette — colors assigned
+  by rank at render time and capped at 6 series with the rest folded into "Other", not
+  stored per-category — plus a top-merchants list and month navigator).
+- INR remittance logging with a live CAD→INR rate pulled from the free frankfurter.app
+  API (falls back to manual entry if the fetch fails), logged as a regular expense
+  transaction so it folds into the same reports.
+- Wired the real "Money" widget into the Today dashboard (replacing its Phase-4
+  placeholder) and added a Settings → Money page for category management (add/archive),
+  matching the existing Shopping/Calendar settings pages' pattern.
+- Verified against the live database for real: confirmed RLS is enabled with exactly
+  one policy on all six new tables, confirmed the owner account actually has all 13
+  seeded categories, and ran a full insert → query → rollback round trip (account +
+  category + budget + transaction) confirming the period-spend calculation the Budgets
+  tab depends on returns the exact right number — then confirmed the rollback left zero
+  trace.
+- `npm run build` and `npm run lint` both clean; fixed one real TypeScript error along
+  the way (Recharts v3's `Tooltip formatter` types its `value` param as possibly
+  `undefined`, needed a small guard rather than the naive `number` type I first wrote).
+- No owner action needed for this phase — everything works immediately, unlike Phase 3
+  which is still waiting on the two external setup steps logged there.

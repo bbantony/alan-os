@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Palette, KeyRound, LogOut, ShoppingCart, Dumbbell, CalendarClock } from "lucide-react";
+import { Palette, KeyRound, LogOut, ShoppingCart, Dumbbell, CalendarClock, Wallet } from "lucide-react";
 import { signOut } from "./actions";
 import { Button } from "@/components/ui/button";
 import { getCurrentProfile } from "@/lib/supabase/profile";
@@ -18,6 +18,7 @@ const MODULE_LINKS = [
   { label: "Shopping", href: "/settings/shopping", icon: ShoppingCart, ownerOnly: true },
   { label: "Workout", href: "/settings/workout", icon: Dumbbell, ownerOnly: false },
   { label: "Calendar & Reminders", href: "/settings/calendar", icon: CalendarClock, ownerOnly: true },
+  { label: "Money", href: "/settings/money", icon: Wallet, ownerOnly: true },
 ];
 
 export default async function SettingsPage() {

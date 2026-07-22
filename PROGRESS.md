@@ -79,13 +79,22 @@ See `SPEC.md` for the full specification.
       to keep the Supabase project from pausing on inactivity)
 
 ## Phase 4 — Finance core
-- [ ] Accounts, categories
-- [ ] ≤5s manual expense logging
-- [ ] Budgets (payday-anchored periods)
-- [ ] Savings goals
-- [ ] Debts + payoff projections
-- [ ] INR remittances
-- [ ] Reports
+- [x] Accounts (chequing/credit card/investment/cash, CAD or INR, credit
+      utilization bars), user-owned categories (13 seeded defaults, create/
+      archive in Settings → Money)
+- [x] ≤5s manual expense logging (2-step quick-log: amount keypad +
+      category/account/merchant, merchant-memory autocomplete, optimistic UI)
+- [x] Budgets (payday-anchored weekly/biweekly/monthly periods with
+      short-month clamping, safe-to-spend banner, per-category progress bars)
+- [x] Savings goals (progress rings, add-to-goal, deadlines)
+- [x] Debts + avalanche/snowball payoff projections (extra-payment slider,
+      months-to-payoff + total interest + payoff order, 600-month safety cap)
+- [x] INR remittances (CAD-sent/INR-received log, live FX rate via
+      frankfurter.app, running totals)
+- [x] Reports (spend-by-category donut w/ validated categorical palette,
+      6-month trend bar chart, top merchants, month navigator)
+- [x] Today dashboard "Money" widget wired to real safe-to-spend data
+- [x] Settings → Money category management page
 
 ## Phase 5 — Finance AI
 - [ ] Receipt scanning pipeline + review UI
@@ -121,5 +130,14 @@ data, not just read over), and deployed — but reminders won't actually be deli
 and Google Calendar won't connect until the two owner actions above are done. See
 MANUAL.md's Phase 3 section for exact click-by-click steps.
 
-Next session once those are done: "Read SPEC.md. Phase 3 is complete and deployed.
-Execute Phase 4 only."
+Phase 4 (Finance core) is built, verified against the live database (RLS +
+seeded categories + a full budget-spend round trip were actually exercised
+with real inserts/rollback, not just read over), build/lint clean, and
+deployed. No owner action is required for Phase 4 — everything works out of
+the box (money never touches a service-role client; every table uses the
+same `auth.uid() = user_id` RLS pattern already proven in every prior phase).
+
+Next session: "Read SPEC.md. Phase 4 is complete and deployed. Execute
+Phase 5 only" (once the two Phase 3 owner actions — Google OAuth credentials
+and the cron-job.org pinger — are done, since Phase 5's receipt pipeline is
+independent of those but full Calendar/reminders delivery still needs them).

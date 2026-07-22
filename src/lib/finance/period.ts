@@ -1,0 +1,55 @@
+import type { BudgetPeriod } from "./types";
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function toDateString(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export interface PeriodBounds {
+  start: string; // inclusive, YYYY-MM-DD
+  end: string; // exclusive, YYYY-MM-DD
+}
+
+// The budget period containing `today`, anchored to `anchorDate` (payday) —
+// weekly/biweekly repeat every 7/14 days from the anchor; monthly repeats on
+// the anchor's day-of-month each month (clamped to the last day of shorter
+// months, e.g. an anchor of the 31st runs Feb 28/29 -> Mar 31).
+export function currentPeriodBounds(period: BudgetPeriod, anchorDate: string, today: string): PeriodBounds {
+  if (period === "monthly") {
+    const anchorDay = Number(anchorDate.slice(8, 10));
+    const [ty, tm, td] = today.split("-").map(Number);
+
+    let startYear = ty;
+    let startMonth = tm;
+    if (td < anchorDay) {
+      startMonth -= 1;
+      if (startMonth === 0) {
+        startMonth = 12;
+        startYear -= 1;
+      }
+    }
+
+    let endYear = startYear;
+    let endMonth = startMonth + 1;
+    if (endMonth === 13) {
+      endMonth = 1;
+      endYear += 1;
+    }
+
+    const start = new Date(Date.UTC(startYear, startMonth - 1, Math.min(anchorDay, daysInMonth(startYear, startMonth))));
+    const end = new Date(Date.UTC(endYear, endMonth - 1, Math.min(anchorDay, daysInMonth(endYear, endMonth))));
+    return { start: toDateString(start), end: toDateString(end) };
+  }
+
+  const intervalDays = period === "weekly" ? 7 : 14;
+  const anchor = new Date(`${anchorDate}T00:00:00Z`);
+  const todayDate = new Date(`${today}T00:00:00Z`);
+  const diffDays = Math.floor((todayDate.getTime() - anchor.getTime()) / 86400000);
+  const periodsElapsed = Math.floor(diffDays / intervalDays);
+  const start = new Date(anchor.getTime() + periodsElapsed * intervalDays * 86400000);
+  const end = new Date(start.getTime() + intervalDays * 86400000);
+  return { start: toDateString(start), end: toDateString(end) };
+}
