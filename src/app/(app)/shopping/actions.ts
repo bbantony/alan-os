@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getBudgets } from "@/app/(app)/money/actions";
 import type {
   ShoppingCategoryItem,
   ShoppingCategoryRow,
@@ -11,6 +12,28 @@ import type {
 } from "@/lib/shopping/types";
 
 const STAPLE_RESURFACE_DAYS = 14;
+
+// Shopping <-> Finance hook (SPEC.md Part B4): "remaining budget for the
+// relevant category visible while adding/checking off items" — the
+// Groceries budget, since that's what an ordinary shopping trip maps to.
+// Returns null if the owner hasn't set one up, rather than showing a
+// misleading $0.
+export interface GroceryBudgetSummary {
+  remainingCents: number;
+  amountCents: number;
+  spentCents: number;
+}
+
+export async function getGroceryBudgetSummary(): Promise<GroceryBudgetSummary | null> {
+  const budgets = await getBudgets();
+  const grocery = budgets.find((b) => b.category_name.toLowerCase() === "groceries");
+  if (!grocery) return null;
+  return {
+    remainingCents: Math.max(0, grocery.amount_cents - grocery.spent_cents),
+    amountCents: grocery.amount_cents,
+    spentCents: grocery.spent_cents,
+  };
+}
 
 async function requireUser() {
   const supabase = await createClient();

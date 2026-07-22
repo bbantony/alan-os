@@ -214,14 +214,13 @@ SPEC.md phase — a cross-cutting initiative requested directly by the owner)
       (the admin system itself, the design foundation, and the most-used
       module) came first.
 
-### Found during this work, not fixed (flagged, not silently changed)
-Two profiles exist with `role = 'owner'` — the real owner's account
-(`antonyalan99@gmail.com`) and a second one (`antonyalbert03@gmail.com`),
-both created the same day Phase 0 first shipped, before the signup default
-was changed away from `owner`. Both currently have unconditional admin
-access under the new system. Left untouched since only the owner knows
-whether that second account is intentional — see the plain-English summary
-for what to do about it.
+### Resolved
+The second `role = 'owner'` account (`antonyalbert03@gmail.com`, "Albert")
+found during Part 1 has been demoted to `full_user` per the owner's
+explicit instruction — he keeps full access to every module (nothing
+changed about what he can use day to day), he's just no longer an admin:
+no Admin page, no cross-crew oversight override. `antonyalan99@gmail.com`
+is now the sole `owner`.
 
 ---
 

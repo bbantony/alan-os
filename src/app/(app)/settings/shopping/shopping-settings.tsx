@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { toast } from "@/components/ui/toast";
 import { getShoppingIcon, AVAILABLE_SHOPPING_ICON_NAMES } from "@/lib/shopping/icon-registry";
 import type { ShoppingCategoryItem, ShoppingCategoryRow } from "@/lib/shopping/types";
 import {
@@ -54,6 +56,7 @@ export function ShoppingSettings({
           created_at: new Date().toISOString(),
         },
       ]);
+      toast.success(`"${name}" category added`);
     });
   }
 
@@ -77,6 +80,7 @@ export function ShoppingSettings({
     startTransition(async () => {
       await deleteShoppingCategory({ id });
     });
+    toast.success("Category deleted");
   }
 
   function handleAddKnownItem(categoryId: string) {
@@ -226,10 +230,10 @@ export function ShoppingSettings({
           placeholder="New category name…"
           className="flex-1"
         />
-        <select
+        <Select
           value={newCategoryIcon}
           onChange={(e) => setNewCategoryIcon(e.target.value)}
-          className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+          className="h-8 w-28"
           aria-label="Icon"
         >
           {AVAILABLE_SHOPPING_ICON_NAMES.map((iconName) => (
@@ -237,7 +241,7 @@ export function ShoppingSettings({
               {iconName}
             </option>
           ))}
-        </select>
+        </Select>
         <Button type="submit" size="icon">
           <Plus className="size-4" />
         </Button>

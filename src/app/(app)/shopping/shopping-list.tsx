@@ -6,10 +6,12 @@ import { Plus, Star, Trash2, WifiOff, Check, PartyPopper } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/empty-state";
 import { ShoppingIllustration } from "@/components/illustrations";
 import { getShoppingIcon } from "@/lib/shopping/icon-registry";
+import { formatCents } from "@/lib/finance/money";
 import {
   SHOPPING_UNITS,
   SHOPPING_UNIT_LABELS,
@@ -62,11 +64,13 @@ export function ShoppingList({
   initialSuggestions,
   categories,
   initialKnownItems,
+  groceryBudget,
 }: {
   initialItems: ShoppingItem[];
   initialSuggestions: ShoppingItem[];
   categories: ShoppingCategoryRow[];
   initialKnownItems: ShoppingCategoryItem[];
+  groceryBudget: { remainingCents: number; amountCents: number; spentCents: number } | null;
 }) {
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
   const [suggestions, setSuggestions] = useState<ShoppingItem[]>(initialSuggestions);
@@ -325,6 +329,16 @@ export function ShoppingList({
         </div>
       </div>
 
+      {groceryBudget && (
+        <Link
+          href="/money"
+          className="tap-press mb-4 flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
+        >
+          <span className="text-muted-foreground">Groceries budget</span>
+          <span className="tabular font-medium text-primary">{formatCents(groceryBudget.remainingCents)} left</span>
+        </Link>
+      )}
+
       <AnimatePresence>
         {tripToast && (
           <motion.div
@@ -386,13 +400,13 @@ export function ShoppingList({
           </Button>
         </div>
         <div className="flex gap-2">
-          <select
+          <Select
             value={category}
             onChange={(e) => {
               setCategory(e.target.value);
               setCategoryTouched(true);
             }}
-            className="h-8 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
+            className="h-8 flex-1"
             aria-label="Category"
           >
             {categories.map((cat) => (
@@ -400,7 +414,7 @@ export function ShoppingList({
                 {cat.name}
               </option>
             ))}
-          </select>
+          </Select>
           <Input
             type="number"
             inputMode="decimal"
@@ -409,10 +423,10 @@ export function ShoppingList({
             placeholder="Qty"
             className="w-20"
           />
-          <select
+          <Select
             value={quantityUnit}
             onChange={(e) => setQuantityUnit(e.target.value as ShoppingUnit)}
-            className="h-8 w-20 rounded-lg border border-input bg-transparent px-2 text-sm"
+            className="h-8 w-20"
             aria-label="Unit"
           >
             {SHOPPING_UNITS.map((unit) => (
@@ -420,7 +434,7 @@ export function ShoppingList({
                 {SHOPPING_UNIT_LABELS[unit]}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </form>
 

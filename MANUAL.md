@@ -609,14 +609,10 @@ placed into one crew ("The Crew") automatically, so their shared workout feed lo
 exactly the same as before — the new controls just exist now for you to use whenever
 you want to split people up or restrict what they can open.
 
-**One thing worth your attention**: while building this, a second account with full
-owner-level access turned up in the database — `antonyalbert03@gmail.com` — created the
-same day this app first went live, before the very first signup default was changed
-away from "owner." It was left exactly as-is rather than changed without asking, since
-only you know whether that's an account you actually meant to have full admin rights.
-If it shouldn't be an admin, open **Settings → Admin → Users**, find it, and just leave
-its module toggles as you'd like a normal account to have — a full role-demotion option
-isn't in the Users screen yet, so say the word if you want that added too.
+**Resolved**: the second account that had full owner-level access
+(`antonyalbert03@gmail.com`, "Albert") has been demoted per your instruction — he keeps
+full access to every module exactly as before, he's just no longer an admin. You
+(`antonyalan99@gmail.com`) are the only account with admin rights now.
 
 ---
 
