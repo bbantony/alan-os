@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Segmented } from "@/components/ui/segmented";
 import type { Account, Category, Debt, Receipt, SavingsGoal, Transaction } from "@/lib/finance/types";
 import type { BudgetWithProgress, MerchantMemory } from "./actions";
 import { QuickLogForm } from "./quick-log-form";
@@ -63,20 +63,12 @@ export function MoneyShell({
         </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-5 gap-1.5">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              "tap-press rounded-lg border px-1 py-2 text-[11px] font-medium",
-              tab === t.key ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        className="mb-4"
+        options={TABS.map((t) => ({ value: t.key, label: t.label }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {tab === "overview" && (
         <OverviewView

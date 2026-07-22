@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { CheckCircle2, Circle, MoonStar, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { fadeInUpVariants } from "@/lib/motion";
 import type { TopGoal } from "@/lib/reminders/types";
 import type { Task } from "@/lib/tasks/types";
 import { planTomorrow } from "@/app/(app)/calendar/actions";
@@ -23,7 +25,7 @@ export function DayPlannerCard({
 
   if (!isEvening) {
     return (
-      <div className="rounded-xl border border-border bg-surface p-4 sm:col-span-2">
+      <motion.div variants={fadeInUpVariants} className="rounded-xl border border-border bg-surface p-4 sm:col-span-2">
         <div className="mb-2 flex items-center gap-2">
           <Sparkles className="size-4 text-primary" />
           <span className="font-heading text-sm font-semibold">Today&apos;s focus</span>
@@ -50,7 +52,7 @@ export function DayPlannerCard({
             Yesterday: &ldquo;{yesterdayReflection}&rdquo;
           </p>
         )}
-      </div>
+      </motion.div>
     );
   }
 
@@ -103,17 +105,17 @@ function EveningRitual({
 
   if (saved) {
     return (
-      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm sm:col-span-2">
+      <motion.div variants={fadeInUpVariants} className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm sm:col-span-2">
         <div className="flex items-center gap-2 text-primary">
           <CheckCircle2 className="size-4" />
           Tomorrow&apos;s plan is set.
         </div>
-      </div>
+      </motion.div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-4 sm:col-span-2">
+    <motion.div variants={fadeInUpVariants} className="rounded-xl border border-border bg-surface p-4 sm:col-span-2">
       <div className="mb-3 flex items-center gap-2">
         <MoonStar className="size-4 text-primary" />
         <span className="font-heading text-sm font-semibold">Plan tomorrow</span>
@@ -189,6 +191,6 @@ function EveningRitual({
       >
         {saving ? "Saving…" : "Save plan"}
       </Button>
-    </div>
+    </motion.div>
   );
 }

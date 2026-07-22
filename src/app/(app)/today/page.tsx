@@ -26,6 +26,7 @@ import { formatInAppTimezone, isEveningPlanningTime, todayInAppTimezone } from "
 import { DashboardWidget } from "@/components/dashboard/widget";
 import { SunriseIllustration } from "@/components/illustrations";
 import { DayPlannerCard } from "./day-planner-card";
+import { DashboardGrid } from "./dashboard-grid";
 import { NO_MODULES_ACCESS } from "@/lib/permissions";
 
 export default async function TodayPage() {
@@ -62,7 +63,7 @@ export default async function TodayPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <DashboardGrid>
         <DashboardWidget
           title="Your AI briefing"
           icon={Sparkles}
@@ -151,7 +152,7 @@ export default async function TodayPage() {
         <DashboardWidget title="Local news" icon={MapPin} comingInPhase={7}>
           Headlines for a region you choose in Settings.
         </DashboardWidget>
-      </div>
+      </DashboardGrid>
     </div>
   );
 }

@@ -4,9 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Flame, Plus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Segmented } from "@/components/ui/segmented";
 import { EmptyState } from "@/components/empty-state";
 import { WorkoutIllustration } from "@/components/illustrations";
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { celebratePr } from "@/lib/workout/celebrate";
 import type { FeedWorkout, WeightUnit } from "@/lib/workout/types";
@@ -106,20 +106,12 @@ export function WorkoutFeed({
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-4 gap-1.5">
-        {(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={cn(
-              "rounded-lg border px-1.5 py-2 text-xs font-medium",
-              view === v ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-            )}
-          >
-            {VIEW_LABELS[v]}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        className="mb-4"
+        options={(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => ({ value: v, label: VIEW_LABELS[v] }))}
+        value={view}
+        onChange={setView}
+      />
 
       {view === "leaderboard" ? (
         <Leaderboard entries={leaderboard} currentUserId={currentUserId} />
