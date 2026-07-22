@@ -3,7 +3,6 @@ import { cn } from "@/lib/utils";
 import { formatWeight } from "@/lib/workout/units";
 import { WORKOUT_TYPE_LABELS, type FeedWorkout, type WeightUnit } from "@/lib/workout/types";
 import { Reactions } from "./reactions";
-import { Comments } from "./comments";
 
 function initials(name: string | null): string {
   if (!name) return "?";
@@ -70,7 +69,7 @@ export function FeedCard({
   currentUserId: string;
   weightUnit: WeightUnit;
 }) {
-  const { workout, author, sets, run, prs, reactions, comments } = feedItem;
+  const { workout, author, sets, run, prs, reactions } = feedItem;
   const hasPr = prs.length > 0;
 
   const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
@@ -125,9 +124,8 @@ export function FeedCard({
 
       {workout.notes && <p className="mt-1 text-sm text-muted-foreground">{workout.notes}</p>}
 
-      <div className="mt-3 border-t border-border pt-3">
+      <div className="mt-3 border-t border-border pt-2.5">
         <Reactions workoutId={workout.id} reactions={reactions} currentUserId={currentUserId} />
-        <Comments workoutId={workout.id} comments={comments} />
       </div>
     </div>
   );

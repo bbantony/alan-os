@@ -3,24 +3,40 @@
 import { Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { displayWeight, smallestIncrementKg, toStoredKg } from "@/lib/workout/units";
+import { barWeightKg, displayWeight, smallestIncrementKg, toStoredKg } from "@/lib/workout/units";
 import type { DraftSet, WeightUnit } from "@/lib/workout/types";
 
 export function SetRow({
   index,
   set,
   unit,
+  isBarbell,
   onChange,
   onRemove,
 }: {
   index: number;
   set: DraftSet;
   unit: WeightUnit;
+  isBarbell: boolean;
   onChange: (set: DraftSet) => void;
   onRemove: () => void;
 }) {
-  const shownWeight = displayWeight(set.weightKg, unit);
   const increment = smallestIncrementKg(unit);
+  const bar = barWeightKg(unit);
+
+  // Barbell exercises: the number the lifter actually types is what's loaded
+  // on the bar (plates only), not the total — the bar's own weight is added
+  // underneath automatically. Everywhere else in the app (PRs, history,
+  // last-session display) still works off the true total stored in weightKg.
+  const shownWeight = isBarbell
+    ? Math.max(0, displayWeight(set.weightKg, unit) - displayWeight(bar, unit))
+    : displayWeight(set.weightKg, unit);
+
+  function setShownWeight(nextShown: number) {
+    const clamped = Math.max(0, nextShown);
+    const totalKg = isBarbell ? toStoredKg(clamped, unit) + bar : toStoredKg(clamped, unit);
+    onChange({ ...set, weightKg: totalKg });
+  }
 
   return (
     <div className="flex items-center gap-2">
@@ -57,11 +73,16 @@ export function SetRow({
       <span className="text-xs text-muted-foreground">×</span>
 
       <div className="flex items-center gap-1">
+        {isBarbell && (
+          <span className="whitespace-nowrap text-xs text-muted-foreground">
+            Bar ({displayWeight(bar, unit)}) +
+          </span>
+        )}
         <Button
           type="button"
           variant="outline"
           size="icon-xs"
-          onClick={() => onChange({ ...set, weightKg: Math.max(0, set.weightKg - increment) })}
+          onClick={() => setShownWeight(shownWeight - increment)}
           aria-label="Less weight"
         >
           <Minus className="size-3" />
@@ -70,14 +91,14 @@ export function SetRow({
           type="number"
           inputMode="decimal"
           value={shownWeight}
-          onChange={(e) => onChange({ ...set, weightKg: toStoredKg(Number(e.target.value) || 0, unit) })}
+          onChange={(e) => setShownWeight(Number(e.target.value) || 0)}
           className="h-7 w-16 text-center"
         />
         <Button
           type="button"
           variant="outline"
           size="icon-xs"
-          onClick={() => onChange({ ...set, weightKg: set.weightKg + increment })}
+          onClick={() => setShownWeight(shownWeight + increment)}
           aria-label="More weight"
         >
           <Plus className="size-3" />

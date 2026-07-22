@@ -63,7 +63,10 @@ export function NewWorkoutForm({
   const [avgHr, setAvgHr] = useState("");
 
   async function addExerciseToDraft(exercise: Exercise) {
-    setDraftExercises((prev) => [...prev, { exerciseId: exercise.id, exerciseName: exercise.name, sets: [] }]);
+    setDraftExercises((prev) => [
+      ...prev,
+      { exerciseId: exercise.id, exerciseName: exercise.name, isBarbell: exercise.is_barbell, sets: [] },
+    ]);
     const last = await getLastSessionSets(exercise.id);
     setLastSessionByExercise((prev) => ({ ...prev, [exercise.id]: last }));
     const initialSet = suggestionFor(last, weightUnit);
@@ -263,6 +266,7 @@ export function NewWorkoutForm({
                       index={i}
                       set={set}
                       unit={weightUnit}
+                      isBarbell={ex.isBarbell}
                       onChange={(next) => updateSet(ex.exerciseId, i, next)}
                       onRemove={() => removeSet(ex.exerciseId, i)}
                     />

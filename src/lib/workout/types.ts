@@ -29,6 +29,7 @@ export interface Exercise {
   created_by: string | null;
   name: string;
   muscle_group: MuscleGroup;
+  is_barbell: boolean;
   created_at: string;
 }
 
@@ -77,14 +78,6 @@ export interface Reaction {
   created_at: string;
 }
 
-export interface Comment {
-  id: string;
-  workout_id: string;
-  user_id: string;
-  body: string;
-  created_at: string;
-}
-
 export interface WorkoutTemplate {
   id: string;
   user_id: string;
@@ -115,7 +108,6 @@ export interface FeedWorkout {
   run: Run | null;
   prs: (Pr & { exercise_name: string })[];
   reactions: Reaction[];
-  comments: (Comment & { author: CrewProfile | null })[];
 }
 
 // Draft state used while building a new lift session client-side, before submit.
@@ -127,5 +119,6 @@ export interface DraftSet {
 export interface DraftExercise {
   exerciseId: string;
   exerciseName: string;
+  isBarbell: boolean;
   sets: DraftSet[];
 }

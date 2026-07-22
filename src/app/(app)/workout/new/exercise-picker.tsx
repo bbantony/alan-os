@@ -35,6 +35,7 @@ export function ExercisePicker({
   const [addingNew, setAddingNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newMuscleGroup, setNewMuscleGroup] = useState<MuscleGroup>("chest");
+  const [newIsBarbell, setNewIsBarbell] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmDuplicate, setConfirmDuplicate] = useState<Exercise | null>(null);
 
@@ -59,6 +60,7 @@ export function ExercisePicker({
     setQuery("");
     setAddingNew(false);
     setNewName("");
+    setNewIsBarbell(false);
     setError(null);
     setConfirmDuplicate(null);
   }
@@ -82,7 +84,7 @@ export function ExercisePicker({
       }
     }
 
-    const result = await addExercise({ name: trimmed, muscleGroup: newMuscleGroup });
+    const result = await addExercise({ name: trimmed, muscleGroup: newMuscleGroup, isBarbell: newIsBarbell });
     if (result.error || !result.exercise) {
       setError(result.error ?? "Couldn't add that exercise.");
       return;
@@ -129,7 +131,14 @@ export function ExercisePicker({
                     onClick={() => pick(exercise)}
                     className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm hover:bg-muted"
                   >
-                    <span>{exercise.name}</span>
+                    <span>
+                      {exercise.name}
+                      {exercise.is_barbell && (
+                        <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          BB
+                        </span>
+                      )}
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       {MUSCLE_GROUP_LABELS[exercise.muscle_group]}
                     </span>
@@ -176,6 +185,16 @@ export function ExercisePicker({
                 </option>
               ))}
             </select>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={newIsBarbell}
+                onChange={(e) => setNewIsBarbell(e.target.checked)}
+                className="size-4 rounded border-input"
+              />
+              Barbell exercise (enter plate weight, not total)
+            </label>
 
             {confirmDuplicate && (
               <div className="rounded-lg border border-accent/40 bg-accent/10 p-2 text-xs">

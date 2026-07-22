@@ -1,29 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { WORKOUT_TYPE_LABELS, type WeightUnit, type WorkoutTemplate } from "@/lib/workout/types";
-import { deleteTemplate, setWeightUnit } from "@/app/(app)/workout/actions";
+import type { Exercise, WeightUnit, WorkoutTemplate } from "@/lib/workout/types";
+import { setWeightUnit } from "@/app/(app)/workout/actions";
+import { ExerciseManager } from "./exercise-manager";
+import { TemplateEditor } from "./template-editor";
 
 export function WorkoutSettings({
   initialWeightUnit,
   initialTemplates,
+  initialExercises,
 }: {
   initialWeightUnit: WeightUnit;
   initialTemplates: WorkoutTemplate[];
+  initialExercises: Exercise[];
 }) {
   const [unit, setUnit] = useState(initialWeightUnit);
   const [templates, setTemplates] = useState(initialTemplates);
+  const [exercises, setExercises] = useState(initialExercises);
 
   async function handleUnitChange(next: WeightUnit) {
     setUnit(next);
     await setWeightUnit(next);
   }
 
-  async function handleDelete(id: string) {
-    setTemplates((prev) => prev.filter((t) => t.id !== id));
-    await deleteTemplate({ id });
+  function upsertExercise(exercise: Exercise) {
+    setExercises((prev) =>
+      prev.some((e) => e.id === exercise.id) ? prev.map((e) => (e.id === exercise.id ? exercise : e)) : [...prev, exercise]
+    );
   }
 
   return (
@@ -59,22 +64,28 @@ export function WorkoutSettings({
         ) : (
           <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
             {templates.map((t) => (
-              <li key={t.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <div>
-                  <p className="font-medium">{t.name}</p>
-                  <p className="text-xs text-muted-foreground">{WORKOUT_TYPE_LABELS[t.type]}</p>
-                </div>
-                <button
-                  onClick={() => handleDelete(t.id)}
-                  className="text-muted-foreground/40 hover:text-destructive"
-                  aria-label="Delete template"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </li>
+              <TemplateEditor
+                key={t.id}
+                template={t}
+                exercises={exercises}
+                onExerciseCreated={upsertExercise}
+                onSaved={(next) => setTemplates((prev) => prev.map((p) => (p.id === next.id ? next : p)))}
+                onDeleted={() => setTemplates((prev) => prev.filter((p) => p.id !== t.id))}
+              />
             ))}
           </ul>
         )}
+      </div>
+
+      <div>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Exercises
+        </h2>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Fix a name, change its muscle group, or mark it as a barbell exercise — this updates it
+          for the whole crew.
+        </p>
+        <ExerciseManager exercises={exercises} onUpdated={upsertExercise} />
       </div>
     </div>
   );

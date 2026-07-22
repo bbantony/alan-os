@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Flame, Plus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/empty-state";
 import { WorkoutIllustration } from "@/components/illustrations";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { celebratePr } from "@/lib/workout/celebrate";
 import type { FeedWorkout, WeightUnit } from "@/lib/workout/types";
@@ -14,7 +14,16 @@ import { getFeed, getLeaderboard, type LeaderboardEntry } from "./actions";
 import { FeedCard } from "./feed-card";
 import { Leaderboard } from "./leaderboard";
 
-const REALTIME_TABLES = ["workouts", "workout_sets", "runs", "reactions", "comments", "prs"] as const;
+const REALTIME_TABLES = ["workouts", "workout_sets", "runs", "reactions", "prs"] as const;
+
+type ViewMode = "all" | "mine" | "others" | "leaderboard";
+
+const VIEW_LABELS: Record<ViewMode, string> = {
+  all: "Everyone",
+  mine: "Mine",
+  others: "Others",
+  leaderboard: "Leaderboard",
+};
 
 export function WorkoutFeed({
   initialFeed,
@@ -31,6 +40,7 @@ export function WorkoutFeed({
 }) {
   const [feed, setFeed] = useState(initialFeed);
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
+  const [view, setView] = useState<ViewMode>("all");
 
   useEffect(() => {
     const supabase = createClient();
@@ -65,6 +75,12 @@ export function WorkoutFeed({
 
   const myStreak = leaderboard.find((e) => e.profile.id === currentUserId)?.currentStreak ?? 0;
 
+  const visibleFeed = useMemo(() => {
+    if (view === "mine") return feed.filter((f) => f.workout.user_id === currentUserId);
+    if (view === "others") return feed.filter((f) => f.workout.user_id !== currentUserId);
+    return feed;
+  }, [feed, view, currentUserId]);
+
   return (
     <div className="mx-auto max-w-lg px-4 py-8 pb-4">
       <div className="mb-4 flex items-center justify-between">
@@ -90,41 +106,45 @@ export function WorkoutFeed({
         </div>
       </div>
 
-      <Tabs defaultValue="feed">
-        <TabsList className="mb-4 w-full">
-          <TabsTrigger value="feed" className="flex-1">
-            Feed
-          </TabsTrigger>
-          <TabsTrigger value="leaderboard" className="flex-1">
-            Leaderboard
-          </TabsTrigger>
-        </TabsList>
+      <div className="mb-4 grid grid-cols-4 gap-1.5">
+        {(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={cn(
+              "rounded-lg border px-1.5 py-2 text-xs font-medium",
+              view === v ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
+            )}
+          >
+            {VIEW_LABELS[v]}
+          </button>
+        ))}
+      </div>
 
-        <TabsContent value="feed">
-          {feed.length === 0 ? (
-            <EmptyState
-              title="No workouts yet"
-              description="Log your first session and the crew will see it here."
-              icon={<WorkoutIllustration className="size-8" />}
+      {view === "leaderboard" ? (
+        <Leaderboard entries={leaderboard} currentUserId={currentUserId} />
+      ) : visibleFeed.length === 0 ? (
+        <EmptyState
+          title={view === "mine" ? "No workouts logged yet" : "No workouts here yet"}
+          description={
+            view === "mine"
+              ? "Log your first session and it'll show up here."
+              : "Once someone logs a workout, it'll show up here."
+          }
+          icon={<WorkoutIllustration className="size-8" />}
+        />
+      ) : (
+        <div className="space-y-3">
+          {visibleFeed.map((item) => (
+            <FeedCard
+              key={item.workout.id}
+              feedItem={item}
+              currentUserId={currentUserId}
+              weightUnit={weightUnit}
             />
-          ) : (
-            <div className="space-y-3">
-              {feed.map((item) => (
-                <FeedCard
-                  key={item.workout.id}
-                  feedItem={item}
-                  currentUserId={currentUserId}
-                  weightUnit={weightUnit}
-                />
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        <TabsContent value="leaderboard">
-          <Leaderboard entries={leaderboard} currentUserId={currentUserId} />
-        </TabsContent>
-      </Tabs>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

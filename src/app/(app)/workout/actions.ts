@@ -7,7 +7,6 @@ import { todayInAppTimezone } from "@/lib/time";
 import { sessionBests, detectNewPrs, type NewPr } from "@/lib/workout/pr";
 import { computeStreak, startOfWeek } from "@/lib/workout/streaks";
 import type {
-  Comment,
   CrewProfile,
   Exercise,
   FeedWorkout,
@@ -78,11 +77,17 @@ export async function getRecentExerciseIds(): Promise<string[]> {
 export async function addExercise(input: {
   name: string;
   muscleGroup: MuscleGroup;
+  isBarbell?: boolean;
 }): Promise<{ exercise: Exercise | null; error?: string }> {
   const { supabase, user } = await requireUser();
   const { data, error } = await supabase
     .from("exercises")
-    .insert({ name: input.name.trim(), muscle_group: input.muscleGroup, created_by: user.id })
+    .insert({
+      name: input.name.trim(),
+      muscle_group: input.muscleGroup,
+      is_barbell: input.isBarbell ?? false,
+      created_by: user.id,
+    })
     .select("*")
     .single();
 
@@ -93,6 +98,32 @@ export async function addExercise(input: {
 
   revalidatePath("/workout/new");
   return { exercise: data as Exercise };
+}
+
+// Exercises are crew-shared, so any crew member may fix a name/muscle
+// group/barbell flag (RLS: exercises_update_crew, migration 0006) — this is
+// what lets the seeded master-list entries (created_by null) be corrected at
+// all, since nobody "owns" them.
+export async function updateExercise(input: {
+  id: string;
+  name: string;
+  muscleGroup: MuscleGroup;
+  isBarbell: boolean;
+}): Promise<{ error?: string }> {
+  const { supabase } = await requireUser();
+  const { error } = await supabase
+    .from("exercises")
+    .update({ name: input.name.trim(), muscle_group: input.muscleGroup, is_barbell: input.isBarbell })
+    .eq("id", input.id);
+
+  if (error) {
+    if (error.code === "23505") return { error: "That exercise already exists." };
+    return { error: error.message };
+  }
+
+  revalidatePath("/settings/workout");
+  revalidatePath("/workout/new");
+  return {};
 }
 
 // Sets from the most recent previous workout (of this user's last 30) that
@@ -286,13 +317,29 @@ export async function saveTemplate(input: {
   revalidatePath("/settings/workout");
 }
 
+export async function updateTemplate(input: {
+  id: string;
+  name: string;
+  type: WorkoutType;
+  exerciseIds: string[];
+}) {
+  const { supabase, user } = await requireUser();
+  await supabase
+    .from("workout_templates")
+    .update({ name: input.name.trim(), type: input.type, exercise_ids: input.exerciseIds })
+    .eq("id", input.id)
+    .eq("user_id", user.id);
+  revalidatePath("/workout/new");
+  revalidatePath("/settings/workout");
+}
+
 export async function deleteTemplate(input: { id: string }) {
   const { supabase, user } = await requireUser();
   await supabase.from("workout_templates").delete().eq("id", input.id).eq("user_id", user.id);
   revalidatePath("/settings/workout");
 }
 
-// ---------- Feed, reactions, comments ----------
+// ---------- Feed & reactions ----------
 
 export async function getCrewProfiles(): Promise<CrewProfile[]> {
   const { supabase } = await requireUser();
@@ -314,13 +361,12 @@ export async function getFeed(limit = 30): Promise<FeedWorkout[]> {
   const workoutIds = workoutRows.map((w) => w.id);
   const profileMap = new Map(((profiles as CrewProfile[]) ?? []).map((p) => [p.id, p]));
 
-  const [{ data: sets }, { data: runs }, { data: prs }, { data: reactions }, { data: comments }, { data: exercises }] =
+  const [{ data: sets }, { data: runs }, { data: prs }, { data: reactions }, { data: exercises }] =
     await Promise.all([
       supabase.from("workout_sets").select("*").in("workout_id", workoutIds),
       supabase.from("runs").select("*").in("workout_id", workoutIds),
       supabase.from("prs").select("*").in("workout_id", workoutIds),
       supabase.from("reactions").select("*").in("workout_id", workoutIds),
-      supabase.from("comments").select("*").in("workout_id", workoutIds).order("created_at", { ascending: true }),
       supabase.from("exercises").select("id, name"),
     ]);
 
@@ -342,10 +388,6 @@ export async function getFeed(limit = 30): Promise<FeedWorkout[]> {
 
     const workoutReactions = ((reactions as Reaction[]) ?? []).filter((r) => r.workout_id === workout.id);
 
-    const workoutComments = ((comments as Comment[]) ?? [])
-      .filter((c) => c.workout_id === workout.id)
-      .map((c) => ({ ...c, author: profileMap.get(c.user_id) ?? null }));
-
     return {
       workout,
       author: profileMap.get(workout.user_id) ?? null,
@@ -353,7 +395,6 @@ export async function getFeed(limit = 30): Promise<FeedWorkout[]> {
       run,
       prs: workoutPrs,
       reactions: workoutReactions,
-      comments: workoutComments,
     };
   });
 }
@@ -377,14 +418,6 @@ export async function toggleReaction(input: { workoutId: string; emoji: string }
   await supabase.from("reactions").insert({ workout_id: input.workoutId, user_id: user.id, emoji: input.emoji });
   revalidatePath("/workout");
   return { active: true };
-}
-
-export async function addComment(input: { workoutId: string; body: string }) {
-  const { supabase, user } = await requireUser();
-  const body = input.body.trim();
-  if (!body) return;
-  await supabase.from("comments").insert({ workout_id: input.workoutId, user_id: user.id, body });
-  revalidatePath("/workout");
 }
 
 // ---------- Streaks & leaderboard ----------

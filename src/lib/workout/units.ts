@@ -32,3 +32,11 @@ export function formatWeight(weightKg: number, unit: WeightUnit): string {
 export function smallestIncrementKg(unit: WeightUnit): number {
   return unit === "lbs" ? lbsToKg(5) : 2.5;
 }
+
+// Standard barbell weight, in the round number lifters actually use for their
+// display unit (a 45lb bar, not "20.4kg"; a 20kg bar, not "44lb"). Only affects
+// the barbell set-entry UI ("Bar + plate weight") — the stored weight is always
+// the true total in kg, so PRs/streaks/history stay unaffected.
+export function barWeightKg(unit: WeightUnit): number {
+  return unit === "lbs" ? lbsToKg(45) : 20;
+}
