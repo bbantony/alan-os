@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/empty-state";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
@@ -142,9 +143,11 @@ export function GoalsView({
       )}
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 sm:items-center" onClick={() => setShowForm(false)}>
-          <div className="w-full max-w-sm rounded-t-2xl bg-popover p-4 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-3 font-heading text-base font-semibold">New goal</h3>
+        <Dialog open onOpenChange={(next) => !next && setShowForm(false)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>New goal</DialogTitle>
+            </DialogHeader>
             <div className="space-y-3">
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Goal name" autoFocus />
               <Input type="number" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} placeholder="Target amount" />
@@ -153,22 +156,24 @@ export function GoalsView({
                 {saving ? "Saving…" : "Create goal"}
               </Button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {addingTo && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/20 sm:items-center" onClick={() => setAddingTo(null)}>
-          <div className="w-full max-w-sm rounded-t-2xl bg-popover p-4 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="mb-3 font-heading text-base font-semibold">Add to &ldquo;{addingTo.name}&rdquo;</h3>
+        <Dialog open onOpenChange={(next) => !next && setAddingTo(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add to &ldquo;{addingTo.name}&rdquo;</DialogTitle>
+            </DialogHeader>
             <div className="space-y-3">
               <Input type="number" inputMode="decimal" value={addAmount} onChange={(e) => setAddAmount(e.target.value)} placeholder="Amount" autoFocus />
               <Button type="button" className="w-full" disabled={!addAmount} onClick={handleAddToGoal}>
                 Add
               </Button>
             </div>
-          </div>
-        </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

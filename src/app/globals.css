@@ -166,6 +166,15 @@
   --font-scale: 1;
   --density-scale: 1;
 
+  /* Elevation scale — every surface that should visually "lift" (Card,
+     Dialog, dropdowns) uses one of these instead of ad-hoc shadows, so
+     elevation reads consistently everywhere instead of some surfaces using a
+     ring and others a plain border. Plain black-based: works fine across all
+     6 palettes without needing a per-palette shadow color. */
+  --shadow-sm: 0 1px 2px 0 rgb(20 20 15 / 0.06), 0 1px 1px 0 rgb(20 20 15 / 0.04);
+  --shadow-md: 0 4px 10px -2px rgb(20 20 15 / 0.08), 0 2px 4px -2px rgb(20 20 15 / 0.05);
+  --shadow-lg: 0 14px 28px -6px rgb(20 20 15 / 0.14), 0 4px 8px -4px rgb(20 20 15 / 0.06);
+
   /* shadcn-style aliases mapped onto our own token names above */
   --card: var(--surface);
   --card-foreground: var(--foreground);
@@ -182,6 +191,13 @@
 .dark {
   --destructive: #E2564B;
   --destructive-foreground: #0B120E;
+
+  /* Dark surfaces are already near-black, so a black-based shadow needs more
+     opacity (and less spread) to still read as "lifted" rather than vanish
+     into the background. */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 1px 0 rgb(0 0 0 / 0.2);
+  --shadow-md: 0 4px 10px -2px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 14px 28px -6px rgb(0 0 0 / 0.5), 0 4px 8px -4px rgb(0 0 0 / 0.25);
 }
 
 :root[data-font-size="sm"] { --font-scale: 0.9375; }
@@ -221,6 +237,10 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
 
   --font-sans: var(--font-inter);
   --font-heading: var(--font-space-grotesk);

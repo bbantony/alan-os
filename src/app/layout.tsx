@@ -3,6 +3,7 @@ import { Space_Grotesk, Archivo, Fraunces, Inter, Geist_Mono } from "next/font/g
 import { ThemeScript } from "@/components/theme/theme-script";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
+import { Toaster } from "@/components/ui/toast";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -56,6 +57,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>{children}</ThemeProvider>
+        <Toaster />
         <ServiceWorkerRegister />
       </body>
     </html>

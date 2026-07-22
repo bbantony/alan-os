@@ -582,3 +582,46 @@ fully-global model, and not a bigger multi-crew-per-user system than needed).
 - Part 2 (design system foundation: motion, shadow tokens, new Select/Switch/
   SegmentedControl/Toast primitives) and Part 3 (module-by-module polish pass) are next,
   continuing without further check-ins per the owner's explicit standing instruction.
+
+## 13. Admin/Permissions Overhaul + App-Wide Design Polish — Part 2 (Design System Foundation)
+
+**Requested:** Continuation of the same request as #12 — the design/polish half.
+
+**Changes made:**
+- `src/lib/motion.ts`: the shared Framer Motion variants (list item enter/exit,
+  stagger container, fade-in-up, a dialog pop-in, page transition timing) extracted
+  from the one place they were already done well (`tasks/task-list.tsx`), so every
+  other module can use the identical 150-250ms, non-bouncy feel SPEC.md Part C asks
+  for instead of reinventing it (or, as found in the earlier audit, not having any
+  motion at all).
+- `globals.css`: added a `--shadow-sm/md/lg` elevation scale (tuned separately for
+  light vs dark, since dark surfaces need more shadow opacity to still read as
+  "lifted") wired into Tailwind's `@theme` block as real `shadow-sm/md/lg` utilities —
+  previously elevation was ad hoc (`Card` used a ring, most hand-rolled surfaces used
+  a plain border, nothing in between).
+- New component-library primitives, all following the existing `base-ui/react` + `cva`
+  convention (`button.tsx`/`dialog.tsx`): `segmented.tsx` (one real segmented control
+  with an animated sliding active-pill via Framer Motion's `layoutId`, replacing the
+  broken `tabs.tsx` **and** the 4 independent hand-copies of the same tab-bar markup
+  found drifting apart in the audit — each `Segmented` instance gets its own unique
+  `layoutId` via `useId()` so multiple instances on one page never fight over the same
+  animation), `switch.tsx` (`@base-ui/react/switch`), and a deliberately lightweight
+  `select.tsx` — a styled wrapper around the *native* `<select>` rather than the full
+  `base-ui` Select compound component, since every select in this app is a simple flat
+  option list and the native element already has full keyboard/accessibility behavior
+  for free; building the heavier compound version would have been extra risk for
+  purely cosmetic gain.
+- `toast.tsx`: added `sonner` (new dependency) wired into the root layout, styled to
+  read this app's own CSS variables (surface/border/shadow tokens, already dark-mode
+  aware via `ThemeProvider`) instead of sonner's default look — replaces the
+  save/delete/approve silence every form has had so far with real confirmation
+  feedback, to be wired into each module during the polish pass.
+- Fixed the one real regression the audit found: `money/goals-view.tsx`'s two
+  hand-rolled `fixed inset-0 z-50` sheets now use the real `Dialog` primitive, gaining
+  focus-trap and Escape-key handling for free (every other form in the app already
+  used `Dialog` correctly — this was the sole outlier).
+- Deleted `src/components/ui/tabs.tsx` outright (the broken/abandoned `base-ui` Tabs
+  wrapper) rather than leaving it as unimported dead code, now that `segmented.tsx`
+  replaces every place a tab bar was needed.
+- `npm run build`/lint clean. Part 3 (wiring these primitives into every module, plus
+  motion and toast feedback throughout) is next.
