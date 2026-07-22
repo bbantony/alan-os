@@ -237,6 +237,37 @@ body {
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Perf/feel: without this, some mobile browsers wait ~300ms after a tap to
+   confirm it isn't the start of a double-tap-to-zoom gesture, which reads as
+   "the app is slow to respond" even though nothing server-side is slow.
+   touch-action: manipulation removes that wait. tap-highlight removes the
+   grey flash Android/iOS draw on tap, which otherwise fights with our own
+   :active styles and reads as visual lag/flicker. */
+html {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+[role="button"],
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+
+/* Every custom (non-shadcn) tappable element in the app should use this so a
+   tap gives instant visual feedback instead of waiting on a network
+   round-trip to *feel* like something happened. */
+.tap-press {
+  transition: transform 100ms ease, opacity 100ms ease;
+}
+.tap-press:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading), var(--font-sans), ui-sans-serif, sans-serif;
   letter-spacing: -0.01em;

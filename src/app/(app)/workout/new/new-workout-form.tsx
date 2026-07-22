@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Save } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { ChevronRight, Plus, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { celebratePr } from "@/lib/workout/celebrate";
+import { formatPace } from "@/lib/workout/format";
 import { suggestNextWeight } from "@/lib/workout/progression";
 import {
   WORKOUT_TYPE_LABELS,
@@ -18,10 +20,9 @@ import {
   type WorkoutTemplate,
   type WorkoutType,
 } from "@/lib/workout/types";
-import { getExerciseHistory, logRun, logWorkout, saveTemplate } from "../actions";
+import { getExerciseHistory, logRun, logWorkout, saveTemplate, setWeightUnit } from "../actions";
 import { ExercisePanel } from "./exercise-panel";
 import { ExercisePicker } from "./exercise-picker";
-import { TemplatePicker } from "./template-picker";
 
 function suggestionFor(history: ExerciseHistoryEntry[], unit: WeightUnit): DraftSet {
   const lastSets = history[0]?.sets ?? [];
@@ -36,7 +37,7 @@ export function NewWorkoutForm({
   exercises,
   recentExerciseIds,
   templates,
-  weightUnit,
+  weightUnit: initialWeightUnit,
   todayDate,
 }: {
   exercises: Exercise[];
@@ -46,10 +47,12 @@ export function NewWorkoutForm({
   todayDate: string;
 }) {
   const router = useRouter();
-  const [type, setType] = useState<WorkoutType>("push");
+  const [type, setType] = useState<WorkoutType>("resistance");
   const [workoutDate, setWorkoutDate] = useState(todayDate);
   const [notes, setNotes] = useState("");
+  const [unit, setUnit] = useState<WeightUnit>(initialWeightUnit);
   const [knownExercises, setKnownExercises] = useState(exercises);
+  const [resistanceStarted, setResistanceStarted] = useState(false);
   const [draftExercises, setDraftExercises] = useState<DraftExercise[]>([]);
   const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
   const [historyByExercise, setHistoryByExercise] = useState<Record<string, ExerciseHistoryEntry[]>>({});
@@ -63,6 +66,11 @@ export function NewWorkoutForm({
   const [durationS, setDurationS] = useState("");
   const [avgHr, setAvgHr] = useState("");
 
+  async function handleUnitChange(next: WeightUnit) {
+    setUnit(next);
+    await setWeightUnit(next);
+  }
+
   async function addExerciseToDraft(exercise: Exercise) {
     setDraftExercises((prev) => [
       ...prev,
@@ -72,16 +80,15 @@ export function NewWorkoutForm({
 
     const history = await getExerciseHistory(exercise.id, 4);
     setHistoryByExercise((prev) => ({ ...prev, [exercise.id]: history }));
-    const initialSet = suggestionFor(history, weightUnit);
+    const initialSet = suggestionFor(history, unit);
     setDraftExercises((prev) =>
       prev.map((ex) => (ex.exerciseId === exercise.id ? { ...ex, sets: [initialSet] } : ex))
     );
   }
 
-  async function loadTemplate(template: WorkoutTemplate) {
-    const existingIds = new Set(draftExercises.map((e) => e.exerciseId));
+  async function startFromTemplate(template: WorkoutTemplate) {
+    setResistanceStarted(true);
     for (const id of template.exercise_ids) {
-      if (existingIds.has(id)) continue;
       const exercise = knownExercises.find((e) => e.id === id);
       if (exercise) await addExerciseToDraft(exercise);
     }
@@ -110,7 +117,7 @@ export function NewWorkoutForm({
     setDraftExercises((prev) =>
       prev.map((ex) => {
         if (ex.exerciseId !== exerciseId) return ex;
-        const last = ex.sets[ex.sets.length - 1] ?? suggestionFor(historyByExercise[exerciseId] ?? [], weightUnit);
+        const last = ex.sets[ex.sets.length - 1] ?? suggestionFor(historyByExercise[exerciseId] ?? [], unit);
         return { ...ex, sets: [...ex.sets, { ...last }] };
       })
     );
@@ -129,7 +136,7 @@ export function NewWorkoutForm({
   async function handleSaveTemplate() {
     const name = templateName.trim();
     if (!name || draftExercises.length === 0) return;
-    await saveTemplate({ name, type, exerciseIds: draftExercises.map((e) => e.exerciseId) });
+    await saveTemplate({ name, exerciseIds: draftExercises.map((e) => e.exerciseId) });
     setShowSaveTemplate(false);
     setTemplateName("");
   }
@@ -139,7 +146,6 @@ export function NewWorkoutForm({
     setSubmitting(true);
     const result = await logWorkout({
       workoutDate,
-      type: type as Exclude<WorkoutType, "run">,
       notes: notes.trim() || null,
       exercises: draftExercises.map((ex) => ({
         exerciseId: ex.exerciseId,
@@ -151,35 +157,38 @@ export function NewWorkoutForm({
     router.push("/workout");
   }
 
+  const totalRunSeconds =
+    (Number(durationH) || 0) * 3600 + (Number(durationM) || 0) * 60 + (Number(durationS) || 0);
+  const runKm = Number(distanceKm) || 0;
+  const livePace = runKm > 0 && totalRunSeconds > 0 ? formatPace(runKm, totalRunSeconds) : null;
+
   async function handleSubmitRun() {
-    const km = Number(distanceKm);
-    const totalSeconds = (Number(durationH) || 0) * 3600 + (Number(durationM) || 0) * 60 + (Number(durationS) || 0);
-    if (!km || totalSeconds <= 0 || submitting) return;
+    if (!runKm || totalRunSeconds <= 0 || submitting) return;
     setSubmitting(true);
     await logRun({
       workoutDate,
-      distanceKm: km,
-      durationSeconds: totalSeconds,
+      distanceKm: runKm,
+      durationSeconds: totalRunSeconds,
       avgHr: avgHr ? Number(avgHr) : null,
       notes: notes.trim() || null,
     });
     router.push("/workout");
   }
 
-  const isRun = type === "run";
+  const isRunning = type === "running";
   const activeExercise = draftExercises.find((ex) => ex.exerciseId === activeExerciseId) ?? null;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 pb-24">
       <h1 className="mb-4 font-heading text-2xl font-semibold">New workout</h1>
 
-      <div className="mb-4 grid grid-cols-5 gap-1.5">
-        {(["push", "pull", "legs", "run", "other"] as WorkoutType[]).map((t) => (
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        {(Object.keys(WORKOUT_TYPE_LABELS) as WorkoutType[]).map((t) => (
           <button
             key={t}
             onClick={() => setType(t)}
             className={cn(
-              "rounded-lg border px-2 py-2 text-xs font-medium",
+              "tap-press rounded-lg border px-3 py-2.5 text-sm font-medium",
               type === t ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
             )}
           >
@@ -188,12 +197,28 @@ export function NewWorkoutForm({
         ))}
       </div>
 
-      <div className="mb-4">
+      <div className="mb-5 flex items-center gap-3">
         <Input type="date" value={workoutDate} onChange={(e) => setWorkoutDate(e.target.value)} className="w-40" />
+        {!isRunning && (
+          <div className="flex gap-0.5 rounded-lg border border-border p-0.5">
+            {(["lbs", "kg"] as WeightUnit[]).map((u) => (
+              <button
+                key={u}
+                onClick={() => handleUnitChange(u)}
+                className={cn(
+                  "tap-press rounded-md px-2.5 py-1 text-xs font-semibold",
+                  unit === u ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {isRun ? (
-        <div className="space-y-3">
+      {isRunning ? (
+        <div className="space-y-4">
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Distance (km)</label>
             <Input
@@ -233,6 +258,11 @@ export function NewWorkoutForm({
               <span className="text-xs text-muted-foreground">s</span>
             </div>
           </div>
+          {livePace && (
+            <p className="text-xs text-muted-foreground">
+              Pace: <span className="tabular font-semibold text-foreground">{livePace}</span>
+            </p>
+          )}
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">Avg heart rate (optional)</label>
             <Input
@@ -245,89 +275,117 @@ export function NewWorkoutForm({
             />
           </div>
         </div>
+      ) : !resistanceStarted ? (
+        <div className="space-y-3">
+          {templates.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Your templates
+              </p>
+              <div className="space-y-2">
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => startFromTemplate(t)}
+                    className="tap-press flex w-full items-center justify-between rounded-xl border border-border bg-surface p-3.5 text-left hover:border-primary/40"
+                  >
+                    <div>
+                      <p className="font-heading text-sm font-semibold">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">{t.exercise_ids.length} exercises</p>
+                    </div>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full gap-1.5"
+            onClick={() => setResistanceStarted(true)}
+          >
+            <Plus className="size-4" />
+            Start blank
+          </Button>
+        </div>
       ) : (
         <div className="space-y-4">
-          <TemplatePicker templates={templates} type={type} onLoad={loadTemplate} />
-
-          {draftExercises.length === 0 ? (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {draftExercises.map((ex) => (
+              <button
+                key={ex.exerciseId}
+                onClick={() => setActiveExerciseId(ex.exerciseId)}
+                className={cn(
+                  "tap-press shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium",
+                  ex.exerciseId === activeExerciseId
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-surface hover:bg-muted"
+                )}
+              >
+                {ex.exerciseName}
+                {ex.sets.length > 0 && " ✓"}
+              </button>
+            ))}
             <ExercisePicker
               exercises={knownExercises}
               recentExerciseIds={recentExerciseIds}
-              excludeIds={[]}
+              excludeIds={draftExercises.map((e) => e.exerciseId)}
               onSelect={addExerciseToDraft}
               onExerciseCreated={(exercise) => setKnownExercises((prev) => [...prev, exercise])}
+              compact
             />
-          ) : (
-            <>
-              <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                {draftExercises.map((ex) => (
-                  <button
-                    key={ex.exerciseId}
-                    onClick={() => setActiveExerciseId(ex.exerciseId)}
-                    className={cn(
-                      "shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium",
-                      ex.exerciseId === activeExerciseId
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-surface hover:bg-muted"
-                    )}
-                  >
-                    {ex.exerciseName}
-                    {ex.sets.length > 0 && " ✓"}
-                  </button>
-                ))}
-                <ExercisePicker
-                  exercises={knownExercises}
-                  recentExerciseIds={recentExerciseIds}
-                  excludeIds={draftExercises.map((e) => e.exerciseId)}
-                  onSelect={addExerciseToDraft}
-                  onExerciseCreated={(exercise) => setKnownExercises((prev) => [...prev, exercise])}
-                  compact
-                />
-              </div>
+          </div>
 
-              {activeExercise && (
+          <AnimatePresence mode="wait">
+            {activeExercise && (
+              <motion.div
+                key={activeExercise.exerciseId}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+              >
                 <ExercisePanel
                   exercise={activeExercise}
                   history={historyByExercise[activeExercise.exerciseId] ?? []}
-                  unit={weightUnit}
+                  unit={unit}
                   onChangeSet={(i, set) => updateSet(activeExercise.exerciseId, i, set)}
                   onRemoveSet={(i) => removeSet(activeExercise.exerciseId, i)}
                   onDuplicateLastSet={() => duplicateLastSet(activeExercise.exerciseId)}
                   onRemoveExercise={() => removeExercise(activeExercise.exerciseId)}
                 />
-              )}
-            </>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {draftExercises.length > 0 && (
-            <div>
-              {showSaveTemplate ? (
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={templateName}
-                    onChange={(e) => setTemplateName(e.target.value)}
-                    placeholder="Template name"
-                    className="flex-1"
-                    autoFocus
-                  />
-                  <Button type="button" size="sm" onClick={handleSaveTemplate}>
-                    Save
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => setShowSaveTemplate(true)}
-                >
-                  <Save className="size-3.5" />
-                  Save as template
+          <div>
+            {showSaveTemplate ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  placeholder="Template name"
+                  className="flex-1"
+                  autoFocus
+                />
+                <Button type="button" size="sm" onClick={handleSaveTemplate}>
+                  Save
                 </Button>
-              )}
-            </div>
-          )}
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowSaveTemplate(true)}
+              >
+                <Save className="size-3.5" />
+                Save as template
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -342,13 +400,15 @@ export function NewWorkoutForm({
         />
       </div>
 
-      <Button
-        className="mt-6 w-full"
-        disabled={submitting || (isRun ? false : draftExercises.length === 0)}
-        onClick={isRun ? handleSubmitRun : handleSubmitLift}
-      >
-        {submitting ? "Saving…" : "Save workout"}
-      </Button>
+      {(isRunning || resistanceStarted) && (
+        <Button
+          className="mt-6 w-full"
+          disabled={submitting || (isRunning ? false : draftExercises.length === 0)}
+          onClick={isRunning ? handleSubmitRun : handleSubmitLift}
+        >
+          {submitting ? "Saving…" : "Save workout"}
+        </Button>
+      )}
     </div>
   );
 }

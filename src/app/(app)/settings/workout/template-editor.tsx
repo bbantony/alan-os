@@ -6,9 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deleteTemplate, updateTemplate } from "@/app/(app)/workout/actions";
 import { ExercisePicker } from "@/app/(app)/workout/new/exercise-picker";
-import { WORKOUT_TYPE_LABELS, type Exercise, type WorkoutTemplate, type WorkoutType } from "@/lib/workout/types";
-
-const TEMPLATE_TYPES = (Object.keys(WORKOUT_TYPE_LABELS) as WorkoutType[]).filter((t) => t !== "run");
+import type { Exercise, WorkoutTemplate } from "@/lib/workout/types";
 
 export function TemplateEditor({
   template,
@@ -25,7 +23,6 @@ export function TemplateEditor({
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(template.name);
-  const [type, setType] = useState<WorkoutType>(template.type);
   const [exerciseIds, setExerciseIds] = useState<string[]>(template.exercise_ids);
 
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
@@ -33,14 +30,13 @@ export function TemplateEditor({
   function cancel() {
     setEditing(false);
     setName(template.name);
-    setType(template.type);
     setExerciseIds(template.exercise_ids);
   }
 
   async function handleSave() {
     const finalName = name.trim() || template.name;
-    await updateTemplate({ id: template.id, name: finalName, type, exerciseIds });
-    onSaved({ ...template, name: finalName, type, exercise_ids: exerciseIds });
+    await updateTemplate({ id: template.id, name: finalName, exerciseIds });
+    onSaved({ ...template, name: finalName, exercise_ids: exerciseIds });
     setEditing(false);
   }
 
@@ -54,9 +50,7 @@ export function TemplateEditor({
       <li className="flex items-center justify-between px-4 py-3 text-sm">
         <div>
           <p className="font-medium">{template.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {WORKOUT_TYPE_LABELS[template.type]} · {template.exercise_ids.length} exercises
-          </p>
+          <p className="text-xs text-muted-foreground">{template.exercise_ids.length} exercises</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setEditing(true)} className="text-muted-foreground/50 hover:text-foreground" aria-label="Edit template">
@@ -73,17 +67,6 @@ export function TemplateEditor({
   return (
     <li className="space-y-2 px-4 py-3">
       <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name" autoFocus />
-      <select
-        value={type}
-        onChange={(e) => setType(e.target.value as WorkoutType)}
-        className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-      >
-        {TEMPLATE_TYPES.map((t) => (
-          <option key={t} value={t}>
-            {WORKOUT_TYPE_LABELS[t]}
-          </option>
-        ))}
-      </select>
 
       {exerciseIds.length > 0 && (
         <ul className="space-y-1">

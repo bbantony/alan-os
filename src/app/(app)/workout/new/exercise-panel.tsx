@@ -37,10 +37,10 @@ export function ExercisePanel({
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-heading text-base font-semibold">{exercise.exerciseName}</p>
+        <p className="font-heading text-lg font-semibold">{exercise.exerciseName}</p>
         <button
           onClick={onRemoveExercise}
-          className="text-muted-foreground/40 hover:text-destructive"
+          className="tap-press rounded-full p-1.5 text-muted-foreground/40 hover:text-destructive"
           aria-label="Remove exercise"
         >
           <Trash2 className="size-4" />

@@ -2,9 +2,46 @@
 
 import { Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { barWeightKg, displayWeight, smallestIncrementKg, toStoredKg } from "@/lib/workout/units";
 import type { DraftSet, WeightUnit } from "@/lib/workout/types";
+
+function Stepper({
+  label,
+  value,
+  onDecrement,
+  onIncrement,
+  onChange,
+  step,
+}: {
+  label: string;
+  value: number;
+  onDecrement: () => void;
+  onIncrement: () => void;
+  onChange: (next: number) => void;
+  step: "reps" | "weight";
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{label}</span>
+      <div className="flex items-center gap-1">
+        <Button type="button" variant="outline" size="icon" onClick={onDecrement} aria-label={`Decrease ${label}`}>
+          <Minus className="size-3.5" />
+        </Button>
+        <input
+          type="number"
+          inputMode={step === "reps" ? "numeric" : "decimal"}
+          pattern={step === "reps" ? "[0-9]*" : undefined}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value) || 0)}
+          className="tabular h-9 w-14 rounded-lg border border-input bg-transparent text-center text-base font-semibold outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        />
+        <Button type="button" variant="outline" size="icon" onClick={onIncrement} aria-label={`Increase ${label}`}>
+          <Plus className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function SetRow({
   index,
@@ -39,80 +76,36 @@ export function SetRow({
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-4 text-xs text-muted-foreground">{index + 1}</span>
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-background/60 py-2 pr-1.5 pl-2.5">
+      <span className="tabular w-4 shrink-0 text-xs font-medium text-muted-foreground">{index + 1}</span>
 
-      <div className="flex items-center gap-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          onClick={() => onChange({ ...set, reps: Math.max(0, set.reps - 1) })}
-          aria-label="Fewer reps"
-        >
-          <Minus className="size-3" />
-        </Button>
-        <Input
-          type="number"
-          inputMode="numeric"
+      <div className="flex flex-1 items-center justify-center gap-3">
+        <Stepper
+          label="Reps"
           value={set.reps}
-          onChange={(e) => onChange({ ...set, reps: Number(e.target.value) || 0 })}
-          className="h-7 w-12 text-center"
+          step="reps"
+          onDecrement={() => onChange({ ...set, reps: Math.max(0, set.reps - 1) })}
+          onIncrement={() => onChange({ ...set, reps: set.reps + 1 })}
+          onChange={(next) => onChange({ ...set, reps: next })}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          onClick={() => onChange({ ...set, reps: set.reps + 1 })}
-          aria-label="More reps"
-        >
-          <Plus className="size-3" />
-        </Button>
-      </div>
-
-      <span className="text-xs text-muted-foreground">×</span>
-
-      <div className="flex items-center gap-1">
-        {isBarbell && (
-          <span className="whitespace-nowrap text-xs text-muted-foreground">
-            Bar ({displayWeight(bar, unit)}) +
-          </span>
-        )}
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          onClick={() => setShownWeight(shownWeight - increment)}
-          aria-label="Less weight"
-        >
-          <Minus className="size-3" />
-        </Button>
-        <Input
-          type="number"
-          inputMode="decimal"
+        <span className="mt-4 text-sm text-muted-foreground/60">×</span>
+        <Stepper
+          label={isBarbell ? `Bar+ (${unit})` : `Weight (${unit})`}
           value={shownWeight}
-          onChange={(e) => setShownWeight(Number(e.target.value) || 0)}
-          className="h-7 w-16 text-center"
+          step="weight"
+          onDecrement={() => setShownWeight(shownWeight - increment)}
+          onIncrement={() => setShownWeight(shownWeight + increment)}
+          onChange={setShownWeight}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon-xs"
-          onClick={() => setShownWeight(shownWeight + increment)}
-          aria-label="More weight"
-        >
-          <Plus className="size-3" />
-        </Button>
-        <span className="text-xs text-muted-foreground">{unit}</span>
       </div>
 
       <button
         type="button"
         onClick={onRemove}
-        className="ml-auto shrink-0 text-muted-foreground/40 hover:text-destructive"
+        className="tap-press shrink-0 rounded-full p-2 text-muted-foreground/40 hover:text-destructive"
         aria-label="Remove set"
       >
-        <X className="size-3.5" />
+        <X className="size-4" />
       </button>
     </div>
   );

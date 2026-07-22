@@ -20,7 +20,6 @@ import type {
   Workout,
   WorkoutSet,
   WorkoutTemplate,
-  WorkoutType,
 } from "@/lib/workout/types";
 
 async function requireUser() {
@@ -206,7 +205,6 @@ export interface LoggedPr extends NewPr {
 
 export async function logWorkout(input: {
   workoutDate: string;
-  type: Exclude<WorkoutType, "run">;
   notes: string | null;
   exercises: {
     exerciseId: string;
@@ -221,7 +219,7 @@ export async function logWorkout(input: {
     .insert({
       user_id: user.id,
       workout_date: input.workoutDate,
-      type: input.type,
+      type: "resistance",
       notes: input.notes,
     })
     .select("id")
@@ -285,7 +283,7 @@ export async function logRun(input: {
 
   const { data: workout, error } = await supabase
     .from("workouts")
-    .insert({ user_id: user.id, workout_date: input.workoutDate, type: "run", notes: input.notes })
+    .insert({ user_id: user.id, workout_date: input.workoutDate, type: "running", notes: input.notes })
     .select("id")
     .single();
 
@@ -318,32 +316,22 @@ export async function getTemplates(): Promise<WorkoutTemplate[]> {
   return (data as WorkoutTemplate[]) ?? [];
 }
 
-export async function saveTemplate(input: {
-  name: string;
-  type: WorkoutType;
-  exerciseIds: string[];
-}) {
+export async function saveTemplate(input: { name: string; exerciseIds: string[] }) {
   const { supabase, user } = await requireUser();
   await supabase.from("workout_templates").insert({
     user_id: user.id,
     name: input.name.trim(),
-    type: input.type,
     exercise_ids: input.exerciseIds,
   });
   revalidatePath("/workout/new");
   revalidatePath("/settings/workout");
 }
 
-export async function updateTemplate(input: {
-  id: string;
-  name: string;
-  type: WorkoutType;
-  exerciseIds: string[];
-}) {
+export async function updateTemplate(input: { id: string; name: string; exerciseIds: string[] }) {
   const { supabase, user } = await requireUser();
   await supabase
     .from("workout_templates")
-    .update({ name: input.name.trim(), type: input.type, exercise_ids: input.exerciseIds })
+    .update({ name: input.name.trim(), exercise_ids: input.exerciseIds })
     .eq("id", input.id)
     .eq("user_id", user.id);
   revalidatePath("/workout/new");

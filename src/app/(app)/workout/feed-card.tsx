@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDuration, formatPace, formatRelativeTime } from "@/lib/workout/format";
 import { formatWeight } from "@/lib/workout/units";
 import { WORKOUT_TYPE_LABELS, type FeedWorkout, type WeightUnit } from "@/lib/workout/types";
 import { Reactions } from "./reactions";
@@ -16,39 +17,9 @@ function initials(name: string | null): string {
     .join("");
 }
 
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const minutes = Math.round(diffMs / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
-}
-
-function formatPace(distanceKm: number, durationSeconds: number): string {
-  if (distanceKm <= 0) return "";
-  const secPerKm = durationSeconds / distanceKm;
-  const min = Math.floor(secPerKm / 60);
-  const sec = Math.round(secPerKm % 60);
-  return `${min}:${sec.toString().padStart(2, "0")}/km`;
-}
-
-function formatDuration(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
-
 const TYPE_BADGE_STYLES: Record<string, string> = {
-  push: "bg-primary/10 text-primary",
-  pull: "bg-primary/10 text-primary",
-  legs: "bg-primary/10 text-primary",
-  run: "bg-accent/15 text-accent",
-  other: "bg-muted text-muted-foreground",
+  resistance: "bg-primary/10 text-primary",
+  running: "bg-accent/15 text-accent",
 };
 
 export function FeedCard({

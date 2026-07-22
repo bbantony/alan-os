@@ -1,14 +1,13 @@
 export type MuscleGroup = "chest" | "back" | "shoulders" | "arms" | "legs" | "core" | "other";
-export type WorkoutType = "push" | "pull" | "legs" | "run" | "other";
+// Collapsed from push/pull/legs/run/other (owner feedback: nobody thinks in
+// day-split labels day to day, just "did I lift or did I run").
+export type WorkoutType = "resistance" | "running";
 export type PrKind = "weight" | "est_1rm" | "volume";
 export type WeightUnit = "lbs" | "kg";
 
 export const WORKOUT_TYPE_LABELS: Record<WorkoutType, string> = {
-  push: "Push",
-  pull: "Pull",
-  legs: "Legs",
-  run: "Run",
-  other: "Other",
+  resistance: "Resistance training",
+  running: "Running",
 };
 
 export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
@@ -78,11 +77,12 @@ export interface Reaction {
   created_at: string;
 }
 
+// Templates only ever apply to resistance training — running has no
+// templates, so there's no `type` field here (removed in migration 0007).
 export interface WorkoutTemplate {
   id: string;
   user_id: string;
   name: string;
-  type: WorkoutType;
   exercise_ids: string[];
   created_at: string;
 }
