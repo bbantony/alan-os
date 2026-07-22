@@ -63,3 +63,24 @@ right phase to build it.
   exists.
 - Receipt scan auto-checks matching shopping list items (Phase 5 — already in
   Part E2, just cross-referenced here).
+- **Workout PR push notifications** (Phase 2 ↔ Phase 3): SPEC.md Part E5 calls
+  for a push notification to the crew when someone hits a PR. Phase 2 built the
+  in-app half (confetti + special feed card, live via Realtime for anyone
+  already viewing the feed) but the actual push send needs Phase 3's Web Push
+  infra (VAPID, subscriptions), which didn't exist yet. Wire the real push send
+  from the PR-insert code path in `src/app/(app)/workout/actions.ts`
+  (`logWorkout`) once Phase 3 ships.
+
+## Phase 2 bonus features (owner request, folded in ahead of spec)
+
+Three extras were added to Phase 2 beyond SPEC.md Part E5's literal scope, at
+the owner's choice when Phase 2 was scoped:
+- **Progressive overload nudge** — implemented (`src/lib/workout/progression.ts`).
+- **Workout templates** (save/load a routine) — implemented (`workout_templates`
+  table, `new/template-picker.tsx`).
+- **Streak freeze** — implemented as an automatic rolling grace (one forgiven
+  missed day per trailing 7-day window), not a manually-planned rest day, to
+  keep streaks a pure computed-on-read function with no new schema. See
+  `src/lib/workout/streaks.ts`. Worth a plain-English check-in with the owner
+  once he's used it for a couple of weeks: does "one miss a week is forgiven
+  automatically" feel right, or does he actually want to pick which day?

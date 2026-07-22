@@ -4,6 +4,7 @@ import {
   ShoppingCart,
   Wallet,
   Dumbbell,
+  Flame,
   CalendarDays,
   BookImage,
   CloudSun,
@@ -13,17 +14,19 @@ import {
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { getTasks, getWeeklyDoneCount } from "@/app/(app)/tasks/actions";
 import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
+import { getWorkoutDashboardSummary } from "@/app/(app)/workout/actions";
 import { todayInAppTimezone } from "@/lib/time";
 import { DashboardWidget } from "@/components/dashboard/widget";
 import { SunriseIllustration } from "@/components/illustrations";
 
 export default async function TodayPage() {
-  const [profile, tasks, weeklyDoneCount, shoppingItems, suggestions] = await Promise.all([
+  const [profile, tasks, weeklyDoneCount, shoppingItems, suggestions, workout] = await Promise.all([
     getCurrentProfile(),
     getTasks(),
     getWeeklyDoneCount(),
     getShoppingItems(),
     getStapleSuggestions(),
+    getWorkoutDashboardSummary(),
   ]);
 
   const name = profile?.displayName?.split(" ")[0] ?? "there";
@@ -70,8 +73,14 @@ export default async function TodayPage() {
           Budget pulse and &ldquo;safe to spend&rdquo; will live here.
         </DashboardWidget>
 
-        <DashboardWidget title="Workout" icon={Dumbbell} comingInPhase={2}>
-          Your streak flame and the crew&apos;s activity will live here.
+        <DashboardWidget title="Workout" icon={Dumbbell} href="/workout">
+          <div className="flex items-center gap-1.5">
+            <Flame className="size-4 text-accent" />
+            <span className="tabular text-2xl font-semibold">{workout.currentStreak}</span>
+          </div>
+          <p className="text-muted-foreground">
+            {workout.loggedToday ? "Logged today" : "Not logged yet today"}
+          </p>
         </DashboardWidget>
 
         <DashboardWidget title="Calendar & Reminders" icon={CalendarDays} comingInPhase={3}>

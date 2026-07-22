@@ -30,15 +30,21 @@ See `SPEC.md` for the full specification.
       "arrives in Phase N" placeholders until those modules ship)
 
 ## Phase 2 — Workout
-- [ ] Exercise master list (crew-shared, seeded ~40 PPL exercises)
-- [ ] Logging a lift session (sets, last-session display)
-- [ ] Logging a run
-- [ ] Crew feed + realtime
-- [ ] Reactions/comments
-- [ ] Streaks
-- [ ] PR detection + celebration
-- [ ] Invite flow + role gating
-- [ ] Onboard the 3 friends
+- [x] Exercise master list (crew-shared, seeded 43 PPL exercises, soft-dedupe
+      "did you mean X?" + hard unique-name backstop)
+- [x] Logging a lift session (sets, last-session display, progressive-overload
+      nudge, duplicate-last-set, saved routine templates)
+- [x] Logging a run
+- [x] Crew feed + realtime (Supabase Realtime across workouts/sets/runs/prs/
+      reactions/comments)
+- [x] Reactions/comments
+- [x] Streaks (with a bonus one-forgiven-miss-per-week grace, owner request)
+- [x] PR detection + celebration (confetti, live for crew watching the feed)
+- [x] Invite flow + role gating (server-side route guard in proxy.ts, not just
+      hidden nav — closes a gap found during Phase 2: a workout_member could
+      previously reach any URL by typing it directly)
+- [ ] Onboard the 3 friends — owner action: send the invite link from
+      Workout → invite icon to each friend once this phase is deployed
 
 ## Phase 3 — Reminders & Calendar
 - [ ] Web Push infra (VAPID, subscriptions per device, Vercel cron dispatcher)
@@ -79,7 +85,9 @@ See `SPEC.md` for the full specification.
 - [ ] Work-phone/sales workflow refinements
 
 ---
-**Current status:** Phase 1 complete, built and verified locally (build/lint/typecheck
-clean, RLS verified under real auth context). Live at https://alan-os-nine.vercel.app
-once pushed and deployed — test on your phone to confirm before starting Phase 2.
-Next session: "Read SPEC.md. Phase 1 is complete and deployed. Execute Phase 2 only."
+**Current status:** Phase 2 built and verified locally (build/lint/typecheck clean,
+migration 0005 applied and RLS/grants/realtime verified directly against the database).
+Not yet pushed/deployed or tested on a phone — do that next, then send the invite link
+from Workout → invite icon to each friend to finish "Onboard the 3 friends."
+Next session (once onboarding is done): "Read SPEC.md. Phase 2 is complete and
+deployed. Execute Phase 3 only."

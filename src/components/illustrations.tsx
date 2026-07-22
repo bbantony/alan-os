@@ -55,6 +55,17 @@ export function ComingSoonIllustration(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function WorkoutIllustration(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M6 24h4M38 24h4" />
+      <path d="M10 17v14M38 17v14" />
+      <path d="M14 24h20" />
+      <path d="M14 20v8M34 20v8" />
+    </svg>
+  );
+}
+
 export function AuthIllustration(props: SVGProps<SVGSVGElement>) {
   return (
     <svg {...base} {...props}>

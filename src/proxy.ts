@@ -39,6 +39,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // workout_member (a friend, not the owner) must never reach any module besides
+  // Workout + Settings — SPEC.md Part B2/C3. This is the server-side enforcement;
+  // the nav already hides other links, but a typed-in URL must be blocked too.
+  if (user && !isPublic) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    const pathname = request.nextUrl.pathname;
+    const allowed = pathname.startsWith("/workout") || pathname.startsWith("/settings");
+    if (profile?.role === "workout_member" && !allowed) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/workout";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
 

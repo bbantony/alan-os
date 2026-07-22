@@ -183,4 +183,85 @@ The Today page now shows a full grid of cards:
 
 ---
 
-*(Phase 2 section will be added here once its checklist is complete.)*
+## Phase 2 — Workout
+
+What Phase 2 adds: a real Workout module you and your 3 friends can all use
+together — logging lifts and runs, seeing each other's sessions in a shared
+feed, reacting and commenting, chasing streaks, and getting a little
+celebration when you hit a personal record. This replaces the WhatsApp
+screenshot routine.
+
+### Logging a lift session
+
+1. Tap **Workout → New workout**.
+2. Pick a type: **Push, Pull, Legs,** or **Other**.
+3. If you've saved a routine before for this type, a **"Load from template"**
+   box appears — pick one and tap **Load** to instantly add all its exercises.
+4. Tap **Add exercise** to search the shared exercise list (started you off
+   with about 40 common ones) or add a brand-new one. If something close
+   already exists, it'll ask "Did you mean X?" before creating a duplicate.
+5. Each exercise you add shows **"Last:"** — exactly what you did last time —
+   and quietly pre-fills a suggested next set (e.g. one small weight bump if
+   you crushed it last time, or the same weight if you didn't).
+6. Adjust reps/weight with the +/- buttons or type directly. **Duplicate last
+   set** copies your most recent set instead of retyping it.
+7. Add a note if you want, then tap **Save workout**.
+8. If you hit a personal record (heaviest weight, best estimated 1-rep max,
+   or most total volume for that exercise), you'll see confetti and a "New
+   PR" badge on the post — and anyone else looking at the feed right then
+   sees it too, live.
+9. **Save as template:** once you've built a session, tap "Save as template"
+   to name it (e.g. "Push Day A") so next time you can load the whole thing
+   in one tap instead of re-picking every exercise.
+
+### Logging a run
+
+1. Tap **Workout → New workout → Run**.
+2. Enter distance (km), duration, and optionally your average heart rate.
+3. Tap **Save workout**.
+
+### The crew feed
+
+- Tap **Workout** to see everyone's recent sessions, newest first — updates
+  live, no need to refresh.
+- Tap the emoji row (💪🔥👏😮) to react to a workout; tap again to remove
+  your reaction.
+- Type in the comment box under any workout to add a comment.
+- Tap **Leaderboard** at the top to see everyone's current streak, longest
+  streak ever, and workouts logged this week.
+
+### Streaks
+
+Your streak flame counts consecutive days with at least one logged workout —
+shown at the top of the Workout page and now on the **Today** dashboard too.
+One built-in grace: if you miss a single day in a given week, the streak
+doesn't reset — it just holds steady until your next session. Miss two days
+in the same week, though, and it resets. (This is an automatic rule, not
+something you have to plan ahead — worth telling whoever's driving the
+coding agent if you'd rather pick your rest day yourself instead.)
+
+### Inviting your friends
+
+1. As the owner, tap the **person-plus icon** at the top of the Workout page
+   (or go to `/workout/invite`).
+2. Tap **Copy invite message** — it copies a ready-to-paste message with the
+   sign-up link and your invite code. Send it via text/WhatsApp/iMessage.
+3. Once a friend signs up with that code, they land straight in the Workout
+   module and can only ever see Workout + their own basic Settings — nothing
+   else of yours.
+4. The same page shows everyone who's joined so far, so you can track who's
+   still pending.
+
+### Settings → Workout
+
+Tap **More → Settings → Workout** to switch between **lbs** and **kg**, and
+to see/delete any routines you've saved as templates.
+
+### Today dashboard
+
+The **Workout** card now shows your real streak flame and whether you've
+logged something today — tap it to jump straight into the module.
+
+---
+
+*(Phase 3 section will be added here once its checklist is complete.)*
