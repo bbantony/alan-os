@@ -27,10 +27,10 @@ export function formatWeight(weightKg: number, unit: WeightUnit): string {
   return `${rounded} ${unit}`;
 }
 
-// The smallest sensible plate jump for the overload nudge — 2.5kg (a pair of
-// 1.25s) or 5lb (a pair of 2.5s), whichever matches the user's display unit.
+// Step size for the +/- weight steppers and the overload nudge (owner
+// preference): 2.5 lb or 1 kg, whichever matches the user's display unit.
 export function smallestIncrementKg(unit: WeightUnit): number {
-  return unit === "lbs" ? lbsToKg(5) : 2.5;
+  return unit === "lbs" ? lbsToKg(2.5) : 1;
 }
 
 // Standard barbell weight, in the round number lifters actually use for their

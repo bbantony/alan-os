@@ -53,10 +53,10 @@ export function TemplateEditor({
           <p className="text-xs text-muted-foreground">{template.exercise_ids.length} exercises</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={() => setEditing(true)} className="text-muted-foreground/50 hover:text-foreground" aria-label="Edit template">
+          <button onClick={() => setEditing(true)} className="tap-press text-muted-foreground/50 hover:text-foreground" aria-label="Edit template">
             <Pencil className="size-4" />
           </button>
-          <button onClick={handleDelete} className="text-muted-foreground/40 hover:text-destructive" aria-label="Delete template">
+          <button onClick={handleDelete} className="tap-press text-muted-foreground/40 hover:text-destructive" aria-label="Delete template">
             <Trash2 className="size-4" />
           </button>
         </div>
@@ -78,7 +78,7 @@ export function TemplateEditor({
               {exerciseById.get(id)?.name ?? "Unknown exercise"}
               <button
                 onClick={() => setExerciseIds((prev) => prev.filter((eid) => eid !== id))}
-                className="text-muted-foreground/40 hover:text-destructive"
+                className="tap-press text-muted-foreground/40 hover:text-destructive"
                 aria-label="Remove exercise"
               >
                 <X className="size-3.5" />

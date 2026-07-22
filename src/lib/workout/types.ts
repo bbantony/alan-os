@@ -1,4 +1,5 @@
 export type MuscleGroup = "chest" | "back" | "shoulders" | "arms" | "legs" | "core" | "other";
+export type EquipmentType = "barbell" | "dumbbell" | "kettlebell" | "other";
 // Collapsed from push/pull/legs/run/other (owner feedback: nobody thinks in
 // day-split labels day to day, just "did I lift or did I run").
 export type WorkoutType = "resistance" | "running";
@@ -23,12 +24,30 @@ export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
 export const REACTION_EMOJIS = ["💪", "🔥", "👏", "😮"] as const;
 export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 
+// Short tags shown next to an exercise's name — barbell entry mode ("Bar +
+// plate weight") only kicks in for "barbell"; dumbbell/kettlebell are purely
+// informational tags with normal total-weight entry.
+export const EQUIPMENT_LABELS: Record<EquipmentType, string> = {
+  barbell: "Barbell",
+  dumbbell: "Dumbbell",
+  kettlebell: "Kettlebell",
+  other: "Other",
+};
+
+export const EQUIPMENT_TAGS: Partial<Record<EquipmentType, string>> = {
+  barbell: "BB",
+  dumbbell: "DB",
+  kettlebell: "KB",
+};
+
+// Exercises are private per user (each person keeps their own list, same as
+// templates always have) — see migration 0008.
 export interface Exercise {
   id: string;
-  created_by: string | null;
+  user_id: string;
   name: string;
   muscle_group: MuscleGroup;
-  is_barbell: boolean;
+  equipment: EquipmentType;
   created_at: string;
 }
 
@@ -126,6 +145,6 @@ export interface DraftSet {
 export interface DraftExercise {
   exerciseId: string;
   exerciseName: string;
-  isBarbell: boolean;
+  equipment: EquipmentType;
   sets: DraftSet[];
 }

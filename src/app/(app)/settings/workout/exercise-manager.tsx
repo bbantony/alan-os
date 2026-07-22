@@ -5,7 +5,16 @@ import { Check, Pencil, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { updateExercise } from "@/app/(app)/workout/actions";
-import { MUSCLE_GROUP_LABELS, type Exercise, type MuscleGroup } from "@/lib/workout/types";
+import {
+  EQUIPMENT_LABELS,
+  EQUIPMENT_TAGS,
+  MUSCLE_GROUP_LABELS,
+  type EquipmentType,
+  type Exercise,
+  type MuscleGroup,
+} from "@/lib/workout/types";
+
+const EQUIPMENT_TYPES = Object.keys(EQUIPMENT_LABELS) as EquipmentType[];
 
 export function ExerciseManager({
   exercises,
@@ -18,7 +27,7 @@ export function ExerciseManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>("chest");
-  const [isBarbell, setIsBarbell] = useState(false);
+  const [equipment, setEquipment] = useState<EquipmentType>("other");
   const [error, setError] = useState<string | null>(null);
 
   const sorted = useMemo(() => {
@@ -31,19 +40,19 @@ export function ExerciseManager({
     setEditingId(exercise.id);
     setName(exercise.name);
     setMuscleGroup(exercise.muscle_group);
-    setIsBarbell(exercise.is_barbell);
+    setEquipment(exercise.equipment);
     setError(null);
   }
 
   async function handleSave(exercise: Exercise) {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const result = await updateExercise({ id: exercise.id, name: trimmed, muscleGroup, isBarbell });
+    const result = await updateExercise({ id: exercise.id, name: trimmed, muscleGroup, equipment });
     if (result.error) {
       setError(result.error);
       return;
     }
-    onUpdated({ ...exercise, name: trimmed, muscle_group: muscleGroup, is_barbell: isBarbell });
+    onUpdated({ ...exercise, name: trimmed, muscle_group: muscleGroup, equipment });
     setEditingId(null);
   }
 
@@ -76,15 +85,17 @@ export function ExerciseManager({
                     </option>
                   ))}
                 </select>
-                <label className="flex items-center gap-2 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={isBarbell}
-                    onChange={(e) => setIsBarbell(e.target.checked)}
-                    className="size-4 rounded border-input"
-                  />
-                  Barbell exercise (enter plate weight, not total)
-                </label>
+                <select
+                  value={equipment}
+                  onChange={(e) => setEquipment(e.target.value as EquipmentType)}
+                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                >
+                  {EQUIPMENT_TYPES.map((eq) => (
+                    <option key={eq} value={eq}>
+                      {EQUIPMENT_LABELS[eq]}
+                    </option>
+                  ))}
+                </select>
                 {error && <p className="text-xs text-destructive">{error}</p>}
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditingId(null)}>
@@ -101,9 +112,9 @@ export function ExerciseManager({
                 <div className="min-w-0">
                   <p className="truncate font-medium">
                     {exercise.name}
-                    {exercise.is_barbell && (
-                      <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        BB
+                    {EQUIPMENT_TAGS[exercise.equipment] && (
+                      <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        {EQUIPMENT_TAGS[exercise.equipment]}
                       </span>
                     )}
                   </p>
@@ -111,7 +122,7 @@ export function ExerciseManager({
                 </div>
                 <button
                   onClick={() => startEdit(exercise)}
-                  className="shrink-0 text-muted-foreground/50 hover:text-foreground"
+                  className="tap-press shrink-0 text-muted-foreground/50 hover:text-foreground"
                   aria-label="Edit exercise"
                 >
                   <Pencil className="size-4" />

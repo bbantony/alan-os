@@ -268,6 +268,21 @@ textarea {
   opacity: 0.85;
 }
 
+/* Route-change loading bar (see src/app/(app)/loading.tsx): App Router shows
+   this instantly the moment a navigation starts (tapping a nav link, "New
+   workout", saving and returning to the feed, etc.) and swaps it out the
+   instant the new page's data is ready — so a tap always gets *some* visible
+   response right away instead of a silent wait that feels like nothing
+   happened. */
+@keyframes route-progress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(60%); }
+  100% { transform: translateX(220%); }
+}
+.route-progress-bar {
+  animation: route-progress 900ms ease-in-out infinite;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading), var(--font-sans), ui-sans-serif, sans-serif;
   letter-spacing: -0.01em;

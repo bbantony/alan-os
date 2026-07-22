@@ -8,6 +8,7 @@ import { sessionBests, detectNewPrs, type NewPr } from "@/lib/workout/pr";
 import { computeStreak, startOfWeek } from "@/lib/workout/streaks";
 import type {
   CrewProfile,
+  EquipmentType,
   Exercise,
   ExerciseHistoryEntry,
   FeedWorkout,
@@ -33,9 +34,17 @@ async function requireUser() {
 
 // ---------- Exercises ----------
 
+// Each user keeps their own exercise list (owner request — same as
+// templates). Scoped to the current user; the crew feed's own name
+// resolution (getFeed, below) deliberately queries unfiltered instead, since
+// it needs to resolve other members' exercise names too.
 export async function getExercises(): Promise<Exercise[]> {
-  const { supabase } = await requireUser();
-  const { data } = await supabase.from("exercises").select("*").order("name", { ascending: true });
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase
+    .from("exercises")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("name", { ascending: true });
   return (data as Exercise[]) ?? [];
 }
 
@@ -77,16 +86,16 @@ export async function getRecentExerciseIds(): Promise<string[]> {
 export async function addExercise(input: {
   name: string;
   muscleGroup: MuscleGroup;
-  isBarbell?: boolean;
+  equipment?: EquipmentType;
 }): Promise<{ exercise: Exercise | null; error?: string }> {
   const { supabase, user } = await requireUser();
   const { data, error } = await supabase
     .from("exercises")
     .insert({
+      user_id: user.id,
       name: input.name.trim(),
       muscle_group: input.muscleGroup,
-      is_barbell: input.isBarbell ?? false,
-      created_by: user.id,
+      equipment: input.equipment ?? "other",
     })
     .select("*")
     .single();
@@ -100,21 +109,18 @@ export async function addExercise(input: {
   return { exercise: data as Exercise };
 }
 
-// Exercises are crew-shared, so any crew member may fix a name/muscle
-// group/barbell flag (RLS: exercises_update_crew, migration 0006) — this is
-// what lets the seeded master-list entries (created_by null) be corrected at
-// all, since nobody "owns" them.
 export async function updateExercise(input: {
   id: string;
   name: string;
   muscleGroup: MuscleGroup;
-  isBarbell: boolean;
+  equipment: EquipmentType;
 }): Promise<{ error?: string }> {
-  const { supabase } = await requireUser();
+  const { supabase, user } = await requireUser();
   const { error } = await supabase
     .from("exercises")
-    .update({ name: input.name.trim(), muscle_group: input.muscleGroup, is_barbell: input.isBarbell })
-    .eq("id", input.id);
+    .update({ name: input.name.trim(), muscle_group: input.muscleGroup, equipment: input.equipment })
+    .eq("id", input.id)
+    .eq("user_id", user.id);
 
   if (error) {
     if (error.code === "23505") return { error: "That exercise already exists." };
@@ -304,6 +310,16 @@ export async function logRun(input: {
   return { workoutId };
 }
 
+// Deletes a logged workout (resistance or run). workout_sets/runs/prs/
+// reactions all cascade-delete via their workout_id foreign key (migration
+// 0005), so this is the only query needed.
+export async function deleteWorkout(input: { id: string }) {
+  const { supabase, user } = await requireUser();
+  await supabase.from("workouts").delete().eq("id", input.id).eq("user_id", user.id);
+  revalidatePath("/workout");
+  revalidatePath("/today");
+}
+
 // ---------- Templates ----------
 
 export async function getTemplates(): Promise<WorkoutTemplate[]> {
@@ -372,6 +388,10 @@ export async function getFeed(limit = 30): Promise<FeedWorkout[]> {
       supabase.from("runs").select("*").in("workout_id", workoutIds),
       supabase.from("prs").select("*").in("workout_id", workoutIds),
       supabase.from("reactions").select("*").in("workout_id", workoutIds),
+      // Deliberately unfiltered by user_id, unlike getExercises() — the feed
+      // shows everyone's workouts, so it needs to resolve exercise names
+      // that belong to other crew members' own exercise lists too. Crew-wide
+      // select RLS on exercises (0005) allows this.
       supabase.from("exercises").select("id, name"),
     ]);
 

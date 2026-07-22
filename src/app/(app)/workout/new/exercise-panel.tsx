@@ -3,7 +3,7 @@
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatWeight } from "@/lib/workout/units";
-import type { DraftExercise, DraftSet, ExerciseHistoryEntry, WeightUnit } from "@/lib/workout/types";
+import { EQUIPMENT_TAGS, type DraftExercise, type DraftSet, type ExerciseHistoryEntry, type WeightUnit } from "@/lib/workout/types";
 import { SetRow } from "./set-row";
 
 function formatShortDate(dateStr: string): string {
@@ -37,7 +37,14 @@ export function ExercisePanel({
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
       <div className="mb-3 flex items-center justify-between">
-        <p className="font-heading text-lg font-semibold">{exercise.exerciseName}</p>
+        <p className="flex items-center gap-1.5 font-heading text-lg font-semibold">
+          {exercise.exerciseName}
+          {EQUIPMENT_TAGS[exercise.equipment] && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+              {EQUIPMENT_TAGS[exercise.equipment]}
+            </span>
+          )}
+        </p>
         <button
           onClick={onRemoveExercise}
           className="tap-press rounded-full p-1.5 text-muted-foreground/40 hover:text-destructive"
@@ -70,7 +77,7 @@ export function ExercisePanel({
             index={i}
             set={set}
             unit={unit}
-            isBarbell={exercise.isBarbell}
+            equipment={exercise.equipment}
             onChange={(next) => onChangeSet(i, next)}
             onRemove={() => onRemoveSet(i)}
           />

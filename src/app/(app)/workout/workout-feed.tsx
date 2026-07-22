@@ -141,6 +141,7 @@ export function WorkoutFeed({
               feedItem={item}
               currentUserId={currentUserId}
               weightUnit={weightUnit}
+              onDeleted={() => setFeed((prev) => prev.filter((f) => f.workout.id !== item.workout.id))}
             />
           ))}
         </div>

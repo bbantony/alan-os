@@ -74,7 +74,7 @@ export function NewWorkoutForm({
   async function addExerciseToDraft(exercise: Exercise) {
     setDraftExercises((prev) => [
       ...prev,
-      { exerciseId: exercise.id, exerciseName: exercise.name, isBarbell: exercise.is_barbell, sets: [] },
+      { exerciseId: exercise.id, exerciseName: exercise.name, equipment: exercise.equipment, sets: [] },
     ]);
     setActiveExerciseId(exercise.id);
 

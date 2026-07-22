@@ -202,3 +202,58 @@ the complete history. Also, the running workout form is missing avg BPM.
   every future session updates it automatically after each request, without needing to
   be asked again.
 - Verified with build + lint (both clean) before committing.
+
+---
+
+## 7. "Equipment tags for BB/DB/KB, exercises and templates should be per-user,
+   ability to delete workouts, different weight increments, and make taps feel
+   more responsive"
+
+**Requested:** Add tags for barbell/dumbbell/kettlebell (not just barbell). Each user
+should have their own private list of exercise names and their own templates (not one
+shared crew list). Add the ability to delete a logged workout. Change the weight
+steppers to 2.5 lb / 1 kg increments. And: every tap should have some kind of subtle
+animation so it's obvious something happened during the wait for a page/menu to change
+— right now it just feels like nothing happened.
+
+**Changes made:**
+- Migration `0008_exercises_per_user_and_equipment.sql`: replaced the single
+  `is_barbell` boolean with an `equipment_type` enum (`barbell`/`dumbbell`/
+  `kettlebell`/`other`); gave every user their own private exercise list instead of
+  one shared crew list (added `exercises.user_id`, made insert/update/delete
+  strictly own-rows-only, kept select crew-wide so the feed can still resolve
+  other members' exercise names); added a `seed_default_exercises()` function so
+  every new signup gets their own starter set of 43 exercises, and backfilled
+  the existing accounts. (Templates needed no change here — they were already
+  private per user from the start.)
+- Hit a real ordering bug applying this migration (dropped `created_by` before
+  dropping the RLS policies that referenced it) — caught immediately because the
+  migration failed outright rather than silently, fixed the statement order, and
+  re-verified with SQL queries against the live database afterward, as usual.
+- Found and fixed two data-consistency gaps from that same migration in follow-ups
+  `0009` and `0010`: the retroactive equipment tagging for already-existing exercise
+  rows didn't cover every exercise the new seed list tags as barbell/dumbbell (Skull
+  Crusher, Preacher Curl, and 6 dumbbell exercises), so the owner's original rows
+  were briefly inconsistent with freshly-seeded accounts. Verified afterward with a
+  SQL query grouping by exercise name across all users to confirm zero remaining
+  inconsistencies.
+- Updated the exercise picker, exercise editor (Settings → Workout), and set-entry UI
+  to use the new equipment tag: an "Equipment" dropdown replaces the old barbell
+  checkbox, and BB/DB/KB badges show next to tagged exercise names. The barbell
+  "Bar + plate weight" entry mode still only applies to `equipment: "barbell"` —
+  dumbbell/kettlebell are informational tags only.
+- Added workout deletion: a `deleteWorkout` server action (workout_sets/runs/prs/
+  reactions already cascade-delete via their existing foreign keys, so no schema
+  change was needed there) and a delete icon on your own feed cards, with a confirm
+  prompt before it actually deletes.
+- Changed `smallestIncrementKg()` in `units.ts` from 5 lb/2.5 kg to 2.5 lb/1 kg,
+  hand-verified with a throwaway script.
+- Responsiveness fix: added `src/app/(app)/loading.tsx`, which uses Next.js App
+  Router's built-in navigation-loading mechanism to show a thin top progress bar the
+  instant any in-app navigation starts (bottom nav taps, "New workout," saving and
+  returning to the feed, etc.), and removes it the instant the destination page is
+  ready — no extra dependencies or manual event wiring, just the framework's existing
+  Suspense-based `loading.tsx` convention applied to the app shell. Paired with the
+  `.tap-press` instant-feedback fix from the previous entry, every tap that changes
+  the page now gets an immediate visible response.
+- Verified with build + lint (clean) and a route smoke-test before committing.

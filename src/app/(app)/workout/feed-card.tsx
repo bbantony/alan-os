@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Trophy } from "lucide-react";
+import { ChevronDown, Trash2, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration, formatPace, formatRelativeTime } from "@/lib/workout/format";
 import { formatWeight } from "@/lib/workout/units";
 import { WORKOUT_TYPE_LABELS, type FeedWorkout, type WeightUnit } from "@/lib/workout/types";
+import { deleteWorkout } from "./actions";
 import { Reactions } from "./reactions";
 
 function initials(name: string | null): string {
@@ -26,17 +27,29 @@ export function FeedCard({
   feedItem,
   currentUserId,
   weightUnit,
+  onDeleted,
 }: {
   feedItem: FeedWorkout;
   currentUserId: string;
   weightUnit: WeightUnit;
+  onDeleted: () => void;
 }) {
   const { workout, author, sets, run, prs, reactions } = feedItem;
   const [expanded, setExpanded] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const hasPr = prs.length > 0;
+  const isMine = workout.user_id === currentUserId;
 
   const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
   const totalSets = sets.length;
+
+  async function handleDelete() {
+    if (deleting) return;
+    if (!window.confirm("Delete this workout? This can't be undone.")) return;
+    setDeleting(true);
+    await deleteWorkout({ id: workout.id });
+    onDeleted();
+  }
 
   return (
     <div
@@ -61,6 +74,16 @@ export function FeedCard({
         >
           {WORKOUT_TYPE_LABELS[workout.type]}
         </span>
+        {isMine && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="tap-press shrink-0 rounded-full p-1 text-muted-foreground/40 hover:text-destructive disabled:opacity-50"
+            aria-label="Delete workout"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        )}
       </div>
 
       {hasPr && (
@@ -80,7 +103,7 @@ export function FeedCard({
       ) : (
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="flex w-full items-center justify-between text-left text-sm"
+          className="tap-press flex w-full items-center justify-between text-left text-sm"
         >
           <span>
             {exerciseIds.length} exercise{exerciseIds.length === 1 ? "" : "s"} · {totalSets} set

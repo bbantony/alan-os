@@ -12,10 +12,18 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { findPossibleDuplicate } from "@/lib/workout/exercise-match";
-import { MUSCLE_GROUP_LABELS, type Exercise, type MuscleGroup } from "@/lib/workout/types";
+import {
+  EQUIPMENT_LABELS,
+  EQUIPMENT_TAGS,
+  MUSCLE_GROUP_LABELS,
+  type EquipmentType,
+  type Exercise,
+  type MuscleGroup,
+} from "@/lib/workout/types";
 import { addExercise } from "../actions";
 
 const MUSCLE_GROUPS = Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[];
+const EQUIPMENT_TYPES = Object.keys(EQUIPMENT_LABELS) as EquipmentType[];
 
 export function ExercisePicker({
   exercises,
@@ -37,7 +45,7 @@ export function ExercisePicker({
   const [addingNew, setAddingNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newMuscleGroup, setNewMuscleGroup] = useState<MuscleGroup>("chest");
-  const [newIsBarbell, setNewIsBarbell] = useState(false);
+  const [newEquipment, setNewEquipment] = useState<EquipmentType>("other");
   const [error, setError] = useState<string | null>(null);
   const [confirmDuplicate, setConfirmDuplicate] = useState<Exercise | null>(null);
 
@@ -62,7 +70,7 @@ export function ExercisePicker({
     setQuery("");
     setAddingNew(false);
     setNewName("");
-    setNewIsBarbell(false);
+    setNewEquipment("other");
     setError(null);
     setConfirmDuplicate(null);
   }
@@ -86,7 +94,7 @@ export function ExercisePicker({
       }
     }
 
-    const result = await addExercise({ name: trimmed, muscleGroup: newMuscleGroup, isBarbell: newIsBarbell });
+    const result = await addExercise({ name: trimmed, muscleGroup: newMuscleGroup, equipment: newEquipment });
     if (result.error || !result.exercise) {
       setError(result.error ?? "Couldn't add that exercise.");
       return;
@@ -149,9 +157,9 @@ export function ExercisePicker({
                   >
                     <span>
                       {exercise.name}
-                      {exercise.is_barbell && (
+                      {EQUIPMENT_TAGS[exercise.equipment] && (
                         <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                          BB
+                          {EQUIPMENT_TAGS[exercise.equipment]}
                         </span>
                       )}
                     </span>
@@ -202,15 +210,25 @@ export function ExercisePicker({
               ))}
             </select>
 
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={newIsBarbell}
-                onChange={(e) => setNewIsBarbell(e.target.checked)}
-                className="size-4 rounded border-input"
-              />
-              Barbell exercise (enter plate weight, not total)
-            </label>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Equipment</label>
+              <select
+                value={newEquipment}
+                onChange={(e) => setNewEquipment(e.target.value as EquipmentType)}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+              >
+                {EQUIPMENT_TYPES.map((eq) => (
+                  <option key={eq} value={eq}>
+                    {EQUIPMENT_LABELS[eq]}
+                  </option>
+                ))}
+              </select>
+              {newEquipment === "barbell" && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Barbell exercises let you enter plate weight instead of the total.
+                </p>
+              )}
+            </div>
 
             {confirmDuplicate && (
               <div className="rounded-lg border border-accent/40 bg-accent/10 p-2 text-xs">

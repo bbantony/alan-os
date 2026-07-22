@@ -3,7 +3,7 @@
 import { Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { barWeightKg, displayWeight, smallestIncrementKg, toStoredKg } from "@/lib/workout/units";
-import type { DraftSet, WeightUnit } from "@/lib/workout/types";
+import type { DraftSet, EquipmentType, WeightUnit } from "@/lib/workout/types";
 
 function Stepper({
   label,
@@ -47,17 +47,18 @@ export function SetRow({
   index,
   set,
   unit,
-  isBarbell,
+  equipment,
   onChange,
   onRemove,
 }: {
   index: number;
   set: DraftSet;
   unit: WeightUnit;
-  isBarbell: boolean;
+  equipment: EquipmentType;
   onChange: (set: DraftSet) => void;
   onRemove: () => void;
 }) {
+  const isBarbell = equipment === "barbell";
   const increment = smallestIncrementKg(unit);
   const bar = barWeightKg(unit);
 
@@ -65,6 +66,7 @@ export function SetRow({
   // on the bar (plates only), not the total — the bar's own weight is added
   // underneath automatically. Everywhere else in the app (PRs, history,
   // last-session display) still works off the true total stored in weightKg.
+  // Dumbbell/kettlebell are informational tags only — normal total-weight entry.
   const shownWeight = isBarbell
     ? Math.max(0, displayWeight(set.weightKg, unit) - displayWeight(bar, unit))
     : displayWeight(set.weightKg, unit);
