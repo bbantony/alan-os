@@ -2,8 +2,20 @@
 
 This is Alan's personal "second brain" life-management PWA. The full build bible is
 `SPEC.md` (read the relevant Part before starting any module work) — `PROGRESS.md`
-tracks what's shipped phase by phase, and `MANUAL.md` is the plain-English user guide
-that grows after every completed phase.
+tracks what's shipped phase by phase, `MANUAL.md` is the plain-English user guide that
+grows after every completed phase, and `CHANGELOG.md` is a prompt-by-prompt record of
+every request made and every change made in response (see next section).
+
+## Keep CHANGELOG.md current — every single request
+
+After finishing *any* request from Alan (a new feature, a bug fix, a tweak — anything),
+add an entry to `CHANGELOG.md` before considering the work done: what he asked for
+(paraphrased plainly) and a detailed, one-by-one list of what actually changed. This is
+not optional and not just for big features — the point is that a future session (this
+agent, restarted, or a completely different AI) can open the repo cold and reconstruct
+the full history of *why* the code looks the way it does. Newest entries go at the
+bottom. Do this even for small requests; keep the entry proportional to the change, but
+never skip it.
 
 ## The most important rule
 

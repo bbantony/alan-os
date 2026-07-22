@@ -184,7 +184,7 @@ export function TaskList({
                 setTitle(chip);
                 setCategory("work");
               }}
-              className="rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-muted"
+              className="tap-press rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-muted"
             >
               {chip}___
             </button>
@@ -254,7 +254,7 @@ export function TaskList({
         <div className="mt-8 rounded-xl border border-border bg-surface">
           <button
             onClick={() => setWorkExpanded((v) => !v)}
-            className="flex w-full items-center justify-between px-4 py-3 text-sm font-semibold"
+            className="tap-press flex w-full items-center justify-between px-4 py-3 text-sm font-semibold"
           >
             <span>Work ({workTop.length})</span>
             {workExpanded ? (
@@ -293,7 +293,7 @@ export function TaskList({
       <div className="mt-8">
         <button
           onClick={handleToggleCompletedArchive}
-          className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          className="tap-press flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
         >
           {showCompleted ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           Completed
@@ -307,7 +307,7 @@ export function TaskList({
               >
                 <button
                   onClick={() => handleUndoComplete(task)}
-                  className="flex size-5 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-primary-foreground"
+                  className="tap-press flex size-5 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-primary-foreground"
                   aria-label="Mark incomplete"
                 >
                   <Check className="size-3.5" />
@@ -462,7 +462,7 @@ function TaskRow({
     >
       <button
         onClick={onToggleComplete}
-        className="flex size-5 shrink-0 items-center justify-center rounded-md border border-border transition-colors hover:border-primary hover:bg-primary/10"
+        className="tap-press flex size-5 shrink-0 items-center justify-center rounded-md border border-border transition-colors hover:border-primary hover:bg-primary/10"
         aria-label="Complete task"
       />
       <span className="flex-1 text-sm">{task.title}</span>
@@ -488,7 +488,7 @@ function TaskRow({
       {!subtle && !task.parent_task_id && onStartAddSubtask && (
         <button
           onClick={onStartAddSubtask}
-          className="shrink-0 text-muted-foreground/50 hover:text-foreground"
+          className="tap-press shrink-0 text-muted-foreground/50 hover:text-foreground"
           aria-label="Add subtask"
           title="Add subtask"
         >
@@ -497,7 +497,7 @@ function TaskRow({
       )}
       <button
         onClick={onDelete}
-        className="shrink-0 text-muted-foreground/40 hover:text-destructive"
+        className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
         aria-label="Delete task"
       >
         <Trash2 className="size-4" />

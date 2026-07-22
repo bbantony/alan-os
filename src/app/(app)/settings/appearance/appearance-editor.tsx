@@ -54,7 +54,7 @@ export function AppearanceEditor() {
                 type="button"
                 onClick={() => setTheme({ palette: p.id })}
                 className={cn(
-                  "flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-colors",
+                  "tap-press flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-colors",
                   active ? "border-primary ring-2 ring-primary/30" : "border-border"
                 )}
               >

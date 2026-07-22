@@ -347,7 +347,7 @@ export function ShoppingList({
               <button
                 key={s.id}
                 onClick={() => handleAddSuggestion(s)}
-                className="flex items-center gap-1 rounded-full border border-accent/40 bg-surface px-3 py-1 text-sm font-medium hover:bg-accent/10"
+                className="tap-press flex items-center gap-1 rounded-full border border-accent/40 bg-surface px-3 py-1 text-sm font-medium hover:bg-accent/10"
               >
                 <Plus className="size-3.5" />
                 {s.name}
@@ -521,7 +521,7 @@ function ShoppingRow({
       <button
         onClick={onToggle}
         className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+          "tap-press flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
           item.checked ? "border-primary bg-primary text-primary-foreground" : "border-border"
         )}
         aria-label={item.checked ? "Uncheck item" : "Check item"}
@@ -555,7 +555,7 @@ function ShoppingRow({
       )}
       <button
         onClick={onToggleStaple}
-        className={cn("shrink-0", item.is_staple ? "text-accent" : "text-muted-foreground/40")}
+        className={cn("tap-press shrink-0", item.is_staple ? "text-accent" : "text-muted-foreground/40")}
         aria-label="Toggle staple"
         title="Staple item"
       >
@@ -563,7 +563,7 @@ function ShoppingRow({
       </button>
       <button
         onClick={onDelete}
-        className="shrink-0 text-muted-foreground/40 hover:text-destructive"
+        className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
         aria-label="Delete item"
       >
         <Trash2 className="size-4" />

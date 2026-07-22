@@ -123,7 +123,7 @@ export function ShoppingSettings({
               <div className="flex items-center gap-2 px-3 py-2">
                 <button
                   onClick={() => setExpanded(isExpanded ? null : cat.id)}
-                  className="flex flex-1 items-center gap-2 text-left"
+                  className="tap-press flex flex-1 items-center gap-2 text-left"
                 >
                   {isExpanded ? (
                     <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -161,7 +161,7 @@ export function ShoppingSettings({
                 {!cat.is_protected && (
                   <button
                     onClick={() => handleDeleteCategory(cat.id)}
-                    className="shrink-0 text-muted-foreground/40 hover:text-destructive"
+                    className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
                     aria-label="Delete category"
                     disabled={isPending}
                   >
@@ -182,6 +182,7 @@ export function ShoppingSettings({
                         <button
                           onClick={() => handleRemoveKnownItem(item.id)}
                           aria-label={`Remove ${item.item_name}`}
+                          className="tap-press"
                         >
                           <X className="size-3" />
                         </button>
