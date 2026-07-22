@@ -55,6 +55,7 @@ export async function createTask(input: {
   horizon: TaskHorizon;
   category: TaskCategory;
   parentTaskId?: string | null;
+  dueAt?: string | null;
 }) {
   const { supabase, user } = await requireUser();
   await supabase.from("tasks").insert({
@@ -64,6 +65,7 @@ export async function createTask(input: {
     horizon: input.horizon,
     category: input.category,
     parent_task_id: input.parentTaskId ?? null,
+    due_at: input.dueAt ?? null,
   });
 }
 

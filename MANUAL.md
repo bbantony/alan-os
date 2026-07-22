@@ -264,4 +264,133 @@ logged something today — tap it to jump straight into the module.
 
 ---
 
-*(Phase 3 section will be added here once its checklist is complete.)*
+## Phase 3 — Reminders & Calendar
+
+What Phase 3 adds: reminders that actually push a notification to every one of
+your devices (phone, both computers) even when the app isn't open, a
+connection to your real Google Calendar with one combined view of your day,
+and the "plan tomorrow" evening ritual on the Today page. Two one-time setup
+steps are needed before reminders and calendar actually work — do those
+first, they only take about 10 minutes total.
+
+### One-time setup #1 — turn on push notifications
+
+1. Tap **More → Settings → Calendar & Reminders**.
+2. Under "Push notifications," tap **Enable push on this device**.
+3. Your browser will ask permission to send notifications — tap **Allow**.
+4. Do this on every device you want reminders to reach (your phone, your
+   computer, etc.) — each one shows up in a list on that same page, and you
+   can remove a device from there later if you stop using it.
+5. Tap **Send test notification** to confirm one actually arrives.
+
+### One-time setup #2 — connect Google Calendar
+
+This part needs a few clicks in Google's own site first.
+
+1. Go to **console.cloud.google.com** and sign in with the same Google
+   account your calendar is on.
+2. Click the project dropdown at the very top of the page → **New Project**
+   → name it anything (e.g. "Alan OS") → **Create**.
+3. With that new project selected, go to **APIs & Services → Library**,
+   search for **Google Calendar API**, click it, then click **Enable**.
+4. Go to **APIs & Services → OAuth consent screen**. Choose **External** →
+   **Create**. Fill in an app name (e.g. "Alan OS"), and use your own email
+   for both "support email" and "developer contact." Click through **Save
+   and Continue** on the next couple of screens without changing anything,
+   until you reach **Test users** — add your own Google email address there,
+   then save.
+5. Go to **APIs & Services → Credentials → Create Credentials → OAuth
+   client ID**. Application type: **Web application**.
+6. Under **Authorized redirect URIs**, click **Add URI** twice and enter
+   exactly these two addresses (both, not just one):
+   - `https://alan-os-nine.vercel.app/api/auth/google/callback`
+   - `http://localhost:3000/api/auth/google/callback`
+7. Click **Create**. A box pops up showing a **Client ID** and **Client
+   secret** — keep this box open, you need both values next.
+8. Go to **vercel.com**, open the **alan-os** project → **Settings →
+   Environment Variables**. Add a new variable named `GOOGLE_CLIENT_ID`,
+   paste the Client ID from step 7, and tick all three environment boxes
+   (Production/Preview/Development). Do the same for a variable named
+   `GOOGLE_CLIENT_SECRET` with the Client secret.
+9. Back in Alan OS, go to **More → Settings → Calendar & Reminders** and tap
+   **Connect Google Calendar**.
+
+### One-time setup #3 — turn on reminder delivery
+
+Reminders won't actually fire on time until this last step is done. The free
+hosting plan this app runs on only allows checking for due reminders once a
+day on its own — this hooks up a free outside service that checks every
+minute instead, which is what makes reminders feel instant.
+
+1. Open the project folder on your computer and find the file named
+   `.env.local`. Open it in any text editor (Notepad is fine).
+2. Find the line that starts with `CRON_SECRET=` and copy everything after
+   the `=` sign — that's a password-like string, keep it handy.
+3. Go to **cron-job.org** and sign up for a free account (no credit card
+   needed).
+4. Once logged in, click **Create cronjob**.
+5. Title: anything, e.g. "Alan OS reminders".
+6. Address/URL: `https://alan-os-nine.vercel.app/api/cron/reminders`
+7. Schedule: every 1 minute (or every 5 minutes — either is fine).
+8. Find the section for adding a custom request header (may be under
+   "Advanced" or "Notification settings" depending on the site's current
+   layout). Add one header: name it `Authorization`, and for the value type
+   `Bearer ` (with a space) followed by the secret you copied in step 2.
+9. Save. Reminders will now actually arrive on time from here on.
+
+### Reminders
+
+1. Tap **More → Calendar → Reminders** tab.
+2. Tap **New reminder**, type a title, pick a date/time.
+3. Under "Repeat," tap a preset — **Daily, Weekdays, Weekly, Every N days,
+   Monthly**, or **Custom** for anything else. Leave it on **One-time** for a
+   reminder that only fires once.
+4. If you've connected Google Calendar, you can also tick **Also add to
+   Google Calendar** — this puts a matching event on your real calendar too,
+   as a backup in case a push notification doesn't arrive.
+5. When a reminder fires, you'll get a notification with **Done** and
+   **Snooze 1h** buttons right on it. Tapping the notification itself
+   (instead of a button) opens the app to your reminders list, where the same
+   actions exist as ordinary buttons — useful since not every phone supports
+   notification action buttons the same way.
+6. From the reminders list you can also pause a reminder (the ⏸ icon) without
+   deleting it, snooze it for a custom amount (15m/1h/3h/tomorrow 9am), or
+   delete it outright.
+7. On any task with a due date, tap the **bell icon** next to it to
+   automatically create a matching reminder — no need to re-type anything.
+
+### Agenda
+
+1. Tap **More → Calendar → Agenda** tab.
+2. Toggle between **Today** and **Week**. Everything shows in one list,
+   sorted by time: your real Google Calendar events, your reminders, and any
+   task with a due date — each tagged so you can tell them apart at a glance.
+3. If Google Calendar is connected, tap **Event** to add something directly
+   to your real calendar (title, date/time, how long it runs) without leaving
+   the app.
+
+### The evening planning ritual
+
+Starting at 8pm, the Today page's focus card switches into planning mode
+automatically:
+
+1. Pick up to 3 goals for **tomorrow** — search your open tasks or just type
+   something new.
+2. Optionally add a one-line reflection on how today went.
+3. Tap **Save plan**.
+
+The next day, that card shows your picked goals as today's focus. If you
+skip the ritual some evening, it automatically shows your overdue tasks
+first, then whatever's in your Now/Today lists — so there's always something
+useful there even if you forget to plan ahead. Whatever you wrote as
+yesterday's reflection quietly shows up at the bottom of today's card too.
+
+### Today dashboard
+
+The **Calendar & Reminders** card now shows either your next real calendar
+event or how many reminders are due today, and tapping it jumps straight to
+the Agenda.
+
+---
+
+*(Phase 4 section will be added here once its checklist is complete.)*

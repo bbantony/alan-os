@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Bell, BellRing, Check, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,7 +15,8 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { TasksIllustration } from "@/components/illustrations";
 import { cn } from "@/lib/utils";
-import { isOutsideWorkHours } from "@/lib/time";
+import { formatInAppTimezone, isOutsideWorkHours } from "@/lib/time";
+import { createReminderFromTask } from "@/app/(app)/calendar/actions";
 import {
   TASK_HORIZONS,
   TASK_HORIZON_LABELS,
@@ -46,6 +47,8 @@ export function TaskList({
   const [title, setTitle] = useState("");
   const [horizon, setHorizon] = useState<TaskHorizon>("today");
   const [category, setCategory] = useState<TaskCategory>("personal");
+  const [dueAt, setDueAt] = useState("");
+  const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set());
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [confirmTask, setConfirmTask] = useState<Task | null>(null);
@@ -72,6 +75,7 @@ export function TaskList({
     const trimmed = title.trim();
     if (!trimmed) return;
     const id = crypto.randomUUID();
+    const dueAtIso = dueAt ? new Date(dueAt).toISOString() : null;
     const optimistic: Task = {
       id,
       user_id: "",
@@ -79,7 +83,7 @@ export function TaskList({
       title: trimmed,
       notes: null,
       horizon,
-      due_at: null,
+      due_at: dueAtIso,
       category,
       completed_at: null,
       sort_order: 0,
@@ -88,7 +92,13 @@ export function TaskList({
     setTasks((prev) => [...prev, optimistic]);
     setTitle("");
     setCategory("personal");
-    await createTask({ id, title: trimmed, horizon, category });
+    setDueAt("");
+    await createTask({ id, title: trimmed, horizon, category, dueAt: dueAtIso });
+  }
+
+  async function handleRemindMe(task: Task) {
+    setRemindedIds((prev) => new Set(prev).add(task.id));
+    await createReminderFromTask({ taskId: task.id });
   }
 
   async function handleAddSubtask(parent: Task) {
@@ -217,6 +227,13 @@ export function TaskList({
             <Plus className="size-4" />
           </Button>
         </div>
+        <Input
+          type="datetime-local"
+          value={dueAt}
+          onChange={(e) => setDueAt(e.target.value)}
+          className="text-xs"
+          aria-label="Due date (optional)"
+        />
       </form>
 
       {tasks.length === 0 && (
@@ -245,6 +262,8 @@ export function TaskList({
               onToggleComplete={handleToggleComplete}
               onDelete={handleDelete}
               onMoveHorizon={handleMoveHorizon}
+              onRemindMe={handleRemindMe}
+              remindedIds={remindedIds}
             />
           );
         })}
@@ -282,6 +301,8 @@ export function TaskList({
                     onToggleComplete={handleToggleComplete}
                     onDelete={handleDelete}
                     onMoveHorizon={handleMoveHorizon}
+                    onRemindMe={handleRemindMe}
+                    remindedIds={remindedIds}
                   />
                 );
               })}
@@ -363,6 +384,8 @@ function TaskSection({
   onToggleComplete,
   onDelete,
   onMoveHorizon,
+  onRemindMe,
+  remindedIds,
 }: {
   label: string;
   tasks: Task[];
@@ -375,6 +398,8 @@ function TaskSection({
   onToggleComplete: (task: Task) => void;
   onDelete: (task: Task) => void;
   onMoveHorizon: (task: Task, horizon: TaskHorizon) => void;
+  onRemindMe: (task: Task) => void;
+  remindedIds: Set<string>;
 }) {
   return (
     <div>
@@ -391,6 +416,8 @@ function TaskSection({
                 onDelete={() => onDelete(task)}
                 onMoveHorizon={(h) => onMoveHorizon(task, h)}
                 onStartAddSubtask={() => onStartAddSubtask(task.id)}
+                onRemindMe={() => onRemindMe(task)}
+                reminded={remindedIds.has(task.id)}
               />
               {(subtasksOf.get(task.id) ?? []).length > 0 && (
                 <ul className="ml-7 mt-1 space-y-1">
@@ -440,6 +467,8 @@ function TaskRow({
   onDelete,
   onMoveHorizon,
   onStartAddSubtask,
+  onRemindMe,
+  reminded,
 }: {
   task: Task;
   subtle?: boolean;
@@ -447,6 +476,8 @@ function TaskRow({
   onDelete: () => void;
   onMoveHorizon?: (h: TaskHorizon) => void;
   onStartAddSubtask?: () => void;
+  onRemindMe?: () => void;
+  reminded?: boolean;
 }) {
   return (
     <motion.div
@@ -466,6 +497,22 @@ function TaskRow({
         aria-label="Complete task"
       />
       <span className="flex-1 text-sm">{task.title}</span>
+      {!subtle && task.due_at && (
+        <span className="text-xs text-muted-foreground">
+          {formatInAppTimezone(task.due_at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+        </span>
+      )}
+      {!subtle && task.due_at && onRemindMe && (
+        <button
+          onClick={onRemindMe}
+          disabled={reminded}
+          className="tap-press shrink-0 text-muted-foreground/50 hover:text-foreground disabled:text-accent"
+          aria-label={reminded ? "Reminder set" : "Remind me"}
+          title={reminded ? "Reminder set" : "Remind me at the due time"}
+        >
+          {reminded ? <BellRing className="size-4" /> : <Bell className="size-4" />}
+        </button>
+      )}
       {!subtle && NON_PERSONAL_LABELS.includes(task.category) && (
         <span className="text-xs text-muted-foreground">
           {TASK_CATEGORY_LABELS[task.category]}

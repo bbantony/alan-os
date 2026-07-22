@@ -15,23 +15,34 @@ import { getCurrentProfile } from "@/lib/supabase/profile";
 import { getTasks, getWeeklyDoneCount } from "@/app/(app)/tasks/actions";
 import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
 import { getWorkoutDashboardSummary } from "@/app/(app)/workout/actions";
-import { todayInAppTimezone } from "@/lib/time";
+import {
+  getCalendarDashboardSummary,
+  getTodayFocus,
+  getYesterdayReflection,
+} from "@/app/(app)/calendar/actions";
+import { formatInAppTimezone, isEveningPlanningTime, todayInAppTimezone } from "@/lib/time";
 import { DashboardWidget } from "@/components/dashboard/widget";
 import { SunriseIllustration } from "@/components/illustrations";
+import { DayPlannerCard } from "./day-planner-card";
 
 export default async function TodayPage() {
-  const [profile, tasks, weeklyDoneCount, shoppingItems, suggestions, workout] = await Promise.all([
-    getCurrentProfile(),
-    getTasks(),
-    getWeeklyDoneCount(),
-    getShoppingItems(),
-    getStapleSuggestions(),
-    getWorkoutDashboardSummary(),
-  ]);
+  const [profile, tasks, weeklyDoneCount, shoppingItems, suggestions, workout, calendar, focus, yesterdayReflection] =
+    await Promise.all([
+      getCurrentProfile(),
+      getTasks(),
+      getWeeklyDoneCount(),
+      getShoppingItems(),
+      getStapleSuggestions(),
+      getWorkoutDashboardSummary(),
+      getCalendarDashboardSummary(),
+      getTodayFocus(),
+      getYesterdayReflection(),
+    ]);
 
   const name = profile?.displayName?.split(" ")[0] ?? "there";
   const dueToday = tasks.filter((t) => t.horizon === "today").length;
   const uncheckedShopping = shoppingItems.filter((i) => !i.checked).length;
+  const isEvening = isEveningPlanningTime();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -83,9 +94,23 @@ export default async function TodayPage() {
           </p>
         </DashboardWidget>
 
-        <DashboardWidget title="Calendar & Reminders" icon={CalendarDays} comingInPhase={3}>
-          Your next event and reminders due today will live here.
+        <DashboardWidget title="Calendar & Reminders" icon={CalendarDays} href="/calendar">
+          {calendar.nextEventTitle ? (
+            <>
+              <div className="truncate text-sm font-semibold">{calendar.nextEventTitle}</div>
+              <p className="text-muted-foreground">
+                {calendar.nextEventTime && formatInAppTimezone(calendar.nextEventTime, { dateStyle: "medium", timeStyle: "short" })}
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="tabular text-2xl font-semibold">{calendar.remindersDueToday}</div>
+              <p className="text-muted-foreground">reminders due today</p>
+            </>
+          )}
         </DashboardWidget>
+
+        <DayPlannerCard isEvening={isEvening} focus={focus} yesterdayReflection={yesterdayReflection} openTasks={tasks} />
 
         <DashboardWidget title="Journal" icon={BookImage} comingInPhase={6}>
           A nudge to post today&apos;s photo will live here.

@@ -47,11 +47,36 @@ See `SPEC.md` for the full specification.
       Workout → invite icon to each friend once this phase is deployed
 
 ## Phase 3 — Reminders & Calendar
-- [ ] Web Push infra (VAPID, subscriptions per device, Vercel cron dispatcher)
-- [ ] Reminders CRUD w/ RRULE presets
-- [ ] Google Calendar OAuth
-- [ ] Agenda view + event creation
-- [ ] Day-planner ritual (morning pick / evening plan, auto-pull)
+- [x] Web Push infra (VAPID keys generated + set; DST-aware RRULE recurrence;
+      dispatcher route with an atomic claim so it can never double-send;
+      signed per-reminder action tokens for Done/Snooze so a dormant PWA's
+      expired session can't silently break them; service worker push +
+      notificationclick handlers)
+- [x] Reminders CRUD w/ RRULE presets (daily/weekdays/weekly/every-N-days/
+      monthly/custom), pause/resume/snooze (15m/1h/3h/tomorrow 9am in-app,
+      fixed 1h from the push notification itself), delete
+- [x] Google Calendar OAuth (code written and verified against Google's
+      libraries — **owner action needed**: create the OAuth credentials in
+      Google Cloud Console, see MANUAL.md)
+- [x] Agenda view + event creation (Today/Week, merges Google Calendar events
+      + reminders + tasks-with-due-dates into one timeline — the Tasks↔Calendar
+      hook from SPEC.md Part B4)
+- [x] Day-planner ritual (today's-focus display with auto-pull fallback,
+      evening plan-tomorrow ritual with task search + free-text goals +
+      1-line reflection, quiet "yesterday's reflection" callback)
+- [x] Bonus: one-tap "Remind me" on any task with a due date (added minimal
+      due-date support to Tasks, which didn't have any UI for it before)
+- [x] Bonus: wired the real crew push notification for workout PRs that
+      Phase 2 deferred (LATER.md) — now sends to the rest of the crew's
+      devices, not just an in-app celebration
+- [ ] **Owner action**: create Google OAuth credentials (Google Cloud
+      Console) and paste into Vercel env vars — see MANUAL.md for exact steps
+- [ ] **Owner action**: sign up for a free cron-job.org account and point it
+      at `/api/cron/reminders` with the bearer secret — see MANUAL.md
+      (Vercel's own free-tier cron can only run once/day, too infrequent for
+      timely reminders, so this external pinger is the real delivery clock;
+      a once-daily native Vercel Cron entry was added too, as a backup +
+      to keep the Supabase project from pausing on inactivity)
 
 ## Phase 4 — Finance core
 - [ ] Accounts, categories
@@ -85,9 +110,16 @@ See `SPEC.md` for the full specification.
 - [ ] Work-phone/sales workflow refinements
 
 ---
-**Current status:** Phase 2 built and verified locally (build/lint/typecheck clean,
-migration 0005 applied and RLS/grants/realtime verified directly against the database).
-Not yet pushed/deployed or tested on a phone — do that next, then send the invite link
-from Workout → invite icon to each friend to finish "Onboard the 3 friends."
-Next session (once onboarding is done): "Read SPEC.md. Phase 2 is complete and
-deployed. Execute Phase 3 only."
+**Current status:** Phase 2 is live and has been iterated on across several rounds of
+owner feedback (UI redesigns, per-user exercise lists, barbell entry mode, workout
+deletion) — see CHANGELOG.md for the full history. Onboarding the 3 friends is still
+the owner's own pending action.
+
+Phase 3 (Reminders & Calendar) is built, verified against the live database (migration
++ RLS + the full dispatcher pipeline were actually exercised end-to-end with real test
+data, not just read over), and deployed — but reminders won't actually be delivered
+and Google Calendar won't connect until the two owner actions above are done. See
+MANUAL.md's Phase 3 section for exact click-by-click steps.
+
+Next session once those are done: "Read SPEC.md. Phase 3 is complete and deployed.
+Execute Phase 4 only."

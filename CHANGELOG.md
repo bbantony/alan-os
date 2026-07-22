@@ -292,3 +292,93 @@ Settings → Workout → Exercises only supports renaming an exercise — add re
   unused one, confirmed the expected success/failure for each) rather than just
   trusting the logic.
 - Verified with build + lint (clean) before committing.
+
+---
+
+## 9. "Let's move on to the next phase" — Phase 3, built overnight without check-ins
+
+**Requested:** Plan and build Phase 3 (Reminders & Calendar) completely — Web Push
+infra, reminders with recurrence, Google Calendar OAuth, an agenda view, the
+day-planner ritual — "ramped up to 10" against what SPEC.md describes. The owner then
+said he was going to sleep and asked for the whole phase to be built through fully
+autonomously overnight, without pausing for plan approval or further check-ins
+(explicitly extended to future phases too, not just this one).
+
+**Changes made:**
+- Planned the full phase (migration schema, RPC-based architecture, UI layout) and had
+  a second agent pass independently critique it before writing any code — that review
+  caught several real issues fixed before implementation: a foreign-key ownership gap,
+  a dispatcher race condition, DST drift in naive recurrence math, and — most
+  importantly — that relying on session cookies for the push notification's Done/Snooze
+  buttons would silently fail once a dormant PWA's session expired.
+- **Hit a real, unplanned blocker**: `SUPABASE_SERVICE_ROLE_KEY` (the conventional way
+  to bypass RLS server-side, and what the original plan assumed) turned out to be an
+  empty/unfilled env var, both locally and on Vercel — never actually set up despite
+  being listed in SPEC.md. Rather than stop and wait for it, re-architected the
+  cross-user data access (the reminder dispatcher, crew workout-PR push) around
+  `security definer` Postgres functions instead — the same pattern already proven
+  working in this codebase (`crew_profiles()` from Phase 2) — gated by a secret stored
+  in a locked-down table (`app_secrets`, RLS enabled with zero policies) after
+  discovering Supabase's managed Postgres blocks the more obvious `ALTER DATABASE ...
+  SET` approach to superuser only. Verified this whole mechanism directly against the
+  live database using the real public anon key (not the privileged migration
+  connection): confirmed the secrets table is genuinely unreachable directly, a wrong
+  secret is rejected, and the correct one is accepted.
+- Migrations `0011`–`0015`: `reminders`, `push_subscriptions`, `gcal_connections`,
+  `day_plans` tables (strict per-user RLS); the security-definer RPCs for the
+  dispatcher (`claim_due_reminders` with an atomic `for update skip locked` claim so
+  retried/overlapping cron ticks can never double-send, `get_push_subscriptions_for_user`,
+  `get_gcal_connection_for_user`, `advance_reminder`, `delete_push_subscription_admin`,
+  `get_reminder_admin`) and for crew push (`crew_push_subscriptions`,
+  `delete_crew_push_subscription`). Hit and fixed a real ordering bug applying `0012`
+  (dropped a column before the policies referencing it) and a return-type change that
+  needed a `drop function` first in `0015` — both caught immediately because the
+  migration failed outright, both re-verified after fixing.
+- `src/lib/reminders/rrule.ts`: recurrence presets (daily/weekdays/weekly-on-X/every-N-
+  days/monthly/custom) built on the `rrule` package, with next-occurrence computation
+  made DST-aware by reconstructing wall-clock time in `America/Winnipeg` rather than
+  trusting the library's internal UTC math (new `zonedTimeToUtc`/`utcToZonedParts`
+  helpers in `src/lib/time.ts`). Hand-verified with test cases spanning both the March
+  and November 2026 DST boundaries, weekday-skipping, and every-N-days/monthly
+  recurrence before trusting it.
+- `src/lib/push/`: Web Push sending (`web-push` package) with self-healing dead-
+  subscription cleanup, and a signed HMAC action-token scheme
+  (`src/lib/reminders/action-token.ts`) so the notification's Done/Snooze buttons work
+  even when the PWA's session has expired — verified for real: generated a token,
+  called the actual route with valid/tampered/missing/mismatched-id tokens, and
+  confirmed the reminder's status changed correctly in the database only for the
+  valid case.
+- `src/lib/gcal/client.ts`: Google Calendar OAuth (`googleapis` package), AES-256-GCM
+  refresh-token encryption (`src/lib/crypto.ts`), agenda reads, and event creation.
+  Reused the same request-host-derived redirect URI pattern that already fixed the
+  signup email-confirmation bug so both localhost and production work without
+  hardcoding a domain.
+- `/api/cron/reminders` (the actual dispatcher, hit by an external cron-job.org pinger
+  rather than native Vercel Cron — confirmed via a live web search that Vercel's free
+  Hobby tier caps cron at once/day, too infrequent for reminders) plus
+  `/api/reminders/[id]/complete` and `.../snooze` (the notification-action routes) and
+  `/api/auth/google/start` / `.../callback` (OAuth). Tested the dispatcher for real:
+  seeded a one-off and a recurring reminder both due in the past, hit the route,
+  confirmed the one-off flipped to `done` and the recurring one advanced to the correct
+  next day, then hit it again immediately and confirmed zero reminders were
+  double-claimed.
+- Full UI under `/calendar` (Agenda + Reminders tabs, replacing the old placeholder
+  page) and `/settings/calendar` (Google connect/disconnect/sync toggle, push device
+  list with a "send test notification" button), plus the day-planner ritual as a new
+  `<DayPlannerCard>` on the Today dashboard (day-mode focus display / evening-mode
+  planning form, auto-pulling overdue-then-today tasks when nothing's been planned) and
+  a real "Calendar & Reminders" Today widget replacing its Phase-3 placeholder.
+- Two bonus items folded in: a one-tap "Remind me" button on any task with a due date
+  (which required first adding minimal due-date UI to the Tasks module, since it had
+  none before this), and finally wiring the real crew push notification for workout
+  PRs that Phase 2 had explicitly deferred to "once Phase 3's Web Push infra exists"
+  (logged in `LATER.md` at the time).
+- Added `vercel.json` with a once-daily native Vercel Cron hitting the same dispatcher
+  route as a backup + to keep the Supabase project from pausing on inactivity (Hobby
+  tier's one allowed cron frequency).
+- Two things need the owner's own action and are clearly flagged in `PROGRESS.md` and
+  walked through step-by-step in `MANUAL.md`: creating Google OAuth credentials in
+  Google Cloud Console, and signing up for the free cron-job.org pinger — both require
+  a browser and an account the agent has no access to. Everything else was built,
+  verified against the live database and real HTTP requests (not just read over), and
+  deployed without waiting for those two steps.

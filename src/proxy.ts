@@ -1,7 +1,14 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/signup"];
+// /api/cron and /api/reminders/*/complete|snooze authenticate themselves
+// (a bearer secret, and a signed per-reminder token respectively — see
+// src/lib/reminders/action-token.ts) rather than relying on a session: the
+// cron dispatcher is hit by an external pinger with no cookies at all, and
+// the notification action routes may fire days after a PWA's session has
+// expired. Without this, the middleware would redirect both to /login before
+// they ever reached their own auth checks.
+const PUBLIC_PATHS = ["/login", "/signup", "/api/cron", "/api/reminders"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

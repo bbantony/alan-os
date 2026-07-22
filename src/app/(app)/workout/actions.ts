@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayInAppTimezone } from "@/lib/time";
 import { sessionBests, detectNewPrs, type NewPr } from "@/lib/workout/pr";
 import { computeStreak, startOfWeek } from "@/lib/workout/streaks";
+import { sendPush, type PushSubscriptionRow } from "@/lib/push/send";
 import type {
   CrewProfile,
   EquipmentType,
@@ -296,6 +297,38 @@ export async function logWorkout(input: {
 
   revalidatePath("/workout");
   revalidatePath("/today");
+
+  // Push the rest of the crew (LATER.md carry-over from Phase 2, wired now
+  // that Web Push infra exists — see crew_push_subscriptions() in migration
+  // 0012/0015). Best-effort: a push failure shouldn't fail the whole save,
+  // the workout/PR was already persisted above and the actor's own device
+  // already got the in-app confetti celebration.
+  if (allNewPrs.length > 0) {
+    try {
+      const [{ data: actorProfile }, { data: crewSubs }] = await Promise.all([
+        supabase.from("profiles").select("display_name").eq("id", user.id).single(),
+        supabase.rpc("crew_push_subscriptions"),
+      ]);
+      const actorName = actorProfile?.display_name ?? "Someone";
+      const othersSubs = ((crewSubs as (PushSubscriptionRow & { user_id: string })[]) ?? []).filter(
+        (s) => s.user_id !== user.id
+      );
+      const exerciseNames = [...new Set(allNewPrs.map((p) => p.exerciseName))].join(", ");
+      await sendPush(
+        othersSubs,
+        {
+          title: "New PR! 🏆",
+          body: `${actorName} just hit a PR on ${exerciseNames}`,
+          url: "/workout",
+        },
+        async (subscriptionId) => {
+          await supabase.rpc("delete_crew_push_subscription", { subscription_id: subscriptionId });
+        }
+      );
+    } catch {
+      // Non-fatal — see comment above.
+    }
+  }
 
   return { workoutId, prs: allNewPrs };
 }
