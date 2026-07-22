@@ -81,6 +81,28 @@ export interface SavingsGoal {
   created_at: string;
 }
 
+export type ReceiptStatus = "pending_review" | "approved" | "discarded";
+
+export interface ReceiptLineItem {
+  raw_name: string;
+  clean_name: string;
+  price_cents: number;
+  category_id: string | null;
+  approved: boolean;
+}
+
+export interface Receipt {
+  id: string;
+  user_id: string;
+  storage_path: string;
+  merchant_guess: string | null;
+  total_cents_guess: number | null;
+  txn_date_guess: string | null;
+  line_items: ReceiptLineItem[];
+  status: ReceiptStatus;
+  created_at: string;
+}
+
 export interface Debt {
   id: string;
   user_id: string;

@@ -1,35 +1,44 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Trash2, Wallet } from "lucide-react";
+import { Receipt as ReceiptIcon, Send, Trash2, Wallet } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone } from "@/lib/time";
 import { formatCents } from "@/lib/finance/money";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/finance/types";
-import type { Account, Category, Transaction } from "@/lib/finance/types";
+import type { Account, Category, Receipt, Transaction } from "@/lib/finance/types";
 import { deleteTransaction } from "./actions";
 import { AccountForm } from "./account-form";
 import { RemittanceForm } from "./remittance-form";
+import { ReceiptScanButton } from "./receipt-scan-button";
+import { ReceiptReviewDialog } from "./receipt-review-dialog";
 
 export function OverviewView({
   accounts,
   transactions,
   categories,
   remittance,
+  receipts,
   onAccountsChanged,
   onTransactionDeleted,
+  onReceiptsChanged,
+  onTransactionsAdded,
 }: {
   accounts: Account[];
   transactions: Transaction[];
   categories: Category[];
   remittance: { cadTotalCents: number; inrTotalCents: number };
+  receipts: Receipt[];
   onAccountsChanged: (updater: (prev: Account[]) => Account[]) => void;
   onTransactionDeleted: (id: string) => void;
+  onReceiptsChanged: (updater: (prev: Receipt[]) => Receipt[]) => void;
+  onTransactionsAdded: (transactions: Transaction[]) => void;
 }) {
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [showRemittanceForm, setShowRemittanceForm] = useState(false);
+  const [reviewingReceipt, setReviewingReceipt] = useState<Receipt | null>(null);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
 
   async function handleDeleteTransaction(id: string) {
@@ -39,6 +48,35 @@ export function OverviewView({
 
   return (
     <div className="space-y-6">
+      <div className="rounded-xl border border-border bg-surface p-3">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="flex items-center gap-1.5 text-sm font-medium">
+            <ReceiptIcon className="size-3.5 text-primary" />
+            Receipts
+          </p>
+          <ReceiptScanButton onUploaded={(receipt) => onReceiptsChanged((prev) => [receipt, ...prev])} />
+        </div>
+        {receipts.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Scan a receipt to log it in seconds.</p>
+        ) : (
+          <ul className="space-y-1.5">
+            {receipts.map((r) => (
+              <li key={r.id}>
+                <button
+                  onClick={() => setReviewingReceipt(r)}
+                  className="tap-press flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted"
+                >
+                  <span>{r.merchant_guess || "Receipt awaiting review"}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {r.total_cents_guess ? formatCents(r.total_cents_guess) : "Tap to enter"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Accounts</h2>
@@ -173,6 +211,27 @@ export function OverviewView({
           onLogged={(updatedAccount) => {
             onAccountsChanged((prev) => prev.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
             setShowRemittanceForm(false);
+          }}
+        />
+      )}
+
+      {reviewingReceipt && (
+        <ReceiptReviewDialog
+          receipt={reviewingReceipt}
+          accounts={accounts}
+          categories={categories}
+          onClose={() => setReviewingReceipt(null)}
+          onDiscarded={(receiptId) => {
+            onReceiptsChanged((prev) => prev.filter((r) => r.id !== receiptId));
+            setReviewingReceipt(null);
+          }}
+          onApproved={(receiptId, transactions, accountId, updatedBalanceCents) => {
+            onReceiptsChanged((prev) => prev.filter((r) => r.id !== receiptId));
+            onAccountsChanged((prev) =>
+              prev.map((a) => (a.id === accountId ? { ...a, current_balance_cents: updatedBalanceCents } : a))
+            );
+            onTransactionsAdded(transactions);
+            setReviewingReceipt(null);
           }}
         />
       )}

@@ -435,3 +435,67 @@ per `SPEC.md`.
   `undefined`, needed a small guard rather than the naive `number` type I first wrote).
 - No owner action needed for this phase — everything works immediately, unlike Phase 3
   which is still waiting on the two external setup steps logged there.
+
+## 11. Phase 5 — Finance AI, with a genuine blocker surfaced instead of silently skipped
+
+**Requested:** Asked "so what's next," which per the standing overnight-build permission
+meant continuing to Phase 5 (Finance AI: receipt scanning, shopping cross-check, CSV
+import). Before starting, flagged a real dependency: receipt vision and CSV
+categorization both need a paid AI API key that only the owner can obtain (account +
+billing). Asked two questions instead of guessing: which AI provider (owner picked
+Google AI Studio/Gemini over Anthropic) and whether to build everything else while
+waiting for the key (owner said yes — build the non-AI scaffolding now).
+
+**Changes made:**
+- Confirmed via a live web search that `gemini-2.0-flash` (the obvious model choice)
+  was retired June 2026 — used the current `gemini-2.5-flash` instead, isolated in one
+  constant (`src/lib/ai/gemini.ts`) so a future model rename is a one-line fix.
+- Migration `0017_finance_ai.sql`: `receipts` table (same strict per-user RLS as every
+  other table in this app), a private Supabase Storage bucket (`receipts`, first Storage
+  usage in this codebase) with a per-user-folder RLS policy, and the real foreign key on
+  `transactions.receipt_id` (that column existed since Phase 4 but had no FK yet since
+  `receipts` didn't exist). Verified directly against the live database: RLS enabled and
+  policied on the table, the bucket exists private, the FK genuinely rejects a bogus
+  receipt id, and — the one genuinely new kind of check this phase needed — simulated
+  Supabase's own `auth.uid()` mechanism via the `request.jwt.claims` Postgres setting
+  (switching to the non-RLS-exempt `authenticated` role) to prove a real user can upload
+  into their own storage folder and is blocked from writing into anyone else's.
+- `src/lib/ai/gemini.ts`: the one shared AI call point SPEC.md Part F requires, forcing
+  JSON-mode output, with the "retry once then fail gracefully to manual entry" rule
+  built in directly — a null return is the expected/handled case everywhere, not an
+  error path. `src/lib/ai/receipt-vision.ts` and `csv-categorizer.ts` build on it; both
+  return `null` immediately if `GEMINI_API_KEY` isn't set, which is what makes "build
+  everything except the AI calls" actually work today with zero half-built states.
+- `src/lib/finance/fuzzy-match.ts` (plain string similarity, not AI — the owner's second
+  answer flagged this doesn't need it) and `src/lib/finance/csv-parser.ts` (dependency-
+  free CSV parser + bank-format column guessing + date normalization). Both hand-
+  verified with throwaway scripts before trusting them, and both verifications caught
+  real bugs: the column-guesser matched "Transaction Date" as both the date AND
+  description column (fixed by claiming columns as they're matched, most-specific
+  first); a debt-payoff-style false assumption in my own fuzzy-match test (raw
+  unprocessed receipt text like "GV 2% MLK" correctly does NOT match "Milk" — that
+  de-abbreviation is specifically the AI's job per SPEC.md, not the fuzzy matcher's).
+- Full receipt flow: `receipt-scan-button.tsx` (camera/photo picker → upload → AI read
+  attempt → review dialog opens either way), `receipt-review-dialog.tsx` (editable
+  merchant/date/line-items/categories, save-as-one vs split-by-category), wired into
+  Overview as a new "Receipts" card. Approving now returns the created transaction(s)
+  and updated account balance to the client (not just revalidating server-side) so the
+  Recent Transactions list and account balance update immediately — caught this gap
+  myself while wiring it up, since the rest of the module already follows that
+  optimistic-update pattern everywhere else.
+- The Shopping ↔ Finance cross-check hook from SPEC.md Part B4: on receipt approval,
+  each line item fuzzy-matches against the still-on-list shopping items; matches get
+  checked off and staples get their timer advanced — plain string matching, no AI call
+  spent on it.
+- CSV import (`src/app/(app)/settings/money/csv-import.tsx` + `csv-actions.ts`): upload
+  → column-mapping step (handles both single signed-Amount and separate Debit/Credit
+  bank export formats, North American MM/DD/YYYY and ISO dates) → review table with
+  duplicate detection (date+amount+merchant match against existing transactions) and
+  per-row categorization (recent-merchant heuristic first, one batched AI call only for
+  rows the heuristic couldn't resolve — never one AI call per row, per SPEC.md's cost
+  guardrails) → bulk import.
+- `.env.local.example` and `.env.local` both document the new `GEMINI_API_KEY` var;
+  `MANUAL.md` walks through getting one from Google AI Studio with a billing safety net
+  (a budget alert, not just "add a card"), plus how to scan a receipt and import a CSV.
+- `npm run build`/lint clean; every non-AI piece verified against the live database with
+  real inserts/rollback, exactly as in every prior phase.

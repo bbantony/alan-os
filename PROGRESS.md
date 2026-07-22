@@ -97,9 +97,20 @@ See `SPEC.md` for the full specification.
 - [x] Settings → Money category management page
 
 ## Phase 5 — Finance AI
-- [ ] Receipt scanning pipeline + review UI
-- [ ] Shopping cross-check hook
-- [ ] CSV import w/ AI categorization
+- [x] Receipt scanning pipeline + review UI (upload → Storage → review screen
+      with editable merchant/date/line items/categories → approve as one
+      transaction or split by category)
+- [x] Shopping cross-check hook (fuzzy-matches approved receipt line items
+      against the shopping list, auto-checks matches, advances staple
+      timers — plain string matching, works today with no AI needed)
+- [x] CSV import w/ categorization (column-mapping UI for any bank export
+      format, duplicate detection by date+amount+merchant, heuristic
+      recent-merchant categorization with AI as an optional second pass)
+- [ ] **Owner action**: get a free Google AI Studio (Gemini) API key and
+      paste it into Vercel + `.env.local` as `GEMINI_API_KEY` — see
+      MANUAL.md's Phase 5 section. Until then, receipt scanning and CSV
+      categorization both fall back to fully manual entry (by design, not
+      a bug) — everything else in this phase already works without it.
 
 ## Phase 6 — Journal & Vinyl
 - [ ] Photo-a-day + reminder + gallery
@@ -137,7 +148,19 @@ deployed. No owner action is required for Phase 4 — everything works out of
 the box (money never touches a service-role client; every table uses the
 same `auth.uid() = user_id` RLS pattern already proven in every prior phase).
 
-Next session: "Read SPEC.md. Phase 4 is complete and deployed. Execute
-Phase 5 only" (once the two Phase 3 owner actions — Google OAuth credentials
-and the cron-job.org pinger — are done, since Phase 5's receipt pipeline is
-independent of those but full Calendar/reminders delivery still needs them).
+Phase 5 (Finance AI) is built and deployed. Every non-AI part (receipt
+upload/storage/review UI, the shopping cross-check hook, CSV import with
+column mapping and duplicate detection) is fully functional right now — the
+only piece waiting on the owner is a Gemini API key, which upgrades receipt
+scanning and CSV categorization from manual entry to automatic. Verified
+against the live database: RLS + the storage bucket's per-user folder policy
+were both exercised for real (not just read over) — confirmed a user can
+upload into their own folder and is blocked from writing into anyone else's
+— plus a full receipt→transaction→shopping-cross-check round trip, and that
+the transactions.receipt_id foreign key genuinely rejects a bogus id.
+
+Next session: "Read SPEC.md. Phase 5 is complete and deployed. Execute
+Phase 6 only" (once the owner actions from Phases 3 and 5 — Google OAuth
+credentials, the cron-job.org pinger, and the Gemini API key — are done,
+since none of Phase 6's Journal/Vinyl work depends on them, but full
+reminders/calendar delivery and AI receipt scanning still do).

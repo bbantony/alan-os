@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Account, Category, Debt, SavingsGoal, Transaction } from "@/lib/finance/types";
+import type { Account, Category, Debt, Receipt, SavingsGoal, Transaction } from "@/lib/finance/types";
 import type { BudgetWithProgress, MerchantMemory } from "./actions";
 import { QuickLogForm } from "./quick-log-form";
 import { OverviewView } from "./overview-view";
@@ -32,6 +32,7 @@ export function MoneyShell({
   initialDebts,
   recentMerchants,
   remittance,
+  initialReceipts,
 }: {
   initialAccounts: Account[];
   categories: Category[];
@@ -41,6 +42,7 @@ export function MoneyShell({
   initialDebts: Debt[];
   recentMerchants: MerchantMemory[];
   remittance: { cadTotalCents: number; inrTotalCents: number };
+  initialReceipts: Receipt[];
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -48,6 +50,7 @@ export function MoneyShell({
   const [budgets, setBudgets] = useState(initialBudgets);
   const [goals, setGoals] = useState(initialGoals);
   const [debts, setDebts] = useState(initialDebts);
+  const [receipts, setReceipts] = useState(initialReceipts);
   const [showQuickLog, setShowQuickLog] = useState(false);
 
   return (
@@ -81,8 +84,11 @@ export function MoneyShell({
           transactions={transactions}
           categories={categories}
           remittance={remittance}
+          receipts={receipts}
           onAccountsChanged={setAccounts}
           onTransactionDeleted={(id) => setTransactions((prev) => prev.filter((t) => t.id !== id))}
+          onReceiptsChanged={setReceipts}
+          onTransactionsAdded={(newTxns) => setTransactions((prev) => [...newTxns, ...prev])}
         />
       )}
       {tab === "budgets" && <BudgetsView budgets={budgets} categories={categories} onChanged={setBudgets} />}

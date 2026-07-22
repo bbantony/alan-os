@@ -495,4 +495,82 @@ Money.
 
 ---
 
-*(Phase 5 section will be added here once its checklist is complete.)*
+## Phase 5 — Finance AI
+
+What Phase 5 adds: scanning a photo of a receipt to log it in one shot,
+bulk-importing transactions from a bank statement export, and a hook that
+automatically checks items off your shopping list when a receipt shows you
+actually bought them. One optional one-time setup step unlocks the "AI"
+part of this — without it, everything still works, you just type receipt
+items in by hand instead of them being read automatically.
+
+### One-time setup — turn on AI reading of receipts (optional)
+
+Skip this for now if you like — receipt scanning and CSV import both work
+today with fully manual entry. This step is what upgrades them to
+automatic.
+
+1. Go to **aistudio.google.com** and sign in with any Google account.
+2. Click **Get API key** (usually top-left) → **Create API key**.
+3. You'll be asked to attach a Google Cloud billing account — this needs a
+   credit card on file, but Google's free tier covers ordinary use for an
+   app like this; to be safe, go to **console.cloud.google.com/billing**,
+   open your billing account, and set a budget alert (e.g. $10/month) so
+   you'd get an email long before anything ever costs real money.
+4. Copy the API key it shows you.
+5. Go to **vercel.com**, open the **alan-os** project → **Settings →
+   Environment Variables**. Add a new variable named `GEMINI_API_KEY`,
+   paste the key in, and tick all three environment boxes
+   (Production/Preview/Development).
+6. Also open the `.env.local` file in the project folder on your computer
+   (Notepad is fine) and paste the same key after `GEMINI_API_KEY=` there,
+   so it works when testing locally too.
+7. Redeploy isn't needed for this one — the next receipt you scan or CSV
+   you import will automatically start using it.
+
+### Scanning a receipt
+
+1. Tap **More → Money → Overview** tab. Under "Receipts," tap **Scan
+   receipt**.
+2. Pick a photo or take one with your camera. It uploads right away.
+3. If the AI key is set up, it reads the merchant, date, and each item off
+   the receipt for you within a few seconds — a review screen opens
+   automatically. If it's not set up (or couldn't read something), the same
+   review screen opens with blank fields ready for you to type in by hand.
+4. On the review screen: fix the merchant/date if needed, edit or add line
+   items (name, price, category for each), and pick which account it came
+   out of.
+5. Choose **Save as one transaction** (the whole receipt logs as a single
+   expense) or **Split by category** (creates one transaction per category
+   the items span — e.g. groceries and a magazine on the same receipt each
+   post to their own budget).
+6. Tap **Approve**. Any item that matches something still on your shopping
+   list gets automatically checked off there too — no need to do it twice.
+7. Not a real receipt, or want to throw it out? Tap **Discard** instead.
+
+### Importing transactions from a CSV file
+
+1. Tap **More → Settings → Money**. Scroll to **Import from CSV** → **Choose
+   file** → pick your bank's exported .csv file.
+2. Confirm which columns are which — the app guesses based on the column
+   headers, but double-check them. If your bank uses separate "Debit" and
+   "Credit" columns instead of one signed amount column, tick that box and
+   pick both.
+3. Pick which account these transactions belong to, then tap **Continue**.
+4. You'll see every row with a suggested category already filled in
+   (learned from your past spending, and from AI if the key above is set
+   up) — change any that are wrong. Rows that look like something you
+   already logged are unchecked automatically (labeled "possible
+   duplicate") so you don't end up with it twice — recheck one yourself if
+   it's actually new.
+5. Tap **Import N transactions**. Done — they show up in Money right away.
+
+### Today dashboard / Shopping
+
+No new dashboard card for this phase — receipts show up as regular
+transactions, and the shopping cross-check quietly keeps your list in sync
+in the background whenever you approve a receipt.
+
+---
+
+*(Phase 6 section will be added here once its checklist is complete.)*
