@@ -100,6 +100,13 @@ export interface WorkoutSetWithExercise extends WorkoutSet {
   exercise_name: string;
 }
 
+// One past session's sets for a given exercise, used by the "history" panel
+// while logging a new session.
+export interface ExerciseHistoryEntry {
+  workoutDate: string;
+  sets: WorkoutSet[];
+}
+
 // Everything the crew feed needs for one card, assembled server-side.
 export interface FeedWorkout {
   workout: Workout;

@@ -9,6 +9,7 @@ import { computeStreak, startOfWeek } from "@/lib/workout/streaks";
 import type {
   CrewProfile,
   Exercise,
+  ExerciseHistoryEntry,
   FeedWorkout,
   MuscleGroup,
   Pr,
@@ -126,20 +127,26 @@ export async function updateExercise(input: {
   return {};
 }
 
-// Sets from the most recent previous workout (of this user's last 30) that
-// included this exercise — a practical lookback bound rather than a full
-// history scan, more than enough for "last session" progressive overload.
-export async function getLastSessionSets(exerciseId: string): Promise<WorkoutSet[]> {
+// Sets from this user's last few sessions that included this exercise (most
+// recent first) — looked up within their last 60 workouts, a practical
+// lookback bound rather than a full history scan. Used both for the "last
+// session" progressive-overload suggestion (entry 0) and the on-screen
+// history so the owner can see a trend, not just one data point.
+export async function getExerciseHistory(
+  exerciseId: string,
+  sessionLimit = 4
+): Promise<ExerciseHistoryEntry[]> {
   const { supabase, user } = await requireUser();
   const { data: myWorkouts } = await supabase
     .from("workouts")
-    .select("id")
+    .select("id, workout_date")
     .eq("user_id", user.id)
     .order("workout_date", { ascending: false })
     .order("created_at", { ascending: false })
-    .limit(30);
+    .limit(60);
 
-  const workoutIds = (myWorkouts ?? []).map((w) => w.id as string);
+  const workoutRows = myWorkouts ?? [];
+  const workoutIds = workoutRows.map((w) => w.id as string);
   if (workoutIds.length === 0) return [];
 
   const { data: sets } = await supabase
@@ -150,14 +157,24 @@ export async function getLastSessionSets(exerciseId: string): Promise<WorkoutSet
 
   if (!sets || sets.length === 0) return [];
 
+  const dateByWorkout = new Map(workoutRows.map((w) => [w.id as string, w.workout_date as string]));
   const orderIndex = new Map(workoutIds.map((id, i) => [id, i]));
-  const mostRecentWorkoutId = [...sets].sort(
-    (a, b) => (orderIndex.get(a.workout_id) ?? 999) - (orderIndex.get(b.workout_id) ?? 999)
-  )[0].workout_id;
 
-  return (sets as WorkoutSet[])
-    .filter((s) => s.workout_id === mostRecentWorkoutId)
-    .sort((a, b) => a.set_number - b.set_number);
+  const byWorkout = new Map<string, WorkoutSet[]>();
+  for (const s of sets as WorkoutSet[]) {
+    const list = byWorkout.get(s.workout_id) ?? [];
+    list.push(s);
+    byWorkout.set(s.workout_id, list);
+  }
+
+  const orderedWorkoutIds = [...byWorkout.keys()].sort(
+    (a, b) => (orderIndex.get(a) ?? 999) - (orderIndex.get(b) ?? 999)
+  );
+
+  return orderedWorkoutIds.slice(0, sessionLimit).map((workoutId) => ({
+    workoutDate: dateByWorkout.get(workoutId) ?? "",
+    sets: (byWorkout.get(workoutId) ?? []).sort((a, b) => a.set_number - b.set_number),
+  }));
 }
 
 // ---------- Logging ----------

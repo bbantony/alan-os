@@ -1,4 +1,7 @@
-import { Trophy } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { ChevronDown, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatWeight } from "@/lib/workout/units";
 import { WORKOUT_TYPE_LABELS, type FeedWorkout, type WeightUnit } from "@/lib/workout/types";
@@ -40,18 +43,6 @@ function formatDuration(totalSeconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-function topSetLabel(
-  sets: FeedWorkout["sets"],
-  exerciseId: string,
-  unit: WeightUnit
-): string {
-  const exerciseSets = sets.filter((s) => s.exercise_id === exerciseId);
-  const top = exerciseSets.reduce((best, s) =>
-    s.weight_kg > best.weight_kg || (s.weight_kg === best.weight_kg && s.reps > best.reps) ? s : best
-  );
-  return `${top.exercise_name} ${formatWeight(top.weight_kg, unit)}×${top.reps}`;
-}
-
 const TYPE_BADGE_STYLES: Record<string, string> = {
   push: "bg-primary/10 text-primary",
   pull: "bg-primary/10 text-primary",
@@ -70,11 +61,11 @@ export function FeedCard({
   weightUnit: WeightUnit;
 }) {
   const { workout, author, sets, run, prs, reactions } = feedItem;
+  const [expanded, setExpanded] = useState(false);
   const hasPr = prs.length > 0;
 
   const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
-  const summaryParts = exerciseIds.slice(0, 3).map((id) => topSetLabel(sets, id, weightUnit));
-  const extra = exerciseIds.length > 3 ? ` +${exerciseIds.length - 3} more` : "";
+  const totalSets = sets.length;
 
   return (
     <div
@@ -116,13 +107,37 @@ export function FeedCard({
           {run.avg_hr ? ` · ${run.avg_hr} bpm` : ""}
         </p>
       ) : (
-        <p className="text-sm">
-          {summaryParts.join(", ")}
-          {extra}
-        </p>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex w-full items-center justify-between text-left text-sm"
+        >
+          <span>
+            {exerciseIds.length} exercise{exerciseIds.length === 1 ? "" : "s"} · {totalSets} set
+            {totalSets === 1 ? "" : "s"}
+          </span>
+          <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", expanded && "rotate-180")} />
+        </button>
       )}
 
-      {workout.notes && <p className="mt-1 text-sm text-muted-foreground">{workout.notes}</p>}
+      {expanded && !run && (
+        <ul className="mt-2 space-y-1 text-sm">
+          {exerciseIds.map((id) => {
+            const exerciseSets = sets.filter((s) => s.exercise_id === id);
+            return (
+              <li key={id}>
+                <span className="font-medium">{exerciseSets[0].exercise_name}:</span>{" "}
+                <span className="text-muted-foreground">
+                  {exerciseSets.map((s) => `${formatWeight(s.weight_kg, weightUnit)}×${s.reps}`).join(", ")}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      {workout.notes && (expanded || run) && (
+        <p className="mt-1 text-sm text-muted-foreground">{workout.notes}</p>
+      )}
 
       <div className="mt-3 border-t border-border pt-2.5">
         <Reactions workoutId={workout.id} reactions={reactions} currentUserId={currentUserId} />

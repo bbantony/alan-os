@@ -2,29 +2,29 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Save, Trash2 } from "lucide-react";
+import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { celebratePr } from "@/lib/workout/celebrate";
-import { formatWeight } from "@/lib/workout/units";
 import { suggestNextWeight } from "@/lib/workout/progression";
 import {
   WORKOUT_TYPE_LABELS,
   type DraftExercise,
   type DraftSet,
   type Exercise,
+  type ExerciseHistoryEntry,
   type WeightUnit,
-  type WorkoutSet,
   type WorkoutTemplate,
   type WorkoutType,
 } from "@/lib/workout/types";
-import { getLastSessionSets, logRun, logWorkout, saveTemplate } from "../actions";
+import { getExerciseHistory, logRun, logWorkout, saveTemplate } from "../actions";
+import { ExercisePanel } from "./exercise-panel";
 import { ExercisePicker } from "./exercise-picker";
-import { SetRow } from "./set-row";
 import { TemplatePicker } from "./template-picker";
 
-function suggestionFor(lastSets: WorkoutSet[], unit: WeightUnit): DraftSet {
+function suggestionFor(history: ExerciseHistoryEntry[], unit: WeightUnit): DraftSet {
+  const lastSets = history[0]?.sets ?? [];
   const suggestion = suggestNextWeight(
     lastSets.map((s) => ({ reps: s.reps, weightKg: s.weight_kg })),
     unit
@@ -51,7 +51,8 @@ export function NewWorkoutForm({
   const [notes, setNotes] = useState("");
   const [knownExercises, setKnownExercises] = useState(exercises);
   const [draftExercises, setDraftExercises] = useState<DraftExercise[]>([]);
-  const [lastSessionByExercise, setLastSessionByExercise] = useState<Record<string, WorkoutSet[]>>({});
+  const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
+  const [historyByExercise, setHistoryByExercise] = useState<Record<string, ExerciseHistoryEntry[]>>({});
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -67,9 +68,11 @@ export function NewWorkoutForm({
       ...prev,
       { exerciseId: exercise.id, exerciseName: exercise.name, isBarbell: exercise.is_barbell, sets: [] },
     ]);
-    const last = await getLastSessionSets(exercise.id);
-    setLastSessionByExercise((prev) => ({ ...prev, [exercise.id]: last }));
-    const initialSet = suggestionFor(last, weightUnit);
+    setActiveExerciseId(exercise.id);
+
+    const history = await getExerciseHistory(exercise.id, 4);
+    setHistoryByExercise((prev) => ({ ...prev, [exercise.id]: history }));
+    const initialSet = suggestionFor(history, weightUnit);
     setDraftExercises((prev) =>
       prev.map((ex) => (ex.exerciseId === exercise.id ? { ...ex, sets: [initialSet] } : ex))
     );
@@ -82,6 +85,7 @@ export function NewWorkoutForm({
       const exercise = knownExercises.find((e) => e.id === id);
       if (exercise) await addExerciseToDraft(exercise);
     }
+    if (template.exercise_ids.length > 0) setActiveExerciseId(template.exercise_ids[0]);
   }
 
   function updateSet(exerciseId: string, index: number, set: DraftSet) {
@@ -106,14 +110,20 @@ export function NewWorkoutForm({
     setDraftExercises((prev) =>
       prev.map((ex) => {
         if (ex.exerciseId !== exerciseId) return ex;
-        const last = ex.sets[ex.sets.length - 1] ?? suggestionFor(lastSessionByExercise[exerciseId] ?? [], weightUnit);
+        const last = ex.sets[ex.sets.length - 1] ?? suggestionFor(historyByExercise[exerciseId] ?? [], weightUnit);
         return { ...ex, sets: [...ex.sets, { ...last }] };
       })
     );
   }
 
   function removeExercise(exerciseId: string) {
-    setDraftExercises((prev) => prev.filter((ex) => ex.exerciseId !== exerciseId));
+    setDraftExercises((prev) => {
+      const next = prev.filter((ex) => ex.exerciseId !== exerciseId);
+      if (activeExerciseId === exerciseId) {
+        setActiveExerciseId(next[0]?.exerciseId ?? null);
+      }
+      return next;
+    });
   }
 
   async function handleSaveTemplate() {
@@ -157,6 +167,7 @@ export function NewWorkoutForm({
   }
 
   const isRun = type === "run";
+  const activeExercise = draftExercises.find((ex) => ex.exerciseId === activeExerciseId) ?? null;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8 pb-24">
@@ -238,62 +249,55 @@ export function NewWorkoutForm({
         <div className="space-y-4">
           <TemplatePicker templates={templates} type={type} onLoad={loadTemplate} />
 
-          {draftExercises.map((ex) => {
-            const lastSets = lastSessionByExercise[ex.exerciseId];
-            return (
-              <div key={ex.exerciseId} className="rounded-xl border border-border bg-surface p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="font-heading text-sm font-semibold">{ex.exerciseName}</p>
+          {draftExercises.length === 0 ? (
+            <ExercisePicker
+              exercises={knownExercises}
+              recentExerciseIds={recentExerciseIds}
+              excludeIds={[]}
+              onSelect={addExerciseToDraft}
+              onExerciseCreated={(exercise) => setKnownExercises((prev) => [...prev, exercise])}
+            />
+          ) : (
+            <>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {draftExercises.map((ex) => (
                   <button
-                    onClick={() => removeExercise(ex.exerciseId)}
-                    className="text-muted-foreground/40 hover:text-destructive"
-                    aria-label="Remove exercise"
+                    key={ex.exerciseId}
+                    onClick={() => setActiveExerciseId(ex.exerciseId)}
+                    className={cn(
+                      "shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium",
+                      ex.exerciseId === activeExerciseId
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-surface hover:bg-muted"
+                    )}
                   >
-                    <Trash2 className="size-4" />
+                    {ex.exerciseName}
+                    {ex.sets.length > 0 && " ✓"}
                   </button>
-                </div>
-
-                {lastSets && lastSets.length > 0 && (
-                  <p className="mb-2 text-xs text-muted-foreground">
-                    Last: {lastSets.map((s) => `${formatWeight(s.weight_kg, weightUnit)}×${s.reps}`).join(" · ")}
-                  </p>
-                )}
-
-                <div className="space-y-1.5">
-                  {ex.sets.map((set, i) => (
-                    <SetRow
-                      key={i}
-                      index={i}
-                      set={set}
-                      unit={weightUnit}
-                      isBarbell={ex.isBarbell}
-                      onChange={(next) => updateSet(ex.exerciseId, i, next)}
-                      onRemove={() => removeSet(ex.exerciseId, i)}
-                    />
-                  ))}
-                </div>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2 gap-1.5"
-                  onClick={() => duplicateLastSet(ex.exerciseId)}
-                >
-                  <Copy className="size-3.5" />
-                  Duplicate last set
-                </Button>
+                ))}
+                <ExercisePicker
+                  exercises={knownExercises}
+                  recentExerciseIds={recentExerciseIds}
+                  excludeIds={draftExercises.map((e) => e.exerciseId)}
+                  onSelect={addExerciseToDraft}
+                  onExerciseCreated={(exercise) => setKnownExercises((prev) => [...prev, exercise])}
+                  compact
+                />
               </div>
-            );
-          })}
 
-          <ExercisePicker
-            exercises={knownExercises}
-            recentExerciseIds={recentExerciseIds}
-            excludeIds={draftExercises.map((e) => e.exerciseId)}
-            onSelect={addExerciseToDraft}
-            onExerciseCreated={(exercise) => setKnownExercises((prev) => [...prev, exercise])}
-          />
+              {activeExercise && (
+                <ExercisePanel
+                  exercise={activeExercise}
+                  history={historyByExercise[activeExercise.exerciseId] ?? []}
+                  unit={weightUnit}
+                  onChangeSet={(i, set) => updateSet(activeExercise.exerciseId, i, set)}
+                  onRemoveSet={(i) => removeSet(activeExercise.exerciseId, i)}
+                  onDuplicateLastSet={() => duplicateLastSet(activeExercise.exerciseId)}
+                  onRemoveExercise={() => removeExercise(activeExercise.exerciseId)}
+                />
+              )}
+            </>
+          )}
 
           {draftExercises.length > 0 && (
             <div>

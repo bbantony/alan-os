@@ -23,12 +23,14 @@ export function ExercisePicker({
   excludeIds,
   onSelect,
   onExerciseCreated,
+  compact,
 }: {
   exercises: Exercise[];
   recentExerciseIds: string[];
   excludeIds: string[];
   onSelect: (exercise: Exercise) => void;
   onExerciseCreated: (exercise: Exercise) => void;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -101,10 +103,24 @@ export function ExercisePicker({
         if (!next) reset();
       }}
     >
-      <DialogTrigger render={<Button type="button" variant="outline" className="w-full gap-1.5" />}>
-        <Plus className="size-4" />
-        Add exercise
-      </DialogTrigger>
+      {compact ? (
+        <DialogTrigger
+          render={
+            <button
+              type="button"
+              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
+              aria-label="Add exercise"
+            />
+          }
+        >
+          <Plus className="size-4" />
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger render={<Button type="button" variant="outline" className="w-full gap-1.5" />}>
+          <Plus className="size-4" />
+          Add exercise
+        </DialogTrigger>
+      )}
       <DialogContent className="max-h-[70vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add exercise</DialogTitle>
