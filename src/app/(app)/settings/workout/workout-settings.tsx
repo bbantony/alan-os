@@ -82,10 +82,14 @@ export function WorkoutSettings({
           Exercises
         </h2>
         <p className="mb-2 text-xs text-muted-foreground">
-          Fix a name, change its muscle group, or mark it as a barbell exercise — this updates it
-          for the whole crew.
+          Your own list — rename one, change its equipment tag, or delete it. Exercises already
+          used in a logged workout can&apos;t be deleted, only renamed.
         </p>
-        <ExerciseManager exercises={exercises} onUpdated={upsertExercise} />
+        <ExerciseManager
+          exercises={exercises}
+          onUpdated={upsertExercise}
+          onDeleted={(id) => setExercises((prev) => prev.filter((e) => e.id !== id))}
+        />
       </div>
     </div>
   );

@@ -132,6 +132,28 @@ export async function updateExercise(input: {
   return {};
 }
 
+// Blocked (not silently ignored) if the exercise has already been used in a
+// logged workout or PR — exercises.id is referenced by workout_sets/prs with
+// no cascade, so Postgres raises a foreign-key violation rather than letting
+// history quietly disappear (SPEC.md's "never lose data" rule). A dangling
+// reference from a saved template is fine and already handled by the UI
+// (template-editor.tsx falls back to "Unknown exercise").
+export async function deleteExercise(input: { id: string }): Promise<{ error?: string }> {
+  const { supabase, user } = await requireUser();
+  const { error } = await supabase.from("exercises").delete().eq("id", input.id).eq("user_id", user.id);
+
+  if (error) {
+    if (error.code === "23503") {
+      return { error: "Can't delete — you've already logged workouts with this exercise." };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath("/settings/workout");
+  revalidatePath("/workout/new");
+  return {};
+}
+
 // Sets from this user's last few sessions that included this exercise (most
 // recent first) — looked up within their last 60 workouts, a practical
 // lookback bound rather than a full history scan. Used both for the "last

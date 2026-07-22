@@ -257,3 +257,38 @@ animation so it's obvious something happened during the wait for a page/menu to 
   `.tap-press` instant-feedback fix from the previous entry, every tap that changes
   the page now gets an immediate visible response.
 - Verified with build + lint (clean) and a route smoke-test before committing.
+
+---
+
+## 8. "Sign-up email confirmation link goes to localhost, and let me delete
+   exercises, not just rename them"
+
+**Requested:** A friend tried to sign up and their confirmation email links to
+`localhost` instead of the real site, so they can never confirm their account. Also,
+Settings → Workout → Exercises only supports renaming an exercise — add real delete.
+
+**Changes made:**
+- The localhost link is a Supabase project setting (Authentication → URL
+  Configuration → Site URL), not something in the app's code — it's almost certainly
+  still set to the `http://localhost:3000` default from initial setup and was never
+  updated for the live site. Gave plain click-by-click steps to fix it in the Supabase
+  dashboard (see the response for this entry) rather than a code change, since this
+  genuinely lives outside the repo.
+- Hardened the code anyway so this can't quietly happen again: `src/app/signup/actions.ts`
+  now explicitly passes `emailRedirectTo` to `supabase.auth.signUp()`, derived from the
+  actual incoming request's host rather than hardcoded — so it's automatically correct
+  whether someone signs up from localhost in development or the real deployed domain,
+  with no environment-specific config to keep in sync. (Supabase's Redirect URLs
+  allowlist still needs the production domain added, which is part of the same
+  dashboard fix.)
+- Added exercise deletion: a `deleteExercise` server action and a delete icon (with a
+  confirm prompt) next to each exercise in Settings → Workout → Exercises. Deliberately
+  does **not** cascade-delete workout history — `workout_sets`/`prs` reference
+  exercises with no cascade, so Postgres blocks the delete with a foreign-key error if
+  the exercise has ever been logged, and the action catches that specific error and
+  shows "Can't delete — you've already logged workouts with this exercise" instead of
+  a raw DB error. Exercises never used in a workout delete cleanly. Verified both
+  paths directly against the live database (found a real used exercise and a real
+  unused one, confirmed the expected success/failure for each) rather than just
+  trusting the logic.
+- Verified with build + lint (clean) before committing.

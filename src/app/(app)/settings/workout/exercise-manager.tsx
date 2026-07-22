@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Pencil, Search } from "lucide-react";
+import { Check, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updateExercise } from "@/app/(app)/workout/actions";
+import { deleteExercise, updateExercise } from "@/app/(app)/workout/actions";
 import {
   EQUIPMENT_LABELS,
   EQUIPMENT_TAGS,
@@ -19,9 +19,11 @@ const EQUIPMENT_TYPES = Object.keys(EQUIPMENT_LABELS) as EquipmentType[];
 export function ExerciseManager({
   exercises,
   onUpdated,
+  onDeleted,
 }: {
   exercises: Exercise[];
   onUpdated: (exercise: Exercise) => void;
+  onDeleted: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -29,6 +31,7 @@ export function ExerciseManager({
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>("chest");
   const [equipment, setEquipment] = useState<EquipmentType>("other");
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<{ id: string; message: string } | null>(null);
 
   const sorted = useMemo(() => {
     const key = query.trim().toLowerCase();
@@ -54,6 +57,17 @@ export function ExerciseManager({
     }
     onUpdated({ ...exercise, name: trimmed, muscle_group: muscleGroup, equipment });
     setEditingId(null);
+  }
+
+  async function handleDelete(exercise: Exercise) {
+    if (!window.confirm(`Delete "${exercise.name}"? This can't be undone.`)) return;
+    setDeleteError(null);
+    const result = await deleteExercise({ id: exercise.id });
+    if (result.error) {
+      setDeleteError({ id: exercise.id, message: result.error });
+      return;
+    }
+    onDeleted(exercise.id);
   }
 
   return (
@@ -108,25 +122,39 @@ export function ExerciseManager({
                 </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">
-                    {exercise.name}
-                    {EQUIPMENT_TAGS[exercise.equipment] && (
-                      <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        {EQUIPMENT_TAGS[exercise.equipment]}
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{MUSCLE_GROUP_LABELS[exercise.muscle_group]}</p>
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {exercise.name}
+                      {EQUIPMENT_TAGS[exercise.equipment] && (
+                        <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          {EQUIPMENT_TAGS[exercise.equipment]}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{MUSCLE_GROUP_LABELS[exercise.muscle_group]}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      onClick={() => startEdit(exercise)}
+                      className="tap-press text-muted-foreground/50 hover:text-foreground"
+                      aria-label="Edit exercise"
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(exercise)}
+                      className="tap-press text-muted-foreground/40 hover:text-destructive"
+                      aria-label="Delete exercise"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => startEdit(exercise)}
-                  className="tap-press shrink-0 text-muted-foreground/50 hover:text-foreground"
-                  aria-label="Edit exercise"
-                >
-                  <Pencil className="size-4" />
-                </button>
+                {deleteError?.id === exercise.id && (
+                  <p className="mt-1 text-xs text-destructive">{deleteError.message}</p>
+                )}
               </div>
             )}
           </li>
