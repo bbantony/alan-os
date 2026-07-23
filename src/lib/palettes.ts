@@ -4,7 +4,12 @@ export type PaletteId =
   | "burgundy-sand"
   | "charcoal-ice"
   | "forest-moss"
-  | "terracotta-bone";
+  | "terracotta-bone"
+  | "teal-mist"
+  | "plum-blush"
+  | "amber-ink"
+  | "rose-linen"
+  | "mono-graphite";
 
 export interface PaletteColors {
   background: string;
@@ -195,6 +200,146 @@ export const PALETTES: Palette[] = [
       border: "#33261F",
     },
   },
+  {
+    id: "teal-mist",
+    name: "Teal / Mist",
+    light: {
+      background: "#F2F7F6",
+      surface: "#FFFFFF",
+      text: "#10201D",
+      primary: "#0B6E6E",
+      primaryForeground: "#F2F7F6",
+      accent: "#D98A3D",
+      accentForeground: "#10201D",
+      muted: "#E3EEEC",
+      mutedForeground: "#52645F",
+      border: "#D3E1DE",
+    },
+    dark: {
+      background: "#0A1514",
+      surface: "#0F1E1C",
+      text: "#EAF3F1",
+      primary: "#3FA8A0",
+      primaryForeground: "#0A1514",
+      accent: "#E3A25F",
+      accentForeground: "#0A1514",
+      muted: "#16302C",
+      mutedForeground: "#8FA6A0",
+      border: "#1E3B36",
+    },
+  },
+  {
+    id: "plum-blush",
+    name: "Plum / Blush",
+    light: {
+      background: "#F8F1F3",
+      surface: "#FFFFFF",
+      text: "#241419",
+      primary: "#5E2A4D",
+      primaryForeground: "#F8F1F3",
+      accent: "#C98A5B",
+      accentForeground: "#241419",
+      muted: "#EFE1E6",
+      mutedForeground: "#6B5560",
+      border: "#E3D0D8",
+    },
+    dark: {
+      background: "#140B10",
+      surface: "#1E1218",
+      text: "#F5EAEF",
+      primary: "#9C5C82",
+      primaryForeground: "#140B10",
+      accent: "#D4A374",
+      accentForeground: "#140B10",
+      muted: "#271A21",
+      mutedForeground: "#AB93A0",
+      border: "#33232B",
+    },
+  },
+  {
+    id: "amber-ink",
+    name: "Amber / Ink",
+    light: {
+      background: "#FBF6E9",
+      surface: "#FFFFFF",
+      text: "#1E1708",
+      primary: "#8A5A00",
+      primaryForeground: "#FBF6E9",
+      accent: "#2F6F5E",
+      accentForeground: "#FBF6E9",
+      muted: "#F0E6CC",
+      mutedForeground: "#6B5F42",
+      border: "#E3D6AE",
+    },
+    dark: {
+      background: "#120E04",
+      surface: "#1C1608",
+      text: "#F5EFDD",
+      primary: "#D9A02E",
+      primaryForeground: "#120E04",
+      accent: "#5FA893",
+      accentForeground: "#120E04",
+      muted: "#241C0C",
+      mutedForeground: "#A99B77",
+      border: "#2E2510",
+    },
+  },
+  {
+    id: "rose-linen",
+    name: "Rose / Linen",
+    light: {
+      background: "#F9F1EC",
+      surface: "#FFFFFF",
+      text: "#241512",
+      primary: "#8C3B3B",
+      primaryForeground: "#F9F1EC",
+      accent: "#4C7A6E",
+      accentForeground: "#F9F1EC",
+      muted: "#EFE0D6",
+      mutedForeground: "#6B5750",
+      border: "#E3D0C3",
+    },
+    dark: {
+      background: "#160D0B",
+      surface: "#201513",
+      text: "#F5E9E3",
+      primary: "#C97070",
+      primaryForeground: "#160D0B",
+      accent: "#6FA294",
+      accentForeground: "#160D0B",
+      muted: "#291B17",
+      mutedForeground: "#AD968E",
+      border: "#34211C",
+    },
+  },
+  {
+    id: "mono-graphite",
+    name: "Mono / Graphite",
+    light: {
+      background: "#F5F5F3",
+      surface: "#FFFFFF",
+      text: "#141414",
+      primary: "#1F1F1F",
+      primaryForeground: "#F5F5F3",
+      accent: "#B5472F",
+      accentForeground: "#F5F5F3",
+      muted: "#E7E7E4",
+      mutedForeground: "#5C5C58",
+      border: "#D9D9D5",
+    },
+    dark: {
+      background: "#0C0C0B",
+      surface: "#131313",
+      text: "#F2F2EF",
+      primary: "#D8D8D4",
+      primaryForeground: "#0C0C0B",
+      accent: "#E06A4D",
+      accentForeground: "#0C0C0B",
+      muted: "#1C1C1A",
+      mutedForeground: "#9C9C97",
+      border: "#262624",
+    },
+  },
 ];
 
 export const DEFAULT_PALETTE_ID: PaletteId = "british-racing-green";
@@ -203,22 +348,34 @@ export function getPalette(id: string | null | undefined): Palette {
   return PALETTES.find((p) => p.id === id) ?? PALETTES[0];
 }
 
-export type HeadingFont = "space-grotesk" | "archivo" | "fraunces";
+export type HeadingFont =
+  | "space-grotesk"
+  | "archivo"
+  | "fraunces"
+  | "sora"
+  | "libre-franklin"
+  | "dm-serif-display";
+export type BodyFont = "inter" | "manrope";
 export type FontSize = "sm" | "md" | "lg";
 export type Density = "compact" | "comfortable";
+export type MotionLevel = "full" | "reduced";
 
 export interface ThemeSettings {
   palette: PaletteId;
   mode: "light" | "dark" | "system";
   headingFont: HeadingFont;
+  bodyFont: BodyFont;
   fontSize: FontSize;
   density: Density;
+  motion: MotionLevel;
 }
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   palette: DEFAULT_PALETTE_ID,
   mode: "system",
   headingFont: "space-grotesk",
+  bodyFont: "inter",
   fontSize: "md",
   density: "comfortable",
+  motion: "full",
 };

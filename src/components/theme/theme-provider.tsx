@@ -39,8 +39,10 @@ function applyThemeToDom(theme: ThemeSettings) {
   root.classList.toggle("dark", isDark);
   root.setAttribute("data-palette", theme.palette);
   root.setAttribute("data-heading-font", theme.headingFont);
+  root.setAttribute("data-body-font", theme.bodyFont ?? "inter");
   root.setAttribute("data-font-size", theme.fontSize);
   root.setAttribute("data-density", theme.density);
+  root.setAttribute("data-motion", theme.motion ?? "full");
 }
 
 export function ThemeProvider({

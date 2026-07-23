@@ -159,6 +159,136 @@
   --border: #33261F;
 }
 
+:root[data-palette="teal-mist"] {
+  --background: #F2F7F6;
+  --surface: #FFFFFF;
+  --foreground: #10201D;
+  --primary: #0B6E6E;
+  --primary-foreground: #F2F7F6;
+  --accent: #D98A3D;
+  --accent-foreground: #10201D;
+  --muted: #E3EEEC;
+  --muted-foreground: #52645F;
+  --border: #D3E1DE;
+}
+
+.dark[data-palette="teal-mist"] {
+  --background: #0A1514;
+  --surface: #0F1E1C;
+  --foreground: #EAF3F1;
+  --primary: #3FA8A0;
+  --primary-foreground: #0A1514;
+  --accent: #E3A25F;
+  --accent-foreground: #0A1514;
+  --muted: #16302C;
+  --muted-foreground: #8FA6A0;
+  --border: #1E3B36;
+}
+
+:root[data-palette="plum-blush"] {
+  --background: #F8F1F3;
+  --surface: #FFFFFF;
+  --foreground: #241419;
+  --primary: #5E2A4D;
+  --primary-foreground: #F8F1F3;
+  --accent: #C98A5B;
+  --accent-foreground: #241419;
+  --muted: #EFE1E6;
+  --muted-foreground: #6B5560;
+  --border: #E3D0D8;
+}
+
+.dark[data-palette="plum-blush"] {
+  --background: #140B10;
+  --surface: #1E1218;
+  --foreground: #F5EAEF;
+  --primary: #9C5C82;
+  --primary-foreground: #140B10;
+  --accent: #D4A374;
+  --accent-foreground: #140B10;
+  --muted: #271A21;
+  --muted-foreground: #AB93A0;
+  --border: #33232B;
+}
+
+:root[data-palette="amber-ink"] {
+  --background: #FBF6E9;
+  --surface: #FFFFFF;
+  --foreground: #1E1708;
+  --primary: #8A5A00;
+  --primary-foreground: #FBF6E9;
+  --accent: #2F6F5E;
+  --accent-foreground: #FBF6E9;
+  --muted: #F0E6CC;
+  --muted-foreground: #6B5F42;
+  --border: #E3D6AE;
+}
+
+.dark[data-palette="amber-ink"] {
+  --background: #120E04;
+  --surface: #1C1608;
+  --foreground: #F5EFDD;
+  --primary: #D9A02E;
+  --primary-foreground: #120E04;
+  --accent: #5FA893;
+  --accent-foreground: #120E04;
+  --muted: #241C0C;
+  --muted-foreground: #A99B77;
+  --border: #2E2510;
+}
+
+:root[data-palette="rose-linen"] {
+  --background: #F9F1EC;
+  --surface: #FFFFFF;
+  --foreground: #241512;
+  --primary: #8C3B3B;
+  --primary-foreground: #F9F1EC;
+  --accent: #4C7A6E;
+  --accent-foreground: #F9F1EC;
+  --muted: #EFE0D6;
+  --muted-foreground: #6B5750;
+  --border: #E3D0C3;
+}
+
+.dark[data-palette="rose-linen"] {
+  --background: #160D0B;
+  --surface: #201513;
+  --foreground: #F5E9E3;
+  --primary: #C97070;
+  --primary-foreground: #160D0B;
+  --accent: #6FA294;
+  --accent-foreground: #160D0B;
+  --muted: #291B17;
+  --muted-foreground: #AD968E;
+  --border: #34211C;
+}
+
+:root[data-palette="mono-graphite"] {
+  --background: #F5F5F3;
+  --surface: #FFFFFF;
+  --foreground: #141414;
+  --primary: #1F1F1F;
+  --primary-foreground: #F5F5F3;
+  --accent: #B5472F;
+  --accent-foreground: #F5F5F3;
+  --muted: #E7E7E4;
+  --muted-foreground: #5C5C58;
+  --border: #D9D9D5;
+}
+
+.dark[data-palette="mono-graphite"] {
+  --background: #0C0C0B;
+  --surface: #131313;
+  --foreground: #F2F2EF;
+  --primary: #D8D8D4;
+  --primary-foreground: #0C0C0B;
+  --accent: #E06A4D;
+  --accent-foreground: #0C0C0B;
+  --muted: #1C1C1A;
+  --muted-foreground: #9C9C97;
+  --border: #262624;
+}
+
 /* ---------- Typography, density & other tokens shared by every palette ---------- */
 
 :root {
@@ -210,6 +340,24 @@
 :root[data-heading-font="space-grotesk"] { --font-heading: var(--font-space-grotesk); }
 :root[data-heading-font="archivo"] { --font-heading: var(--font-archivo); }
 :root[data-heading-font="fraunces"] { --font-heading: var(--font-fraunces); }
+:root[data-heading-font="sora"] { --font-heading: var(--font-sora); }
+:root[data-heading-font="libre-franklin"] { --font-heading: var(--font-libre-franklin); }
+:root[data-heading-font="dm-serif-display"] { --font-heading: var(--font-dm-serif-display); }
+
+:root { --font-body: var(--font-inter); }
+:root[data-body-font="manrope"] { --font-body: var(--font-manrope); }
+
+/* Motion preference (Settings -> Appearance): "reduced" forces every CSS
+   transition/animation to near-zero duration, same override technique as
+   prefers-reduced-motion, but user-controlled rather than only OS-level. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -242,7 +390,7 @@
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
 
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-body);
   --font-heading: var(--font-space-grotesk);
   --font-mono: var(--font-geist-mono);
 }

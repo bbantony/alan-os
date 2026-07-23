@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BottomNav } from "./bottom-nav";
 import { SidebarNav } from "./sidebar-nav";
+import { PageTransition } from "./page-transition";
 import type { ModuleAccess } from "@/lib/permissions";
 
 // The floating quick-capture "+" button used to live here — removed per
@@ -14,7 +15,9 @@ export function AppShell({ moduleAccess, children }: { moduleAccess: ModuleAcces
     <div className="flex min-h-full">
       <SidebarNav moduleAccess={moduleAccess} />
       <div className="flex flex-1 flex-col">
-        <main className="flex-1 pb-20 md:pb-8">{children}</main>
+        <main className="flex-1 pb-20 md:pb-8">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </div>
       <BottomNav moduleAccess={moduleAccess} />
     </div>

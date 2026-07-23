@@ -1,5 +1,15 @@
 import type { Metadata, Viewport } from "next";
-import { Space_Grotesk, Archivo, Fraunces, Inter, Geist_Mono } from "next/font/google";
+import {
+  Space_Grotesk,
+  Archivo,
+  Fraunces,
+  Inter,
+  Geist_Mono,
+  Sora,
+  Libre_Franklin,
+  DM_Serif_Display,
+  Manrope,
+} from "next/font/google";
 import { ThemeScript } from "@/components/theme/theme-script";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { ServiceWorkerRegister } from "@/components/pwa/sw-register";
@@ -26,6 +36,23 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+const sora = Sora({
+  variable: "--font-sora",
+  subsets: ["latin"],
+});
+const libreFranklin = Libre_Franklin({
+  variable: "--font-libre-franklin",
+  subsets: ["latin"],
+});
+const dmSerifDisplay = DM_Serif_Display({
+  variable: "--font-dm-serif-display",
+  subsets: ["latin"],
+  weight: "400",
+});
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: "Alan OS",
@@ -49,7 +76,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${archivo.variable} ${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${spaceGrotesk.variable} ${archivo.variable} ${fraunces.variable} ${inter.variable} ${geistMono.variable} ${sora.variable} ${libreFranklin.variable} ${dmSerifDisplay.variable} ${manrope.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

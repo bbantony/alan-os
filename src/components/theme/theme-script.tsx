@@ -17,8 +17,10 @@ const script = `
     root.classList.toggle("dark", isDark);
     root.setAttribute("data-palette", t.palette);
     root.setAttribute("data-heading-font", t.headingFont);
+    root.setAttribute("data-body-font", t.bodyFont || "inter");
     root.setAttribute("data-font-size", t.fontSize);
     root.setAttribute("data-density", t.density);
+    root.setAttribute("data-motion", t.motion || "full");
   } catch (e) {}
 })();
 `;

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useTheme } from "@/components/theme/theme-provider";
 import { PALETTES } from "@/lib/palettes";
-import type { HeadingFont, FontSize, Density } from "@/lib/palettes";
+import type { HeadingFont, BodyFont, FontSize, Density, MotionLevel } from "@/lib/palettes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { saveThemeSettings } from "../actions";
@@ -12,6 +12,14 @@ const HEADING_FONTS: { id: HeadingFont; label: string }[] = [
   { id: "space-grotesk", label: "Space Grotesk" },
   { id: "archivo", label: "Archivo" },
   { id: "fraunces", label: "Fraunces" },
+  { id: "sora", label: "Sora" },
+  { id: "libre-franklin", label: "Libre Franklin" },
+  { id: "dm-serif-display", label: "DM Serif Display" },
+];
+
+const BODY_FONTS: { id: BodyFont; label: string }[] = [
+  { id: "inter", label: "Inter" },
+  { id: "manrope", label: "Manrope" },
 ];
 
 const FONT_SIZES: { id: FontSize; label: string }[] = [
@@ -23,6 +31,11 @@ const FONT_SIZES: { id: FontSize; label: string }[] = [
 const DENSITIES: { id: Density; label: string }[] = [
   { id: "compact", label: "Compact" },
   { id: "comfortable", label: "Comfortable" },
+];
+
+const MOTION_LEVELS: { id: MotionLevel; label: string; description: string }[] = [
+  { id: "full", label: "Full", description: "Page transitions, list animations, everything." },
+  { id: "reduced", label: "Reduced", description: "Minimal motion — for a calmer feel or motion sensitivity." },
 ];
 
 export function AppearanceEditor() {
@@ -112,6 +125,25 @@ export function AppearanceEditor() {
 
       <section>
         <h2 className="mb-3 font-heading text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Body font
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {BODY_FONTS.map((f) => (
+            <Button
+              key={f.id}
+              type="button"
+              variant={theme.bodyFont === f.id ? "default" : "outline"}
+              onClick={() => setTheme({ bodyFont: f.id })}
+              style={{ fontFamily: `var(--font-${f.id})` }}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-heading text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Text size
         </h2>
         <div className="flex gap-2">
@@ -143,6 +175,28 @@ export function AppearanceEditor() {
             >
               {d.label}
             </Button>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <h2 className="mb-3 font-heading text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Motion
+        </h2>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {MOTION_LEVELS.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setTheme({ motion: m.id })}
+              className={cn(
+                "tap-press flex-1 rounded-xl border p-3 text-left transition-colors",
+                theme.motion === m.id ? "border-primary ring-2 ring-primary/30" : "border-border"
+              )}
+            >
+              <span className="text-sm font-medium">{m.label}</span>
+              <p className="text-xs text-muted-foreground">{m.description}</p>
+            </button>
           ))}
         </div>
       </section>
