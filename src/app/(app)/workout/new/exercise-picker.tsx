@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -198,31 +199,23 @@ export function ExercisePicker({
               placeholder="Exercise name"
               autoFocus
             />
-            <select
-              value={newMuscleGroup}
-              onChange={(e) => setNewMuscleGroup(e.target.value as MuscleGroup)}
-              className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-            >
+            <Select value={newMuscleGroup} onChange={(e) => setNewMuscleGroup(e.target.value as MuscleGroup)}>
               {MUSCLE_GROUPS.map((mg) => (
                 <option key={mg} value={mg}>
                   {MUSCLE_GROUP_LABELS[mg]}
                 </option>
               ))}
-            </select>
+            </Select>
 
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">Equipment</label>
-              <select
-                value={newEquipment}
-                onChange={(e) => setNewEquipment(e.target.value as EquipmentType)}
-                className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-              >
+              <Select value={newEquipment} onChange={(e) => setNewEquipment(e.target.value as EquipmentType)}>
                 {EQUIPMENT_TYPES.map((eq) => (
                   <option key={eq} value={eq}>
                     {EQUIPMENT_LABELS[eq]}
                   </option>
                 ))}
-              </select>
+              </Select>
               {newEquipment === "barbell" && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Barbell exercises let you enter plate weight instead of the total.

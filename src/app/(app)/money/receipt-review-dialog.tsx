@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
@@ -101,17 +102,13 @@ export function ReceiptReviewDialog({
             <Input type="date" value={txnDate} onChange={(e) => setTxnDate(e.target.value)} className="w-36" />
           </div>
 
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-          >
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
 
           <ul className="space-y-2">
             {items.map((item, i) => (
@@ -139,10 +136,10 @@ export function ReceiptReviewDialog({
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
-                <select
+                <Select
                   value={item.category_id ?? ""}
                   onChange={(e) => updateItem(i, { category_id: e.target.value || null })}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-xs"
+                  className="h-8 text-xs"
                 >
                   <option value="">Pick a category…</option>
                   {expenseCategories.map((c) => (
@@ -150,7 +147,7 @@ export function ReceiptReviewDialog({
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </li>
             ))}
           </ul>

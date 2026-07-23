@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
+import { Segmented } from "@/components/ui/segmented";
+import { toast } from "@/components/ui/toast";
 import { getFinanceIcon, AVAILABLE_FINANCE_ICON_NAMES } from "@/lib/finance/icon-registry";
 import { CHART_CATEGORICAL_LIGHT } from "@/lib/finance/chart-colors";
 import type { Category, CategoryKind } from "@/lib/finance/types";
@@ -30,6 +32,7 @@ export function MoneySettings({ initialCategories }: { initialCategories: Catego
       const result = await createCategory({ name: trimmed, icon, color, kind });
       if (result.category) {
         setCategories((prev) => [...prev, result.category!]);
+        toast.success(`"${trimmed}" category added`);
       }
     });
   }
@@ -39,6 +42,7 @@ export function MoneySettings({ initialCategories }: { initialCategories: Catego
     startTransition(async () => {
       await archiveCategory({ id });
     });
+    toast.success("Category archived");
   }
 
   function renderList(list: Category[]) {
@@ -88,33 +92,22 @@ export function MoneySettings({ initialCategories }: { initialCategories: Catego
       <form onSubmit={handleAdd} className="space-y-2 border-t border-border pt-4">
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="New category name…" />
         <div className="flex gap-2">
-          <select
-            value={icon}
-            onChange={(e) => setIcon(e.target.value)}
-            className="h-9 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
-            aria-label="Icon"
-          >
+          <Select value={icon} onChange={(e) => setIcon(e.target.value)} className="flex-1" aria-label="Icon">
             {AVAILABLE_FINANCE_ICON_NAMES.map((iconName) => (
               <option key={iconName} value={iconName}>
                 {iconName}
               </option>
             ))}
-          </select>
-          <div className="flex overflow-hidden rounded-lg border border-input">
-            {(["expense", "income"] as CategoryKind[]).map((k) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setKind(k)}
-                className={cn(
-                  "px-3 text-xs font-medium capitalize",
-                  kind === k ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-                )}
-              >
-                {k}
-              </button>
-            ))}
-          </div>
+          </Select>
+          <Segmented
+            className="w-32"
+            options={[
+              { value: "expense", label: "Expense" },
+              { value: "income", label: "Income" },
+            ]}
+            value={kind}
+            onChange={(v) => setKind(v as CategoryKind)}
+          />
           <Button type="submit" size="icon" disabled={!name.trim()}>
             <Plus className="size-4" />
           </Button>

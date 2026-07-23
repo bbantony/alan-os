@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { formatCents } from "@/lib/finance/money";
 import { parseCsv, guessColumns, normalizeCsvDate, type ColumnGuess } from "@/lib/finance/csv-parser";
@@ -171,7 +172,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
           <div className="grid grid-cols-2 gap-2">
             <label className="text-xs">
               Date column
-              <select
+              <Select
                 value={mapping.dateCol}
                 onChange={(e) => setMapping((m) => ({ ...m, dateCol: Number(e.target.value) }))}
                 className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
@@ -181,11 +182,11 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                     {h}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <label className="text-xs">
               Description column
-              <select
+              <Select
                 value={mapping.descriptionCol}
                 onChange={(e) => setMapping((m) => ({ ...m, descriptionCol: Number(e.target.value) }))}
                 className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
@@ -195,7 +196,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                     {h}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
 
@@ -208,7 +209,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
             <div className="grid grid-cols-2 gap-2">
               <label className="text-xs">
                 Debit column
-                <select
+                <Select
                   value={mapping.debitCol ?? ""}
                   onChange={(e) => setMapping((m) => ({ ...m, debitCol: e.target.value === "" ? null : Number(e.target.value) }))}
                   className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
@@ -219,11 +220,11 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                       {h}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label className="text-xs">
                 Credit column
-                <select
+                <Select
                   value={mapping.creditCol ?? ""}
                   onChange={(e) => setMapping((m) => ({ ...m, creditCol: e.target.value === "" ? null : Number(e.target.value) }))}
                   className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
@@ -234,13 +235,13 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                       {h}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
             </div>
           ) : (
             <label className="text-xs">
               Amount column (negative = expense, positive = income)
-              <select
+              <Select
                 value={mapping.amountCol ?? ""}
                 onChange={(e) => setMapping((m) => ({ ...m, amountCol: e.target.value === "" ? null : Number(e.target.value) }))}
                 className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
@@ -251,23 +252,19 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                     {h}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           )}
 
           <label className="text-xs">
             Which account is this?
-            <select
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-            >
+            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="mt-1 h-8">
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -308,7 +305,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                     </p>
                   </div>
                 </div>
-                <select
+                <Select
                   value={rowCategory[c.tempId] ?? ""}
                   onChange={(e) => setRowCategory((prev) => ({ ...prev, [c.tempId]: e.target.value }))}
                   className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-xs"
@@ -319,7 +316,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                       {cat.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             ))}
           </div>

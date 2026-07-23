@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { dollarsToCents } from "@/lib/finance/money";
 import { ACCOUNT_TYPE_LABELS, type Account, type AccountType, type CurrencyCode } from "@/lib/finance/types";
@@ -66,25 +67,17 @@ export function AccountForm({ onClose, onCreated }: { onClose: () => void; onCre
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (e.g. Scene+ Visa)" autoFocus />
           <Input value={institution} onChange={(e) => setInstitution(e.target.value)} placeholder="Institution (e.g. Scotiabank)" />
           <div className="flex gap-2">
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value as AccountType)}
-              className="h-9 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
-            >
+            <Select value={type} onChange={(e) => setType(e.target.value as AccountType)} className="flex-1">
               {ACCOUNT_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {ACCOUNT_TYPE_LABELS[t]}
                 </option>
               ))}
-            </select>
-            <select
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
-              className="h-9 w-24 rounded-lg border border-input bg-transparent px-2 text-sm"
-            >
+            </Select>
+            <Select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)} className="w-24">
               <option value="CAD">CAD</option>
               <option value="INR">INR</option>
-            </select>
+            </Select>
           </div>
           <Input
             type="number"

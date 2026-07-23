@@ -5,6 +5,7 @@ import { Delete } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { todayInAppTimezone } from "@/lib/time";
@@ -180,17 +181,13 @@ export function QuickLogForm({
               })}
             </div>
 
-            <select
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-            >
+            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
-            </select>
+            </Select>
 
             <div className="relative">
               <Input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder="Merchant (optional)" />

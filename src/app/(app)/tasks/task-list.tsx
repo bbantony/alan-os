@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Bell, BellRing, Check, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -204,28 +205,20 @@ export function TaskList({
           ))}
         </div>
         <div className="flex gap-2">
-          <select
-            value={horizon}
-            onChange={(e) => setHorizon(e.target.value as TaskHorizon)}
-            className="h-8 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
-          >
+          <Select value={horizon} onChange={(e) => setHorizon(e.target.value as TaskHorizon)} className="h-8 flex-1">
             {TASK_HORIZONS.map((h) => (
               <option key={h} value={h}>
                 {TASK_HORIZON_LABELS[h]}
               </option>
             ))}
-          </select>
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value as TaskCategory)}
-            className="h-8 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
-          >
+          </Select>
+          <Select value={category} onChange={(e) => setCategory(e.target.value as TaskCategory)} className="h-8 flex-1">
             {Object.entries(TASK_CATEGORY_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
             ))}
-          </select>
+          </Select>
           <Button type="submit" size="icon" aria-label="Add task">
             <Plus className="size-4" />
           </Button>

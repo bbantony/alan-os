@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { Check, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { toast } from "@/components/ui/toast";
 import { deleteExercise, updateExercise } from "@/app/(app)/workout/actions";
 import {
   EQUIPMENT_LABELS,
@@ -57,6 +59,7 @@ export function ExerciseManager({
     }
     onUpdated({ ...exercise, name: trimmed, muscle_group: muscleGroup, equipment });
     setEditingId(null);
+    toast.success("Exercise updated");
   }
 
   async function handleDelete(exercise: Exercise) {
@@ -68,6 +71,7 @@ export function ExerciseManager({
       return;
     }
     onDeleted(exercise.id);
+    toast.success("Exercise deleted");
   }
 
   return (
@@ -88,28 +92,28 @@ export function ExerciseManager({
             {editingId === exercise.id ? (
               <div className="space-y-2">
                 <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-                <select
+                <Select
                   value={muscleGroup}
                   onChange={(e) => setMuscleGroup(e.target.value as MuscleGroup)}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  className="h-8"
                 >
                   {(Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[]).map((mg) => (
                     <option key={mg} value={mg}>
                       {MUSCLE_GROUP_LABELS[mg]}
                     </option>
                   ))}
-                </select>
-                <select
+                </Select>
+                <Select
                   value={equipment}
                   onChange={(e) => setEquipment(e.target.value as EquipmentType)}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  className="h-8"
                 >
                   {EQUIPMENT_TYPES.map((eq) => (
                     <option key={eq} value={eq}>
                       {EQUIPMENT_LABELS[eq]}
                     </option>
                   ))}
-                </select>
+                </Select>
                 {error && <p className="text-xs text-destructive">{error}</p>}
                 <div className="flex gap-2">
                   <Button type="button" variant="outline" size="sm" className="flex-1" onClick={() => setEditingId(null)}>

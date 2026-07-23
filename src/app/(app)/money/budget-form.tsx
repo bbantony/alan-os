@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { todayInAppTimezone } from "@/lib/time";
 import { dollarsToCents } from "@/lib/finance/money";
@@ -69,30 +70,22 @@ export function BudgetForm({
           <DialogTitle>New budget</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-          >
+          <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
           <Input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Amount" />
           <div className="flex gap-2">
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value as BudgetPeriod)}
-              className="h-9 flex-1 rounded-lg border border-input bg-transparent px-2 text-sm"
-            >
+            <Select value={period} onChange={(e) => setPeriod(e.target.value as BudgetPeriod)} className="flex-1">
               {PERIODS.map((p) => (
                 <option key={p} value={p}>
                   {BUDGET_PERIOD_LABELS[p]}
                 </option>
               ))}
-            </select>
+            </Select>
             <Input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} className="flex-1" />
           </div>
           <p className="text-xs text-muted-foreground">

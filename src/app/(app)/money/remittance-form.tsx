@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
 import { todayInAppTimezone } from "@/lib/time";
 import { dollarsToCents, formatCents } from "@/lib/finance/money";
@@ -74,17 +75,13 @@ export function RemittanceForm({
           <DialogTitle>Send money home</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className="h-9 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
-          >
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">CAD sent</label>
             <Input type="number" inputMode="decimal" value={cad} onChange={(e) => setCad(e.target.value)} placeholder="0.00" />
