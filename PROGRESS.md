@@ -322,9 +322,12 @@ diagnosis.
 
 ---
 
-Next session: "Read SPEC.md. Phase 5 is complete and deployed. Execute
-Phase 6 only" (once the owner actions from Phases 3 and 5 — Google OAuth
-credentials, the cron-job.org pinger, and the Gemini API key — are done,
-since none of Phase 6's Journal/Vinyl work depends on them, but full
-reminders/calendar delivery and AI receipt scanning still do) — though the
-Admin/Design overhaul above takes priority per the owner's latest request.
+Next session: the Admin/Design overhaul and the Routines + One Timeline
+unification (Parts 1-6 above) are both complete and deployed. Nothing is
+currently in progress. The natural next step is "Read SPEC.md. Phase 5 is
+complete and deployed. Execute Phase 6 only" (Journal & Vinyl) — once the
+owner actions from Phases 3 and 5 are done (Google OAuth credentials, the
+cron-job.org pinger, and the Gemini API key; none of Phase 6 depends on
+them, but full reminders/calendar delivery and AI receipt scanning still
+do) — unless the owner has a new, more pressing request instead, which
+should take priority the same way Admin/Design and Routines both did.
