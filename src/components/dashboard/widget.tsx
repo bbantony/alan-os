@@ -2,21 +2,26 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fadeInUpVariants } from "@/lib/motion";
 import { ComingSoonIllustration } from "@/components/illustrations";
 
 export function DashboardWidget({
   title,
-  icon: Icon,
+  icon,
   href,
   comingInPhase,
   className,
   children,
 }: {
   title: string;
-  icon: LucideIcon;
+  // A rendered element (e.g. <Sparkles className="size-4" />), not a
+  // component reference — this is a Client Component but gets rendered
+  // straight from the Server Component today/page.tsx, and a bare component
+  // reference (a function) isn't serializable across that boundary the way
+  // an already-built element is. Color is applied via currentColor on the
+  // wrapping span, so callers don't need to know the "soon" state.
+  icon: React.ReactNode;
   href?: string;
   comingInPhase?: number;
   className?: string;
@@ -38,7 +43,7 @@ export function DashboardWidget({
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Icon className={cn("size-4", soon ? "text-muted-foreground/50" : "text-primary")} />
+          <span className={cn("inline-flex", soon ? "text-muted-foreground/50" : "text-primary")}>{icon}</span>
           <span
             className={cn(
               "font-heading text-sm font-semibold",

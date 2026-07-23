@@ -66,7 +66,7 @@ export default async function TodayPage() {
       <DashboardGrid>
         <DashboardWidget
           title="Your AI briefing"
-          icon={Sparkles}
+          icon={<Sparkles className="size-4" />}
           comingInPhase={7}
           className="sm:col-span-2 border-accent/40 bg-accent/5"
         >
@@ -76,14 +76,14 @@ export default async function TodayPage() {
         </DashboardWidget>
 
         {access.tasks && (
-          <DashboardWidget title="Tasks" icon={ListChecks} href="/tasks">
+          <DashboardWidget title="Tasks" icon={<ListChecks className="size-4" />} href="/tasks">
             <div className="tabular text-2xl font-semibold">{dueToday}</div>
             <p className="text-muted-foreground">due today · {weeklyDoneCount} done this week</p>
           </DashboardWidget>
         )}
 
         {access.shopping && (
-          <DashboardWidget title="Shopping" icon={ShoppingCart} href="/shopping">
+          <DashboardWidget title="Shopping" icon={<ShoppingCart className="size-4" />} href="/shopping">
             <div className="tabular text-2xl font-semibold">{uncheckedShopping}</div>
             <p className="text-muted-foreground">
               {suggestions.length > 0
@@ -94,7 +94,7 @@ export default async function TodayPage() {
         )}
 
         {access.money && (
-          <DashboardWidget title="Money" icon={Wallet} href="/money">
+          <DashboardWidget title="Money" icon={<Wallet className="size-4" />} href="/money">
             <div className="tabular text-2xl font-semibold">{formatCents(money.safeToSpendCents)}</div>
             <p className="text-muted-foreground">
               safe to spend
@@ -104,7 +104,7 @@ export default async function TodayPage() {
         )}
 
         {access.workout && (
-          <DashboardWidget title="Workout" icon={Dumbbell} href="/workout">
+          <DashboardWidget title="Workout" icon={<Dumbbell className="size-4" />} href="/workout">
             <div className="flex items-center gap-1.5">
               <Flame className="size-4 text-accent" />
               <span className="tabular text-2xl font-semibold">{workout.currentStreak}</span>
@@ -116,7 +116,7 @@ export default async function TodayPage() {
         )}
 
         {access.calendar && (
-          <DashboardWidget title="Calendar & Reminders" icon={CalendarDays} href="/calendar">
+          <DashboardWidget title="Calendar & Reminders" icon={<CalendarDays className="size-4" />} href="/calendar">
             {calendar.nextEventTitle ? (
               <>
                 <div className="truncate text-sm font-semibold">{calendar.nextEventTitle}</div>
@@ -137,19 +137,19 @@ export default async function TodayPage() {
           <DayPlannerCard isEvening={isEvening} focus={focus} yesterdayReflection={yesterdayReflection} openTasks={tasks} />
         )}
 
-        <DashboardWidget title="Journal" icon={BookImage} comingInPhase={6}>
+        <DashboardWidget title="Journal" icon={<BookImage className="size-4" />} comingInPhase={6}>
           A nudge to post today&apos;s photo will live here.
         </DashboardWidget>
 
-        <DashboardWidget title="Weather" icon={CloudSun} comingInPhase={7}>
+        <DashboardWidget title="Weather" icon={<CloudSun className="size-4" />} comingInPhase={7}>
           Today&apos;s conditions for Winnipeg.
         </DashboardWidget>
 
-        <DashboardWidget title="World news" icon={Newspaper} comingInPhase={7}>
+        <DashboardWidget title="World news" icon={<Newspaper className="size-4" />} comingInPhase={7}>
           A handful of top headlines.
         </DashboardWidget>
 
-        <DashboardWidget title="Local news" icon={MapPin} comingInPhase={7}>
+        <DashboardWidget title="Local news" icon={<MapPin className="size-4" />} comingInPhase={7}>
           Headlines for a region you choose in Settings.
         </DashboardWidget>
       </DashboardGrid>

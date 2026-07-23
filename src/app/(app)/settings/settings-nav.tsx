@@ -12,7 +12,6 @@ function LinkSection({ title, links, activeHref }: { title: string; links: Setti
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
       <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
         {links.map((item) => {
-          const Icon = item.icon;
           const active = activeHref === item.href;
           return (
             <li key={item.href}>
@@ -23,7 +22,7 @@ function LinkSection({ title, links, activeHref }: { title: string; links: Setti
                   active && "bg-muted text-primary"
                 )}
               >
-                <Icon className={cn("size-4", active ? "text-primary" : "text-muted-foreground")} strokeWidth={1.75} />
+                <span className={cn("inline-flex", active ? "text-primary" : "text-muted-foreground")}>{item.icon}</span>
                 {item.label}
               </Link>
             </li>
