@@ -21,12 +21,13 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
-// Bottom tab bar has room for Today + 3 module slots + More — priority order
-// picks which modules fill those 3 slots when a user has access to more or
-// fewer than 3 (Today and More are always present, neither is module-gated).
+// Bottom tab bar: Today + these module slots (only the ones the account has
+// access to) + More. Shopping was previously buried under More even though
+// it's a daily, at-the-store module — moved up here per owner feedback.
 const PRIMARY_CANDIDATES: { id: ModuleId; item: NavItem }[] = [
   { id: "money", item: { label: "Money", href: "/money", icon: Wallet } },
   { id: "tasks", item: { label: "Tasks", href: "/tasks", icon: ListChecks } },
+  { id: "shopping", item: { label: "Shop", href: "/shopping", icon: ShoppingCart } },
   { id: "workout", item: { label: "Workout", href: "/workout", icon: Dumbbell } },
 ];
 
@@ -43,7 +44,6 @@ const MORE_CANDIDATES: { id: ModuleId; item: NavItem }[] = [
   { id: "calendar", item: { label: "Calendar", href: "/calendar", icon: CalendarDays } },
   { id: "journal", item: { label: "Journal", href: "/journal", icon: BookImage } },
   { id: "vinyl", item: { label: "Vinyl", href: "/vinyl", icon: Disc3 } },
-  { id: "shopping", item: { label: "Shopping", href: "/shopping", icon: ShoppingCart } },
 ];
 
 export function getMoreLinks(moduleAccess: ModuleAccess): NavItem[] {
