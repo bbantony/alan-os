@@ -667,4 +667,58 @@ real account exists.
 
 ---
 
+## Routines, and how Tasks/Calendar/Reminders fit together now
+
+If Tasks and Calendar used to feel like two separate, confusing things, here's the
+simple way to think about it now — there are really only **three kinds of things**:
+
+1. **A Task** — something to do once. Check it off, it's gone (or, if it repeats,
+   the next one appears automatically).
+2. **A Routine** (new) — something you do on a schedule and want to build a habit
+   around, like watering plants every few days or a morning checklist. Routines don't
+   get "completed" forever — they show up again next time they're due, and you build a
+   streak by keeping up with them.
+3. **A Calendar Event** — something on your actual Google Calendar, at a specific time.
+
+**"Reminder" isn't a separate thing to create anymore.** It's just a bell you can turn
+on for any Task or Routine, right where you're already creating or editing it. You'll
+never see a bare "add a reminder" button anywhere — you always start from the Task or
+Routine itself.
+
+### Using Routines
+
+1. Open **Tasks**. At the top, above your regular task list, you'll see a **Your
+   Routines** section.
+2. Tap **+ Add routine** to create one: give it a name, pick an icon, choose how often
+   it repeats (daily, weekdays, weekly on certain days, every N days, or monthly), and
+   optionally a rough time of day. If you want a reminder, set a time and flip the
+   switch.
+3. If it's a multi-step routine (like "Morning Routine: make bed, stretch, review
+   today"), turn on **Checklist** and add each step — tapping the card opens a small
+   checklist instead of marking it done in one tap.
+4. Each routine shows a little flame with a number next to it — that's your current
+   streak (same idea as the Workout streak). Missing a single day here and there won't
+   reset it, but missing two days in the same week will.
+5. Done with a routine for good? Tap the trash icon that appears when you hover/press
+   on its card to archive it — its streak history goes with it.
+
+### The "you keep adding this" nudge
+
+If you've typed the same task in 3 or more times over the last month and a half, Tasks
+will show a small banner offering to turn it into a Routine for you, one tap. This is
+just counting how often you've added something — not AI, just it noticing a pattern
+you've already shown it.
+
+### Today's dashboard, simplified
+
+The Today page used to have a separate Tasks card, a separate Calendar card, and a
+separate "plan tomorrow" card — all showing overlapping information in different ways.
+Now there's **one card** that shows, top to bottom: the single most important thing to
+do right now, your routines due today (tap to check off), your tasks due or overdue
+today, your next calendar event, and (after 8pm) the evening planning ritual for
+tomorrow exactly as before. If you picked 3 goals for today last night, you'll now see
+how many of them actually got done, instead of that just disappearing.
+
+---
+
 *(Phase 6 section will be added here once its checklist is complete.)*

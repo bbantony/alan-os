@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { staggerContainerVariants } from "@/lib/motion";
 
-// Direct motion children (DashboardWidget, DayPlannerCard) share
+// Direct motion children (DashboardWidget, TodayTimeline) share
 // fadeInUpVariants and have no initial/animate of their own — they inherit
 // this container's "hidden"->"visible" transition, giving the whole
 // dashboard grid a subtle staggered entrance instead of popping in at once.

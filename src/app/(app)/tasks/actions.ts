@@ -211,6 +211,15 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
     .select("*")
     .single();
 
+  // Re-point any reminder that was tracking the just-completed instance at
+  // the new one, so recurring tasks with "Remind me" on don't go silent
+  // after their very first completion.
+  await supabase
+    .from("reminders")
+    .update({ linked_task_id: newId })
+    .eq("linked_task_id", input.id)
+    .eq("user_id", user.id);
+
   revalidatePath("/tasks");
   return { nextTask: (created as Task) ?? undefined };
 }

@@ -222,7 +222,7 @@ export async function createReminderFromTask(input: { taskId: string }): Promise
   const { supabase, user } = await requireUser();
   const { data: task } = await supabase
     .from("tasks")
-    .select("id, title, due_at")
+    .select("id, title, due_at, rrule")
     .eq("id", input.taskId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -237,10 +237,13 @@ export async function createReminderFromTask(input: { taskId: string }): Promise
     .maybeSingle();
   if (existing) return {};
 
+  // Copies the task's own rrule, matching updateTask's reminder-upsert path —
+  // otherwise a recurring task's bell-icon reminder would fire once and stop.
   await supabase.from("reminders").insert({
     user_id: user.id,
     title: task.title,
     remind_at: task.due_at,
+    rrule: task.rrule,
     linked_task_id: task.id,
   });
 
@@ -301,7 +304,15 @@ export async function sendTestPush(): Promise<{ sent: number }> {
 
 // ---------- Day-planner ritual ----------
 
-export async function getTodayFocus(): Promise<{ source: "planned" | "auto"; goals: TopGoal[] }> {
+export interface TodayFocusGoal extends TopGoal {
+  done: boolean;
+}
+
+// Closes the loop the evening ritual never had: a picked goal now shows
+// whether it actually got done, instead of being write-once/never-checked-
+// again. Free-typed goals (taskId null) have no task to check against, so
+// they just never show as done — that's an accepted limitation, not a bug.
+export async function getTodayFocus(): Promise<{ source: "planned" | "auto"; goals: TodayFocusGoal[] }> {
   const { supabase, user } = await requireUser();
   const today = todayInAppTimezone();
 
@@ -313,7 +324,22 @@ export async function getTodayFocus(): Promise<{ source: "planned" | "auto"; goa
     .maybeSingle();
 
   const planned = (plan?.top_goals as TopGoal[] | undefined) ?? [];
-  if (planned.length > 0) return { source: "planned", goals: planned };
+  if (planned.length > 0) {
+    const taskIds = planned.filter((g) => g.taskId).map((g) => g.taskId as string);
+    let completedIds = new Set<string>();
+    if (taskIds.length > 0) {
+      const { data: completed } = await supabase
+        .from("tasks")
+        .select("id")
+        .in("id", taskIds)
+        .not("completed_at", "is", null);
+      completedIds = new Set((completed ?? []).map((t) => t.id as string));
+    }
+    return {
+      source: "planned",
+      goals: planned.map((g) => ({ ...g, done: g.taskId ? completedIds.has(g.taskId) : false })),
+    };
+  }
 
   const tasks = await getTasks();
   const [y, m, d] = today.split("-").map(Number);
@@ -324,7 +350,7 @@ export async function getTodayFocus(): Promise<{ source: "planned" | "auto"; goa
   const todayHorizon = tasks.filter((t) => !overdueIds.has(t.id) && (t.horizon === "now" || t.horizon === "today"));
 
   const combined: Task[] = [...overdue, ...todayHorizon].slice(0, 3);
-  return { source: "auto", goals: combined.map((t) => ({ taskId: t.id, title: t.title })) };
+  return { source: "auto", goals: combined.map((t) => ({ taskId: t.id, title: t.title, done: false })) };
 }
 
 export async function getYesterdayReflection(): Promise<string | null> {
@@ -447,18 +473,24 @@ export async function getAgenda(range: "today" | "week"): Promise<AgendaItem[]> 
 
   const { data: reminders } = await supabase
     .from("reminders")
-    .select("id, title, remind_at")
+    .select("id, title, remind_at, linked_task_id")
     .eq("user_id", user.id)
     .eq("status", "active")
     .gte("remind_at", rangeStart.toISOString())
     .lt("remind_at", rangeEnd.toISOString());
+  const taskIdsWithReminder = new Set(
+    (reminders ?? []).filter((r) => r.linked_task_id).map((r) => r.linked_task_id as string)
+  );
   for (const r of reminders ?? []) {
     items.push({ id: `reminder-${r.id}`, title: r.title, time: r.remind_at, source: "reminder" });
   }
 
+  // A task with a linked reminder already has an entry above (from the
+  // reminder itself, which is push-capable and richer) — skip it here so it
+  // doesn't show twice.
   const tasks = await getTasks();
   for (const t of tasks) {
-    if (!t.due_at) continue;
+    if (!t.due_at || taskIdsWithReminder.has(t.id)) continue;
     const dueTime = new Date(t.due_at);
     if (dueTime >= rangeStart && dueTime < rangeEnd) {
       items.push({ id: `task-${t.id}`, title: t.title, time: t.due_at, source: "task" });

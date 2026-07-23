@@ -289,6 +289,37 @@ diagnosis.
       something to bolt on inline — flagged for the owner to decide on,
       not started.
 
+### Part 6 — Routines + One Timeline unification (Tasks/Calendar/Reminders redesign)
+- [x] **New Routines module.** Migration `0020` adds `routines`,
+      `routine_steps`, `routine_completions` (strict per-user RLS) plus a
+      `reminders.linked_routine_id` column. A routine is a repeating habit
+      tracked with a streak (single habit or multi-step checklist), living
+      inside the Tasks page rather than a new nav tab.
+- [x] **Fixed 4 real bugs found during the redesign research**, not just
+      "the owner is confused": a recurring task's reminder no longer orphans
+      after the task's first completion; the bell-icon reminder path now
+      copies a task's recurrence rule (previously only the detail-dialog
+      path did); the Agenda no longer shows a task+its reminder as two
+      separate entries; the evening-ritual's picked goals now show "X of 3
+      done" instead of never being checked again.
+- [x] **Shared streak math promoted.** `src/lib/streaks.ts` is now the one
+      copy of the streak-with-one-forgiven-miss logic; Workout re-exports
+      from it unchanged. New `<StreakBadge>` component replaces two
+      copy-pasted Flame+number snippets.
+- [x] **Today dashboard consolidated.** The old "Tasks" widget, "Calendar &
+      Reminders" widget, and `DayPlannerCard` (three overlapping,
+      non-cross-referenced views of overlapping due-today data) are now one
+      `<TodayTimeline>` card: routines due today, tasks due/overdue, next
+      calendar event, the evening ritual, and a single "what's next" line at
+      the top.
+- [x] **The "innovative" piece**: a plain-SQL (no AI) nudge — a task title
+      added 3+ times in 45 days offers to become a routine with one tap.
+- [x] Full plan researched and approved via plan-mode before any code, per
+      the owner's explicit "come up with a plan first" ask; verified against
+      the live database (schema/RLS/cascade-delete, a full routine lifecycle
+      round trip, the recurring-task-reminder fix, `isDueOnDate` against
+      daily/weekly/every-N-days patterns) both before and after building.
+
 ---
 
 Next session: "Read SPEC.md. Phase 5 is complete and deployed. Execute

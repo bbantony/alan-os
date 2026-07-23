@@ -170,7 +170,7 @@ export function TaskList({
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8 pb-4">
+    <div>
       <div className="mb-1 flex items-center justify-between">
         <h1 className="font-heading text-2xl font-semibold">Tasks</h1>
         <span className="text-xs font-medium text-muted-foreground">

@@ -85,3 +85,20 @@ export function nextOccurrenceUtc(rruleText: string, afterUtc: Date): Date | nul
     APP_TIMEZONE
   );
 }
+
+// Routines care about calendar days, not precise instants (unlike reminders'
+// remind_at) — so this checks plain YYYY-MM-DD membership with floating UTC
+// dates rather than doing the timezone-instant reconstruction nextOccurrenceUtc
+// needs. `dtstartDateStr` anchors interval-based patterns (every_n_days) to a
+// stable epoch — a routine's own created_at date is the natural choice.
+export function isDueOnDate(rruleText: string, dtstartDateStr: string, dateStr: string): boolean {
+  const [dy, dm, dd] = dtstartDateStr.split("-").map(Number);
+  const dtstart = new Date(Date.UTC(dy, dm - 1, dd));
+  const parsed = RRule.parseString(rruleText);
+  const rule = new RRule({ ...parsed, dtstart });
+
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dayStart = new Date(Date.UTC(y, m - 1, d));
+  const dayEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
+  return rule.between(dayStart, dayEnd, true).length > 0;
+}

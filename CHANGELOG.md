@@ -832,3 +832,88 @@ Motion preference (Full/Reduced) — previously the app had zero page-level moti
 **Everything above is logged here, in `PROGRESS.md`, and in `MANUAL.md`** per the
 owner's explicit "make sure you've logged everything" ask — nothing in this entry
 describes work that isn't also reflected in those two files.
+
+## 18. "I don't understand the relationship between Tasks and Calendar" — Routines + One Timeline unification
+
+**What was asked:** the owner said Tasks/Calendar felt confusing and disconnected —
+he's never really used a task/calendar system before, wants to build the habit of using
+this one for everything, and asked for "a great super innovative plan" that connects
+Calendar, Tasks, Reminders, and a new concept of Routines into one system that's
+sophisticated underneath but very simple to use. Explicitly asked for a plan first, which
+was researched, written, and approved via the normal plan-mode flow before any code.
+
+**Research surfaced 4 real bugs/inconsistencies in already-shipped code**, not just a
+"the user is confused" situation:
+1. Completing a recurring task spawned its next instance but never re-pointed the old
+   task's linked reminder — a recurring task with "Remind me" on silently stopped
+   reminding after its very first completion.
+2. The bell-icon "Remind me" path (`createReminderFromTask`) never copied a task's
+   recurrence rule, while the task-detail-dialog's save path did — same action, two
+   different behaviors depending on which button you used.
+3. The Agenda view merged tasks and reminders with no dedup — a task with a reminder
+   attached showed up twice.
+4. The evening-planning ritual's picked "top 3 goals" were write-once/read-once —
+   nothing ever showed whether they actually got done the next day.
+
+**The mental model, collapsed from 4 things to 3 + 1 universal attribute:**
+- **Task** — a one-off thing to do (unchanged).
+- **Routine** (new) — a repeating habit tracked like a streak, not a to-do that nags
+  forever. Can be a single habit ("Water plants") or a checklist ("Morning Routine").
+- **Event** — a real Google Calendar event (unchanged).
+- **Reminder stops being a 4th thing you create** — it's now an attribute (a bell) you
+  turn on for a Task or Routine; the UI never asks you to "make a reminder" on its own.
+
+**What actually changed, one by one:**
+- New migration `0020_routines.sql`: `routines`, `routine_steps`, `routine_completions`
+  tables (strict per-user RLS, same pattern as every other table) plus a
+  `reminders.linked_routine_id` column. A routine is one stable row forever — unlike a
+  recurring task (which spawns a new row per occurrence), each day's completion is just
+  a log entry in `routine_completions`. Deliberate, not an inconsistency: editing a
+  routine should affect every future day at once.
+- Fixed all 4 bugs found above: `setTaskCompleted` now re-points a completed recurring
+  task's reminder at the freshly-spawned next instance; `createReminderFromTask` now
+  copies the task's rrule; `getAgenda` now excludes a task from its own listing if a
+  reminder is already showing it; `getTodayFocus` now reports done/not-done per goal by
+  checking each goal's linked task's completion status.
+- `src/lib/streaks.ts` — the exact streak-with-one-forgiven-miss math that was
+  previously inline-only in Workout (`src/lib/workout/streaks.ts`) is now shared;
+  Workout re-exports from the new location so nothing there changed behavior. New
+  `<StreakBadge>` component replaces two copy-pasted Flame+number snippets and is now
+  used by both Workout and Routines.
+- New `src/lib/routines/` (types, icon registry reusing Shopping's icon-registry
+  pattern) and `src/app/(app)/routines/actions.ts` (`getRoutines`, `getRoutinesDueToday`,
+  `createRoutine`, `archiveRoutine`, `completeRoutineToday`, `uncompleteRoutineToday`,
+  and `getRoutineSuggestions`). Routines reuse the exact same rrule engine tasks and
+  reminders already use (`buildRRuleString`/`nextOccurrenceUtc`) plus one new helper,
+  `isDueOnDate`, for the simpler "is this routine due on this calendar day" check a
+  routine needs (as opposed to reminders' precise-instant math).
+- Routines live inside the **Tasks page**, not a new bottom-nav tab (a 7th tab for a
+  brand-new concept would work against the Shopping-reachability fix from entry 17) — a
+  "Your Routines" section of streak cards sits above the existing horizon-grouped task
+  list, with its own "+ Add routine" flow (title, icon, category, repeat schedule,
+  optional multi-step checklist, optional reminder).
+- **The innovative piece**: a lightweight, non-AI nudge — if a task title has been
+  independently added 3+ times in the last 45 days, a banner offers to turn it into a
+  routine with one tap. Plain SQL frequency counting, no AI, consistent with keeping
+  Phase 7's AI work out of scope for now.
+- Today's dashboard: removed the standalone "Tasks" widget and the "Calendar &
+  Reminders" widget (both summarized overlapping due-today data with zero awareness of
+  each other) and replaced them, along with the old `DayPlannerCard`, with one
+  `<TodayTimeline>` card — routines due today (tap to check off, streak visible), tasks
+  due/overdue today, the next calendar event, and the evening-planning ritual all in one
+  place, plus a single "what's next" line at the top (overdue > due-today task > next
+  routine > next event) answering the one question a novice actually opens the app to
+  ask. The evening ritual's picked goals now show "X of 3 done" instead of never being
+  checked again.
+
+**Verified against the live database before and after building on top:** confirmed the
+new tables' columns/RLS/cascade-delete behavior directly; round-tripped a full routine
+lifecycle (create with steps → complete 3 consecutive days → streak computed correctly
+via the promoted `computeStreak`); reproduced the recurring-task-reminder bug fix
+end-to-end (spawn next instance, re-point the reminder, confirm it now points at the new
+task); sanity-checked `isDueOnDate` against daily/weekly/every-N-days patterns. Caught
+and fixed one bug in my own new code before shipping: the reminder time for a new
+routine was first built from the server's local wall clock instead of the app's
+`zonedTimeToUtc` helper, which would have drifted against Vercel's UTC runtime exactly
+like the timezone bug class already fixed elsewhere this session — corrected before
+committing, not after.

@@ -1,18 +1,16 @@
 import {
   Sparkles,
-  ListChecks,
   ShoppingCart,
   Wallet,
   Dumbbell,
   Flame,
-  CalendarDays,
   BookImage,
   CloudSun,
   Newspaper,
   MapPin,
 } from "lucide-react";
 import { getCurrentProfile } from "@/lib/supabase/profile";
-import { getTasks, getWeeklyDoneCount } from "@/app/(app)/tasks/actions";
+import { getTasks } from "@/app/(app)/tasks/actions";
 import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
 import { getWorkoutDashboardSummary } from "@/app/(app)/workout/actions";
 import { getFinanceDashboardSummary } from "@/app/(app)/money/actions";
@@ -21,11 +19,12 @@ import {
   getTodayFocus,
   getYesterdayReflection,
 } from "@/app/(app)/calendar/actions";
+import { getRoutinesDueToday } from "@/app/(app)/routines/actions";
 import { formatCents } from "@/lib/finance/money";
-import { formatInAppTimezone, isEveningPlanningTime, todayInAppTimezone } from "@/lib/time";
+import { isEveningPlanningTime, todayInAppTimezone, zonedTimeToUtc } from "@/lib/time";
 import { DashboardWidget } from "@/components/dashboard/widget";
 import { SunriseIllustration } from "@/components/illustrations";
-import { DayPlannerCard } from "./day-planner-card";
+import { TodayTimeline } from "./today-timeline";
 import { DashboardGrid } from "./dashboard-grid";
 import { NO_MODULES_ACCESS } from "@/lib/permissions";
 
@@ -33,10 +32,9 @@ export default async function TodayPage() {
   const profile = await getCurrentProfile();
   const access = profile?.moduleAccess ?? NO_MODULES_ACCESS;
 
-  const [tasks, weeklyDoneCount, shoppingItems, suggestions, workout, money, calendar, focus, yesterdayReflection] =
+  const [tasks, shoppingItems, suggestions, workout, money, calendar, focus, yesterdayReflection, routinesDueToday] =
     await Promise.all([
       access.tasks ? getTasks() : Promise.resolve([]),
-      access.tasks ? getWeeklyDoneCount() : Promise.resolve(0),
       access.shopping ? getShoppingItems() : Promise.resolve([]),
       access.shopping ? getStapleSuggestions() : Promise.resolve([]),
       access.workout ? getWorkoutDashboardSummary() : Promise.resolve({ currentStreak: 0, loggedToday: false }),
@@ -46,12 +44,19 @@ export default async function TodayPage() {
         : Promise.resolve({ nextEventTitle: null, nextEventTime: null, remindersDueToday: 0 }),
       access.calendar ? getTodayFocus() : Promise.resolve({ source: "auto" as const, goals: [] }),
       access.calendar ? getYesterdayReflection() : Promise.resolve(null),
+      access.tasks ? getRoutinesDueToday() : Promise.resolve([]),
     ]);
 
   const name = profile?.displayName?.split(" ")[0] ?? "there";
-  const dueToday = tasks.filter((t) => t.horizon === "today").length;
   const uncheckedShopping = shoppingItems.filter((i) => !i.checked).length;
   const isEvening = isEveningPlanningTime();
+
+  const today = todayInAppTimezone();
+  const [y, m, d] = today.split("-").map(Number);
+  const todayStartUtc = zonedTimeToUtc({ year: y, month: m, day: d, hour: 0, minute: 0, second: 0 });
+  const overdueTasks = tasks.filter((t) => t.due_at && new Date(t.due_at) < todayStartUtc);
+  const overdueIds = new Set(overdueTasks.map((t) => t.id));
+  const dueTodayTasks = tasks.filter((t) => !overdueIds.has(t.id) && (t.horizon === "now" || t.horizon === "today"));
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -75,11 +80,18 @@ export default async function TodayPage() {
           and news — written fresh each day.
         </DashboardWidget>
 
-        {access.tasks && (
-          <DashboardWidget title="Tasks" icon={<ListChecks className="size-4" />} href="/tasks">
-            <div className="tabular text-2xl font-semibold">{dueToday}</div>
-            <p className="text-muted-foreground">due today · {weeklyDoneCount} done this week</p>
-          </DashboardWidget>
+        {(access.tasks || access.calendar) && (
+          <TodayTimeline
+            isEvening={isEvening}
+            dueTodayTasks={dueTodayTasks}
+            overdueTasks={overdueTasks}
+            routinesDueToday={routinesDueToday}
+            nextEventTitle={calendar.nextEventTitle}
+            nextEventTime={calendar.nextEventTime}
+            focus={focus}
+            yesterdayReflection={yesterdayReflection}
+            openTasks={tasks}
+          />
         )}
 
         {access.shopping && (
@@ -113,28 +125,6 @@ export default async function TodayPage() {
               {workout.loggedToday ? "Logged today" : "Not logged yet today"}
             </p>
           </DashboardWidget>
-        )}
-
-        {access.calendar && (
-          <DashboardWidget title="Calendar & Reminders" icon={<CalendarDays className="size-4" />} href="/calendar">
-            {calendar.nextEventTitle ? (
-              <>
-                <div className="truncate text-sm font-semibold">{calendar.nextEventTitle}</div>
-                <p className="text-muted-foreground">
-                  {calendar.nextEventTime && formatInAppTimezone(calendar.nextEventTime, { dateStyle: "medium", timeStyle: "short" })}
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="tabular text-2xl font-semibold">{calendar.remindersDueToday}</div>
-                <p className="text-muted-foreground">reminders due today</p>
-              </>
-            )}
-          </DashboardWidget>
-        )}
-
-        {access.calendar && (
-          <DayPlannerCard isEvening={isEvening} focus={focus} yesterdayReflection={yesterdayReflection} openTasks={tasks} />
         )}
 
         <DashboardWidget title="Journal" icon={<BookImage className="size-4" />} comingInPhase={6}>
