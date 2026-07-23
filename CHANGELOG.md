@@ -727,3 +727,108 @@ you added features as well to everything. Just go and don't stop."
   separately (account demotion + Shopping; Calendar; the full `<select>` sweep +
   Settings layout) rather than one giant diff, exactly as every prior part of this
   overhaul.
+
+## 16. Production incident — the app was black-screening — found, fixed, and verified
+
+**Requested:** Owner reported "black screen with 'This page couldn't load. A server
+error occurred.'" when opening the app.
+
+**What happened:** `DashboardWidget` (Today's dashboard tiles) and the new
+`SettingsNav` (the desktop sidebar from #15) had both been converted to Client
+Components earlier this session specifically to use Framer Motion / `usePathname`.
+Both are rendered directly from Server Components (`today/page.tsx`,
+`settings/layout.tsx`, `settings/page.tsx`) that were passing bare Lucide icon
+*component references* as props (`icon={Sparkles}`). A function reference isn't
+serializable across the React Server Component server->client boundary — this threw
+"Functions cannot be passed directly to Client Components" on literally every request
+to `/today`, which is the page every login lands on. That's the black screen.
+
+**Diagnosis, not guesswork:** Pulled the actual Vercel runtime logs (`vercel logs`)
+instead of speculating from the client-side symptom — found the exact error and that it
+had been firing on every single `/today` request since the design-polish deploy that
+morning. Fixed the `/today` instance, then had a research agent sweep the entire
+codebase for the same pattern (any `"use client"` component with a component-reference-
+typed prop, rendered from a Server Component) rather than assuming it was isolated —
+found the second, not-yet-hit occurrence in the brand-new Settings sidebar before it
+ever reached the owner.
+
+**Fix:** Both components now receive an already-rendered icon element
+(`icon={<Sparkles className="size-4" />}`) instead of a bare component reference, with
+color applied via a wrapping `<span>` (relying on Lucide's `currentColor` stroke)
+so callers don't need to duplicate state-dependent styling logic.
+`settings-links.ts` renamed to `.tsx` and now resolves icons to JSX before they ever
+reach the client boundary, rather than passing the raw data through.
+
+**Verified for real, not just "should be fixed"**: deployed, then confirmed via fresh
+`vercel logs` output that no new error entries appeared after the fix went live, and
+manually triggered the reminder dispatcher (see #17) which incidentally also proved
+`/today`'s data-fetching path works end to end again.
+
+## 17. Bug reports + big feature requests: banking research, push notifications, nav, Tasks redesign, Appearance overhaul
+
+**Requested:** (1) Research whether Canadian/American bank accounts can be connected
+for automatic transaction import — answer only, no build. (2) Appearance settings
+hadn't really changed — wants more themes, animations, and better fonts. (3) Push
+notifications don't work — tested by setting a task reminder and got nothing. (4)
+Complete Tasks module redesign — "very unintuitive," specifically called out the
+"Follow up"/"Call" quick-chips, and asked for recurring tasks with reminders. (5)
+Shopping missing from the bottom nav. (6) The floating "+" button ("tf is that?"). (7)
+Make sure everything is logged.
+
+**Banking research (answer, not built):** Plaid is the most practical single choice for
+both Canadian and US accounts (Scotiabank + US cards like Amex both fall under its
+coverage) — it has a genuine free tier for a single personal user's own accounts (a
+handful of free monthly production API calls), with per-call pricing beyond that
+(~$0.30-0.60/call for transaction data). Flinks is the more Canada-native alternative
+(95%+ connection success across 15,000+ North American institutions) but is priced for
+businesses, not really suited to a single hobbyist account. Not built — this would be a
+real integration (OAuth-style bank-linking flow, a new `bank_connections` table, a
+webhook/sync job) worth its own planned phase if the owner wants to move forward with
+it, not something to bolt on inline.
+
+**Push notifications — diagnosed, not a bug in the delivery code itself:** Queried the
+live database directly: a real push subscription exists for the owner's Android Chrome,
+and two active reminders were sitting there with `last_fired_at: null` despite being
+well past due. Manually invoked the dispatcher route
+(`GET /api/cron/reminders` with the bearer secret) directly against production —
+it correctly claimed both reminders and reported `{"pushed":2}`. This proves the whole
+pipeline (subscription, dispatcher, VAPID, service worker) works correctly; the actual
+gap is that the free external pinger (cron-job.org) that's supposed to hit this endpoint
+every 1-5 minutes was never set up — still listed as a pending owner action in
+`PROGRESS.md` since Phase 3. Considered self-hosting this via a GitHub Actions scheduled
+workflow instead (would need no owner action at all) but ran the actual numbers first:
+a 5-minute cadence is ~8,640 runs/month, and GitHub bills Actions minutes in 1-minute
+increments per run regardless of how short the job is — that's ~8,640 billable minutes
+against a private repo's 2,000/month free allowance, a real risk of the reminders
+silently stopping again mid-month (or incurring cost) rather than a genuine fix. Left
+this as the one remaining owner action rather than replacing a real gap with a worse one.
+
+**Nav fixes:** Shopping moved from the More menu into the primary bottom tab bar (six
+slots now: Today/Money/Tasks/Shop/Workout/More) — it's a daily, at-the-store module
+that shouldn't have required an extra tap to reach. The floating quick-capture "+"
+button on every screen was removed entirely — it only ever opened a "coming soon"
+dialog (real quick-capture is Phase 7 AI work), and a non-functional mystery button on
+every screen is worse than no button.
+
+**Tasks module — complete redesign** (see the dedicated commit for full detail):
+dropped the inconsistent "Work gets a whole nested collapsible section, other
+categories just get a text badge" structure down to one grouping dimension (horizon);
+removed the "Follow up with"/"Call" quick-chips (which also had a literal `___` typo
+appended to every label); moved 4 of a task row's 6-7 crammed inline controls into a
+new tap-to-open detail dialog; and added real recurring tasks (migration `0019`,
+reusing the exact rrule/DST-aware-next-occurrence machinery already built for reminders
+rather than inventing a second recurrence system) — completing a recurring task spawns
+its next instance automatically, and a recurring task can carry its own recurring
+reminder. Verified the regeneration logic against the live database, catching two wrong
+assumptions in my own test script (day-count vs. weekday, then UTC vs. app-timezone
+weekday) before trusting the result — same self-checking discipline as every other
+piece of non-trivial date math this session.
+
+**Appearance overhaul** (see the dedicated commit): 5 new palettes (11 total), 3 new
+heading fonts + a newly-configurable body font (6 heading options, 2 body options, up
+from 3 and 1), and real page-transition animation on every route change via a new
+Motion preference (Full/Reduced) — previously the app had zero page-level motion at all.
+
+**Everything above is logged here, in `PROGRESS.md`, and in `MANUAL.md`** per the
+owner's explicit "make sure you've logged everything" ask — nothing in this entry
+describes work that isn't also reflected in those two files.

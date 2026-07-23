@@ -40,28 +40,42 @@ they're just labeled placeholder pages so the navigation has somewhere to go.
 ### Getting around the app
 
 - **On your phone:** a row of tabs sits at the bottom of the screen —
-  Today, Money, Tasks, Workout, More. Tap any tab to jump to that section.
+  Today, Money, Tasks, Shop, Workout, More. Tap any tab to jump to that
+  section. (Shopping moved into this row later — it used to be buried
+  under More, which didn't make sense for something you check while
+  actually standing in a store.)
 - **On a computer:** the same links appear as a sidebar on the left.
 - **More** opens a list of everything that doesn't fit in the bottom bar:
-  Calendar, Journal, Vinyl, Shopping, and Settings.
-- **The floating "+" button** (bottom-right, on every screen) is where
-  quick-capture will live eventually ("spent $12 at Tim Hortons, remind me
-  to call mom Saturday" typed in one box). For now it just says the
-  feature is coming later — that's expected, not a bug.
+  Calendar, Journal, Vinyl, and Settings.
+- Only the modules a given account actually has access to show up in the
+  tabs/More at all — see the **Admin — Users & Crews** section further down
+  for how that's controlled.
+- There used to be a floating "+" button on every screen for quick-capture.
+  It was removed — it only ever said "coming soon" (real quick-capture is
+  later AI work), and a button that does nothing on every single screen was
+  more confusing than useful. It'll come back once it actually works.
 
 ### Changing how the app looks (Settings → Appearance)
 
 1. Tap **More → Settings → Appearance**.
-2. **Palette:** tap any of the 6 color swatches (British Racing Green is the
-   default) — the whole app recolors instantly so you can preview before
-   committing.
+2. **Palette:** tap any of the 11 color swatches (British Racing Green is
+   the default) — the whole app recolors instantly so you can preview
+   before committing. Added later: Teal/Mist, Plum/Blush, Amber/Ink,
+   Rose/Linen, and Mono/Graphite, alongside the original 6.
 3. **Mode:** Light, Dark, or System (System follows your phone/computer's
    own light/dark setting).
-4. **Heading font:** three choices — Space Grotesk (default), Archivo,
-   Fraunces.
-5. **Text size:** S / M / L.
-6. **Density:** Compact or Comfortable spacing.
-7. Tap **Save** — a small "Saved." confirmation appears, and your choice is
+4. **Heading font:** six choices now — Space Grotesk (default), Archivo,
+   Fraunces, plus three added later: Sora, Libre Franklin, and DM Serif
+   Display.
+5. **Body font:** Inter (default) or Manrope — this one's new; before, the
+   body text font wasn't changeable at all.
+6. **Text size:** S / M / L.
+7. **Density:** Compact or Comfortable spacing.
+8. **Motion:** Full (every animation, including a fade when you move
+   between pages) or Reduced (minimal motion — good for a calmer feel or if
+   animation makes you queasy). This is also new — before, there was no way
+   to turn animation up or down.
+9. Tap **Save** — a small "Saved." confirmation appears, and your choice is
    now tied to your account, so it'll follow you to any device you sign
    into.
 
@@ -153,25 +167,34 @@ even though most of it isn't built yet.
 
 ### Tasks
 
-1. Tap **Tasks**.
-2. Type a task and tap **+**. Pick which section it belongs in — **Now,
-   Today, This Week, This Month,** or **Someday** — and a category.
-3. For sales-call tasks, tap the **"Follow up with ___"** or **"Call ___"**
-   chip above the input — it fills in the phrase and sets the category to
-   Work for you; just type the name and add it.
-4. Tap the small **+** next to any task to add a subtask underneath it
-   (one level — subtasks can't have their own subtasks).
-5. Tap a task's empty checkbox to complete it. If it still has unfinished
-   subtasks, you'll be asked to confirm first.
-6. To move a task to a different section later, use the small dropdown next
-   to it on the row.
-7. **Work tasks** are pulled into their own collapsible "Work" section near
-   the bottom, so your personal list isn't cluttered by day-job to-dos.
-   It's collapsed automatically before 8am, after 6pm, and on weekends —
-   tap the header to expand it any time you want to peek anyway.
-8. Tap **Completed** near the bottom to see everything you've finished
-   (and undo one if you tapped it by mistake). Your weekly "done" count
-   shows at the top of the page and on the Today dashboard.
+Redesigned later in response to feedback that the original version was cluttered and
+confusing — this is the current version.
+
+1. Tap **Tasks**. Type a task, pick which section it belongs in (**Now, Today, This
+   Week, This Month,** or **Someday**), and tap **+**. That's it for the fast path —
+   everything else below is optional and lives one tap away, not crammed into the
+   quick-add row.
+2. **Tap any task's title** (not its checkbox) to open its details: category, a due
+   date, notes, **Repeat**, and **Remind me** — all in one place instead of scattered
+   across the row.
+3. **Recurring tasks** (new): in a task's details, set **Repeat** to Daily, Weekdays,
+   Weekly, Every N days, or Monthly — you'll need a due date set first, since that's
+   what tells it when to come back. When you complete a repeating task, it checks off
+   like normal and a fresh copy appears automatically at its next due date — you never
+   have to re-type a chore you do every week.
+4. Turn on **Remind me** in the same details screen (once a due date is set) to get a
+   push notification when it's due — works for one-time and repeating tasks alike; a
+   repeating task's reminder repeats right along with it.
+5. Tap the small **+** next to any task to add a subtask underneath it (one level —
+   subtasks can't have their own subtasks).
+6. Tap a task's empty checkbox to complete it. If it still has unfinished subtasks,
+   you'll be asked to confirm first.
+7. Every task shows a small category tag under its title now (unless it's Personal,
+   the default) — Work tasks live in the same list as everything else instead of a
+   separate collapsible section, sorted purely by Now/Today/This Week/etc.
+8. Tap **Completed** near the bottom to see everything you've finished (and undo one
+   if you tapped it by mistake). Your weekly "done" count shows at the top of the page
+   and on the Today dashboard.
 
 ### Today dashboard
 
@@ -326,6 +349,15 @@ Reminders won't actually fire on time until this last step is done. The free
 hosting plan this app runs on only allows checking for due reminders once a
 day on its own — this hooks up a free outside service that checks every
 minute instead, which is what makes reminders feel instant.
+
+**This is genuinely the one thing standing between you and working
+notifications** — confirmed directly: everything else (your phone's push
+subscription, the actual sending code, Google's push service) was tested
+by hand and works correctly. There's just nothing automatically checking
+for due reminders every minute yet, only once a day, so most reminders sit
+unfired until this step is done. It takes about 2 minutes and there's no
+way around doing it yourself — it needs your own free account on an
+outside site, which isn't something that can be set up on your behalf.
 
 1. Open the project folder on your computer and find the file named
    `.env.local`. Open it in any text editor (Notepad is fine).

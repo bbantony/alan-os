@@ -241,6 +241,54 @@ changed about what he can use day to day), he's just no longer an admin:
 no Admin page, no cross-crew oversight override. `antonyalan99@gmail.com`
 is now the sole `owner`.
 
+### Production incident (found and fixed the same day)
+`DashboardWidget` and `SettingsNav` were converted to Client Components in
+Parts 2-4 above but are rendered from Server Components that were passing
+bare icon component references as props — not serializable across that
+boundary, which crashed every single `/today` load (the page every login
+lands on) with a black screen. Found via live Vercel runtime logs, fixed
+in both places, swept the rest of the codebase for the same pattern (found
+nowhere else), and confirmed via fresh logs that the error stopped
+appearing after the fix deployed. See `CHANGELOG.md` entry 16 for the full
+diagnosis.
+
+### Part 5 — Bug reports + more feature requests (nav, Tasks redesign, Appearance overhaul)
+- [x] Bottom nav: Shopping moved from More into the primary tab bar.
+- [x] Removed the non-functional floating quick-capture "+" button (real
+      quick-capture is Phase 7; a placeholder that does nothing but say
+      "coming soon" on every screen was worse than not having it).
+- [x] **Tasks module — complete redesign.** One grouping dimension
+      (horizon) instead of Work getting a whole separate nested section;
+      removed the buggy "Follow up with"/"Call" quick-chips; task rows
+      simplified from 6-7 crammed controls down to checkbox/title/bell/
+      delete, with horizon/category/due-date/repeat/notes moved into a
+      tap-to-open detail dialog. New: recurring tasks (migration `0019`,
+      reusing reminders' own rrule + DST-aware next-occurrence math) —
+      completing a recurring task spawns its next instance automatically,
+      and can carry its own recurring reminder.
+- [x] **Appearance overhaul.** 5 new palettes (11 total), 3 new heading
+      fonts + a newly-configurable body font (6 heading / 2 body options,
+      up from 3 / 1 fixed), and real page-transition animation on every
+      route change via a new Motion (Full/Reduced) preference.
+- [x] **Push notifications — diagnosed, not a code bug.** Manually
+      triggered the live dispatcher; it correctly claimed and pushed both
+      overdue reminders, proving the whole pipeline (subscription →
+      dispatcher → VAPID → service worker) works. The actual gap is
+      unchanged from Phase 3: the free cron-job.org pinger that's supposed
+      to hit the dispatcher every 1-5 minutes still hasn't been set up —
+      see the Phase 3 owner action below. (Considered self-hosting this via
+      a GitHub Actions scheduled workflow to remove the owner-action
+      entirely, but the real numbers don't work: 5-minute cadence is
+      ~8,640 runs/month, GitHub bills a full minute per run minimum, and
+      the private repo's free allowance is 2,000 minutes/month — that
+      would trade "never set up" for "silently stops working mid-month.")
+- [x] **Banking research (Plaid/Flinks/etc.) — answered, not built.** See
+      the plain-English answer in the conversation / `CHANGELOG.md` entry
+      17. Genuinely connecting bank accounts would be its own planned
+      phase (OAuth-style linking flow, a new table, a sync job), not
+      something to bolt on inline — flagged for the owner to decide on,
+      not started.
+
 ---
 
 Next session: "Read SPEC.md. Phase 5 is complete and deployed. Execute
