@@ -1,7 +1,9 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { nextOccurrenceUtc } from "@/lib/reminders/rrule";
 import type { Task, TaskCategory, TaskHorizon } from "@/lib/tasks/types";
 
 async function requireUser() {
@@ -49,6 +51,35 @@ export async function getWeeklyDoneCount(): Promise<number> {
   return count ?? 0;
 }
 
+// Does this task have a linked reminder? (Used to show a bell state without
+// a separate join everywhere the task list renders.)
+export async function getTaskIdsWithReminders(): Promise<string[]> {
+  const { supabase, user } = await requireUser();
+  const { data } = await supabase
+    .from("reminders")
+    .select("linked_task_id")
+    .eq("user_id", user.id)
+    .not("linked_task_id", "is", null);
+  return [...new Set((data ?? []).map((r) => r.linked_task_id as string))];
+}
+
+async function createLinkedReminder(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  taskId: string,
+  title: string,
+  dueAt: string,
+  rrule: string | null
+) {
+  await supabase.from("reminders").insert({
+    user_id: userId,
+    title,
+    remind_at: dueAt,
+    rrule,
+    linked_task_id: taskId,
+  });
+}
+
 export async function createTask(input: {
   id: string;
   title: string;
@@ -56,6 +87,8 @@ export async function createTask(input: {
   category: TaskCategory;
   parentTaskId?: string | null;
   dueAt?: string | null;
+  rrule?: string | null;
+  remindMe?: boolean;
 }) {
   const { supabase, user } = await requireUser();
   await supabase.from("tasks").insert({
@@ -66,16 +99,120 @@ export async function createTask(input: {
     category: input.category,
     parent_task_id: input.parentTaskId ?? null,
     due_at: input.dueAt ?? null,
+    rrule: input.rrule ?? null,
   });
+
+  if (input.remindMe && input.dueAt) {
+    await createLinkedReminder(supabase, user.id, input.id, input.title, input.dueAt, input.rrule ?? null);
+  }
+  revalidatePath("/tasks");
 }
 
-export async function setTaskCompleted(input: { id: string; completed: boolean }) {
+// Full-detail editor (horizon/category/due date/repeat/notes) — everything
+// the old crammed task row used to expose inline now lives in one place,
+// opened by tapping a task rather than scattered across the row itself.
+export async function updateTask(input: {
+  id: string;
+  title: string;
+  notes: string | null;
+  horizon: TaskHorizon;
+  category: TaskCategory;
+  dueAt: string | null;
+  rrule: string | null;
+  remindMe: boolean;
+}): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
-  await supabase
+  const { error } = await supabase
     .from("tasks")
-    .update({ completed_at: input.completed ? new Date().toISOString() : null })
+    .update({
+      title: input.title,
+      notes: input.notes,
+      horizon: input.horizon,
+      category: input.category,
+      due_at: input.dueAt,
+      rrule: input.rrule,
+    })
     .eq("id", input.id)
     .eq("user_id", user.id);
+  if (error) return { error: error.message };
+
+  const { data: existingReminder } = await supabase
+    .from("reminders")
+    .select("id")
+    .eq("linked_task_id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (input.remindMe && input.dueAt) {
+    if (existingReminder) {
+      await supabase
+        .from("reminders")
+        .update({ title: input.title, remind_at: input.dueAt, rrule: input.rrule, status: "active" })
+        .eq("id", existingReminder.id);
+    } else {
+      await createLinkedReminder(supabase, user.id, input.id, input.title, input.dueAt, input.rrule);
+    }
+  } else if (!input.remindMe && existingReminder) {
+    await supabase.from("reminders").delete().eq("id", existingReminder.id);
+  }
+
+  revalidatePath("/tasks");
+  return {};
+}
+
+// Completing a recurring task spawns the next instance (same pattern every
+// mainstream to-do app uses: Things, Todoist) rather than the task just
+// vanishing forever — computed with the exact same DST-aware rrule math
+// reminders already rely on.
+export async function setTaskCompleted(input: { id: string; completed: boolean }): Promise<{ nextTask?: Task }> {
+  const { supabase, user } = await requireUser();
+
+  if (!input.completed) {
+    await supabase
+      .from("tasks")
+      .update({ completed_at: null })
+      .eq("id", input.id)
+      .eq("user_id", user.id);
+    return {};
+  }
+
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  await supabase
+    .from("tasks")
+    .update({ completed_at: new Date().toISOString() })
+    .eq("id", input.id)
+    .eq("user_id", user.id);
+
+  if (!task?.rrule || !task.due_at) return {};
+
+  const next = nextOccurrenceUtc(task.rrule, new Date(task.due_at));
+  if (!next) return {};
+
+  const newId = crypto.randomUUID();
+  const { data: created } = await supabase
+    .from("tasks")
+    .insert({
+      id: newId,
+      user_id: user.id,
+      title: task.title,
+      notes: task.notes,
+      horizon: task.horizon,
+      category: task.category,
+      due_at: next.toISOString(),
+      rrule: task.rrule,
+      parent_task_id: task.parent_task_id,
+    })
+    .select("*")
+    .single();
+
+  revalidatePath("/tasks");
+  return { nextTask: (created as Task) ?? undefined };
 }
 
 export async function moveTaskHorizon(input: { id: string; horizon: TaskHorizon }) {

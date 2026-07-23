@@ -32,4 +32,8 @@ export interface Task {
   completed_at: string | null;
   sort_order: number;
   created_at: string;
+  // Reuses the exact rrule text format reminders already use
+  // (src/lib/reminders/rrule.ts) — same RecurrencePreset vocabulary, same
+  // DST-aware next-occurrence math, just stored on a different table.
+  rrule: string | null;
 }

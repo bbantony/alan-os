@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, BellRing, Check, ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { Bell, BellRing, Check, ChevronDown, ChevronRight, Plus, Repeat, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -16,50 +16,47 @@ import {
 import { EmptyState } from "@/components/empty-state";
 import { TasksIllustration } from "@/components/illustrations";
 import { toast } from "@/components/ui/toast";
+import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
 import { cn } from "@/lib/utils";
-import { formatInAppTimezone, isOutsideWorkHours } from "@/lib/time";
+import { formatInAppTimezone } from "@/lib/time";
+import { describeRRule } from "@/lib/reminders/rrule";
 import { createReminderFromTask } from "@/app/(app)/calendar/actions";
 import {
   TASK_HORIZONS,
   TASK_HORIZON_LABELS,
   TASK_CATEGORY_LABELS,
   type Task,
-  type TaskCategory,
   type TaskHorizon,
 } from "@/lib/tasks/types";
 import {
   createTask,
   deleteTask,
   getCompletedTasks,
-  moveTaskHorizon,
   setTaskCompleted,
 } from "./actions";
-
-const QUICK_CHIPS = ["Follow up with ", "Call "];
-const NON_PERSONAL_LABELS: TaskCategory[] = ["errand", "pr_application", "french", "other"];
+import { TaskDetailDialog } from "./task-detail-dialog";
 
 export function TaskList({
   initialTasks,
   weeklyDoneCount,
+  initialReminderTaskIds,
 }: {
   initialTasks: Task[];
   weeklyDoneCount: number;
+  initialReminderTaskIds: string[];
 }) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [title, setTitle] = useState("");
   const [horizon, setHorizon] = useState<TaskHorizon>("today");
-  const [category, setCategory] = useState<TaskCategory>("personal");
-  const [dueAt, setDueAt] = useState("");
-  const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set());
+  const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set(initialReminderTaskIds));
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [confirmTask, setConfirmTask] = useState<Task | null>(null);
-  const [workExpanded, setWorkExpanded] = useState(() => !isOutsideWorkHours());
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Task[] | null>(null);
 
-  const nonWorkTop = tasks.filter((t) => !t.parent_task_id && t.category !== "work");
-  const workTop = tasks.filter((t) => !t.parent_task_id && t.category === "work");
+  const topLevel = tasks.filter((t) => !t.parent_task_id);
   const subtasksOf = useMemo(() => {
     const map = new Map<string, Task[]>();
     for (const t of tasks) {
@@ -77,7 +74,6 @@ export function TaskList({
     const trimmed = title.trim();
     if (!trimmed) return;
     const id = crypto.randomUUID();
-    const dueAtIso = dueAt ? new Date(dueAt).toISOString() : null;
     const optimistic: Task = {
       id,
       user_id: "",
@@ -85,17 +81,16 @@ export function TaskList({
       title: trimmed,
       notes: null,
       horizon,
-      due_at: dueAtIso,
-      category,
+      due_at: null,
+      category: "personal",
       completed_at: null,
       sort_order: 0,
       created_at: new Date().toISOString(),
+      rrule: null,
     };
     setTasks((prev) => [...prev, optimistic]);
     setTitle("");
-    setCategory("personal");
-    setDueAt("");
-    await createTask({ id, title: trimmed, horizon, category, dueAt: dueAtIso });
+    await createTask({ id, title: trimmed, horizon, category: "personal" });
   }
 
   async function handleRemindMe(task: Task) {
@@ -120,6 +115,7 @@ export function TaskList({
       completed_at: null,
       sort_order: 0,
       created_at: new Date().toISOString(),
+      rrule: null,
     };
     setTasks((prev) => [...prev, optimistic]);
     setSubtaskTitle("");
@@ -136,7 +132,11 @@ export function TaskList({
   async function completeTask(task: Task) {
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     setCompletedTasks(null);
-    await setTaskCompleted({ id: task.id, completed: true });
+    const result = await setTaskCompleted({ id: task.id, completed: true });
+    if (result.nextTask) {
+      setTasks((prev) => [...prev, result.nextTask!]);
+      toast.success(`"${task.title}" completed — repeats again ${task.rrule ? describeRRule(task.rrule) : ""}`.trim());
+    }
   }
 
   function handleToggleComplete(task: Task) {
@@ -152,11 +152,6 @@ export function TaskList({
     setTasks((prev) => prev.filter((t) => t.id !== task.id && t.parent_task_id !== task.id));
     await deleteTask({ id: task.id });
     toast.success("Task deleted");
-  }
-
-  async function handleMoveHorizon(task: Task, next: TaskHorizon) {
-    setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, horizon: next } : t)));
-    await moveTaskHorizon({ id: task.id, horizon: next });
   }
 
   async function handleToggleCompletedArchive() {
@@ -183,54 +178,27 @@ export function TaskList({
         </span>
       </div>
 
-      <form onSubmit={handleAdd} className="my-4 space-y-2">
+      <form onSubmit={handleAdd} className="my-4 flex gap-2">
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Add a task…"
+          className="flex-1"
         />
-        <div className="flex flex-wrap gap-2">
-          {QUICK_CHIPS.map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => {
-                setTitle(chip);
-                setCategory("work");
-              }}
-              className="tap-press rounded-full border border-border px-3 py-1 text-xs font-medium hover:bg-muted"
-            >
-              {chip}___
-            </button>
+        <Select value={horizon} onChange={(e) => setHorizon(e.target.value as TaskHorizon)} className="w-32 shrink-0">
+          {TASK_HORIZONS.map((h) => (
+            <option key={h} value={h}>
+              {TASK_HORIZON_LABELS[h]}
+            </option>
           ))}
-        </div>
-        <div className="flex gap-2">
-          <Select value={horizon} onChange={(e) => setHorizon(e.target.value as TaskHorizon)} className="h-8 flex-1">
-            {TASK_HORIZONS.map((h) => (
-              <option key={h} value={h}>
-                {TASK_HORIZON_LABELS[h]}
-              </option>
-            ))}
-          </Select>
-          <Select value={category} onChange={(e) => setCategory(e.target.value as TaskCategory)} className="h-8 flex-1">
-            {Object.entries(TASK_CATEGORY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-          <Button type="submit" size="icon" aria-label="Add task">
-            <Plus className="size-4" />
-          </Button>
-        </div>
-        <Input
-          type="datetime-local"
-          value={dueAt}
-          onChange={(e) => setDueAt(e.target.value)}
-          className="text-xs"
-          aria-label="Due date (optional)"
-        />
+        </Select>
+        <Button type="submit" size="icon" aria-label="Add task">
+          <Plus className="size-4" />
+        </Button>
       </form>
+      <p className="mb-4 -mt-2 text-xs text-muted-foreground">
+        Tap a task afterward to set a category, due date, repeat, or reminder.
+      </p>
 
       {tasks.length === 0 && (
         <EmptyState
@@ -242,7 +210,7 @@ export function TaskList({
 
       <div className="space-y-6">
         {TASK_HORIZONS.map((h) => {
-          const inHorizon = nonWorkTop.filter((t) => t.horizon === h);
+          const inHorizon = topLevel.filter((t) => t.horizon === h);
           if (inHorizon.length === 0) return null;
           return (
             <TaskSection
@@ -257,55 +225,13 @@ export function TaskList({
               onAddSubtask={handleAddSubtask}
               onToggleComplete={handleToggleComplete}
               onDelete={handleDelete}
-              onMoveHorizon={handleMoveHorizon}
               onRemindMe={handleRemindMe}
+              onOpenDetail={setEditingTask}
               remindedIds={remindedIds}
             />
           );
         })}
       </div>
-
-      {workTop.length > 0 && (
-        <div className="mt-8 rounded-xl border border-border bg-surface">
-          <button
-            onClick={() => setWorkExpanded((v) => !v)}
-            className="tap-press flex w-full items-center justify-between px-4 py-3 text-sm font-semibold"
-          >
-            <span>Work ({workTop.length})</span>
-            {workExpanded ? (
-              <ChevronDown className="size-4" />
-            ) : (
-              <ChevronRight className="size-4" />
-            )}
-          </button>
-          {workExpanded && (
-            <div className="space-y-4 border-t border-border p-4">
-              {TASK_HORIZONS.map((h) => {
-                const inHorizon = workTop.filter((t) => t.horizon === h);
-                if (inHorizon.length === 0) return null;
-                return (
-                  <TaskSection
-                    key={h}
-                    label={TASK_HORIZON_LABELS[h]}
-                    tasks={inHorizon}
-                    subtasksOf={subtasksOf}
-                    addingSubtaskFor={addingSubtaskFor}
-                    subtaskTitle={subtaskTitle}
-                    onSubtaskTitleChange={setSubtaskTitle}
-                    onStartAddSubtask={setAddingSubtaskFor}
-                    onAddSubtask={handleAddSubtask}
-                    onToggleComplete={handleToggleComplete}
-                    onDelete={handleDelete}
-                    onMoveHorizon={handleMoveHorizon}
-                    onRemindMe={handleRemindMe}
-                    remindedIds={remindedIds}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="mt-8">
         <button
@@ -364,6 +290,28 @@ export function TaskList({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {editingTask && (
+        <TaskDetailDialog
+          task={editingTask}
+          hasReminder={remindedIds.has(editingTask.id)}
+          onClose={() => setEditingTask(null)}
+          onSaved={(updated) => {
+            setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+            setRemindedIds((prev) => {
+              const next = new Set(prev);
+              if (updated.due_at) next.add(updated.id);
+              else next.delete(updated.id);
+              return next;
+            });
+            setEditingTask(null);
+          }}
+          onDeleted={(id) => {
+            setTasks((prev) => prev.filter((t) => t.id !== id && t.parent_task_id !== id));
+            setEditingTask(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -379,8 +327,8 @@ function TaskSection({
   onAddSubtask,
   onToggleComplete,
   onDelete,
-  onMoveHorizon,
   onRemindMe,
+  onOpenDetail,
   remindedIds,
 }: {
   label: string;
@@ -393,8 +341,8 @@ function TaskSection({
   onAddSubtask: (parent: Task) => void;
   onToggleComplete: (task: Task) => void;
   onDelete: (task: Task) => void;
-  onMoveHorizon: (task: Task, horizon: TaskHorizon) => void;
   onRemindMe: (task: Task) => void;
+  onOpenDetail: (task: Task) => void;
   remindedIds: Set<string>;
 }) {
   return (
@@ -405,14 +353,21 @@ function TaskSection({
       <ul className="space-y-1">
         <AnimatePresence initial={false}>
           {tasks.map((task) => (
-            <li key={task.id}>
+            <motion.li
+              key={task.id}
+              layout
+              variants={listItemVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              transition={LIST_ITEM_TRANSITION}
+            >
               <TaskRow
                 task={task}
                 onToggleComplete={() => onToggleComplete(task)}
                 onDelete={() => onDelete(task)}
-                onMoveHorizon={(h) => onMoveHorizon(task, h)}
-                onStartAddSubtask={() => onStartAddSubtask(task.id)}
                 onRemindMe={() => onRemindMe(task)}
+                onOpenDetail={() => onOpenDetail(task)}
                 reminded={remindedIds.has(task.id)}
               />
               {(subtasksOf.get(task.id) ?? []).length > 0 && (
@@ -428,7 +383,7 @@ function TaskSection({
                   ))}
                 </ul>
               )}
-              {addingSubtaskFor === task.id && (
+              {addingSubtaskFor === task.id ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -447,8 +402,17 @@ function TaskSection({
                     <Plus className="size-3.5" />
                   </Button>
                 </form>
+              ) : (
+                !task.parent_task_id && (
+                  <button
+                    onClick={() => onStartAddSubtask(task.id)}
+                    className="tap-press ml-7 mt-1 text-xs text-muted-foreground/60 hover:text-foreground"
+                  >
+                    + subtask
+                  </button>
+                )
               )}
-            </li>
+            </motion.li>
           ))}
         </AnimatePresence>
       </ul>
@@ -461,27 +425,28 @@ function TaskRow({
   subtle,
   onToggleComplete,
   onDelete,
-  onMoveHorizon,
-  onStartAddSubtask,
   onRemindMe,
+  onOpenDetail,
   reminded,
 }: {
   task: Task;
   subtle?: boolean;
   onToggleComplete: () => void;
   onDelete: () => void;
-  onMoveHorizon?: (h: TaskHorizon) => void;
-  onStartAddSubtask?: () => void;
   onRemindMe?: () => void;
+  onOpenDetail?: () => void;
   reminded?: boolean;
 }) {
+  const subtitleParts: string[] = [];
+  if (task.due_at) {
+    subtitleParts.push(formatInAppTimezone(task.due_at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }));
+  }
+  if (task.category !== "personal") {
+    subtitleParts.push(TASK_CATEGORY_LABELS[task.category]);
+  }
+
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.18 }}
+    <div
       className={cn(
         "flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2",
         subtle && "border-transparent bg-transparent py-1"
@@ -492,12 +457,19 @@ function TaskRow({
         className="tap-press flex size-5 shrink-0 items-center justify-center rounded-md border border-border transition-colors hover:border-primary hover:bg-primary/10"
         aria-label="Complete task"
       />
-      <span className="flex-1 text-sm">{task.title}</span>
-      {!subtle && task.due_at && (
-        <span className="text-xs text-muted-foreground">
-          {formatInAppTimezone(task.due_at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
-        </span>
-      )}
+      <button
+        onClick={onOpenDetail}
+        disabled={!onOpenDetail}
+        className="min-w-0 flex-1 text-left disabled:cursor-default"
+      >
+        <p className="truncate text-sm">{task.title}</p>
+        {subtitleParts.length > 0 && (
+          <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+            {task.rrule && <Repeat className="size-3 shrink-0" />}
+            {subtitleParts.join(" · ")}
+          </p>
+        )}
+      </button>
       {!subtle && task.due_at && onRemindMe && (
         <button
           onClick={onRemindMe}
@@ -509,35 +481,6 @@ function TaskRow({
           {reminded ? <BellRing className="size-4" /> : <Bell className="size-4" />}
         </button>
       )}
-      {!subtle && NON_PERSONAL_LABELS.includes(task.category) && (
-        <span className="text-xs text-muted-foreground">
-          {TASK_CATEGORY_LABELS[task.category]}
-        </span>
-      )}
-      {!subtle && onMoveHorizon && (
-        <select
-          value={task.horizon}
-          onChange={(e) => onMoveHorizon(e.target.value as TaskHorizon)}
-          className="h-6 rounded-md border border-input bg-transparent px-1 text-xs"
-          aria-label="Move to section"
-        >
-          {TASK_HORIZONS.map((h) => (
-            <option key={h} value={h}>
-              {TASK_HORIZON_LABELS[h]}
-            </option>
-          ))}
-        </select>
-      )}
-      {!subtle && !task.parent_task_id && onStartAddSubtask && (
-        <button
-          onClick={onStartAddSubtask}
-          className="tap-press shrink-0 text-muted-foreground/50 hover:text-foreground"
-          aria-label="Add subtask"
-          title="Add subtask"
-        >
-          <Plus className="size-4" />
-        </button>
-      )}
       <button
         onClick={onDelete}
         className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
@@ -545,6 +488,6 @@ function TaskRow({
       >
         <Trash2 className="size-4" />
       </button>
-    </motion.div>
+    </div>
   );
 }
