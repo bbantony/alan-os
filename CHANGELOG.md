@@ -668,3 +668,62 @@ instead of leaving them unused.
   glossed over. The admin system, the design foundation, and the app's most-used module
   (Money) came first as the highest-value work; the remaining polish is a smaller,
   lower-risk follow-up whenever picked back up.
+
+## 15. Demote the second admin account; finish the design sweep + more features
+
+**Requested:** "That account should not be admin. Furthermore, redesign the untouched
+modules as well to match the rest of the app and keep it consistent, and also make sure
+you added features as well to everything. Just go and don't stop."
+
+**Changes made:**
+- Demoted `antonyalbert03@gmail.com` from `role='owner'` to `role='full_user'` directly
+  in the database — he keeps every module enabled (identical day-to-day access to
+  before), he just loses `is_admin()` and everything gated by it (the Admin page,
+  cross-crew oversight). Confirmed exactly one `owner` remains afterward. Updated
+  `PROGRESS.md`/`MANUAL.md`'s "found but not fixed" notes to "resolved."
+- **Shopping**: category/quantity-unit pickers moved onto the `Select` primitive.
+  New feature: a "Groceries budget remaining" banner right on the shopping list,
+  reusing Money's existing period-aware `getBudgets()` calculation rather than
+  reimplementing payday-anchored period math — this is SPEC.md Part B4's
+  Shopping↔Finance hook ("remaining budget for the relevant category visible while
+  adding/checking off items"), documented since Phase 4 shipped but never actually
+  built until now. Gated behind the viewer's own Money module access, matching the
+  Today dashboard's now-established per-widget access pattern.
+- **Calendar**: found and fixed a second duplicated tab bar the original audit missed
+  (Agenda's own Today/Week toggle, structurally identical to the 3 already
+  consolidated) — now on `Segmented` too. Added list motion to Agenda and Reminders,
+  toast confirmations to reminder save/delete and Google Calendar sync/disconnect, and
+  replaced a hand-rolled "On/Off" pill button with the real `Switch` primitive (a second
+  bespoke reimplementation of exactly what that primitive now exists to replace). New
+  feature: Agenda items were purely read-only before this — tapping a reminder now
+  jumps straight to the Reminders tab, tapping a task jumps to Tasks, turning the merged
+  timeline into an actual navigation hub instead of just a summary you'd have to
+  re-locate the source of yourself.
+- **Went back and finished Money's own forms**, which had been polished for tabs/toasts
+  in the earlier pass but never had their `<select>` elements swapped — account/budget/
+  quick-log/receipt-review/remittance forms, Money's category settings (plus its own
+  expense/income toggle onto `Segmented`), and the CSV import wizard's 7 column-mapping
+  selects. Also caught two more instances outside Money entirely: Tasks' add-task row
+  and Workout's exercise picker/manager. A full app-wide grep for `<select` after this
+  pass turned up exactly 2 remaining — both deliberately left alone (ultra-compact
+  inline per-row category pickers in Shopping's and Tasks' list rows, where the new
+  primitive's chevron icon would visually dominate a control that small) — a judgment
+  call made explicit in the code comments, not an oversight.
+- **Settings got its two-column desktop layout**: `settings-links.ts` (the link data,
+  now defined once) and `settings-nav.tsx` (the rendering, now defined once) are shared
+  between the mobile index page and a new persistent desktop sidebar
+  (`settings/layout.tsx`, a Next.js nested layout wrapping every `/settings/*` route) —
+  previously the exact same link list was hand-duplicated nowhere else, but would have
+  needed to be if the sidebar were built as a one-off. The layout carries zero CSS below
+  the `md` breakpoint, so mobile is provably unchanged. New feature: an account card at
+  the top of the Settings index (avatar-initial circle, name, email, role badge) so it's
+  immediately clear which of the now-multiple real accounts you're using — directly
+  motivated by this same session's discovery of the second owner account.
+- The Admin page's own module-access checkboxes and crew-reassignment dropdown were
+  themselves still using a raw `<input type="checkbox">` and `<select>` from when that
+  page was first built in Part 1 — upgraded to `Switch`/`Select` too, so the admin
+  system doesn't ironically lag the consistency push it kicked off.
+- `npm run build`/lint clean after every file group, each logical unit committed
+  separately (account demotion + Shopping; Calendar; the full `<select>` sweep +
+  Settings layout) rather than one giant diff, exactly as every prior part of this
+  overhaul.

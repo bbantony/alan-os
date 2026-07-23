@@ -145,6 +145,11 @@ even though most of it isn't built yet.
    your own (e.g. "Electronics"), and see/edit the list of item names each
    category has learned. Deleting a category moves its items to "Other,"
    which can't itself be deleted.
+9. **Groceries budget banner** (added later, once Money existed): if you've
+   set up a Groceries budget in Money, a small banner near the top of the
+   Shopping list shows how much of it is left — tap it to jump straight to
+   Money. It only shows up once both a Groceries budget exists and you have
+   access to Money.
 
 ### Tasks
 
@@ -368,6 +373,10 @@ minute instead, which is what makes reminders feel instant.
 3. If Google Calendar is connected, tap **Event** to add something directly
    to your real calendar (title, date/time, how long it runs) without leaving
    the app.
+4. **Tap any row to act on it** (added later): tapping a reminder jumps
+   straight to the Reminders tab; tapping a task jumps to Tasks. The Agenda
+   used to be look-only — now it's a real shortcut to wherever that thing
+   actually lives.
 
 ### The evening planning ritual
 
@@ -613,6 +622,16 @@ you want to split people up or restrict what they can open.
 (`antonyalbert03@gmail.com`, "Albert") has been demoted per your instruction — he keeps
 full access to every module exactly as before, he's just no longer an admin. You
 (`antonyalan99@gmail.com`) are the only account with admin rights now.
+
+### Settings on a bigger screen
+
+On a phone, Settings looks exactly as described above. On a wider screen (a laptop or
+desktop browser), Settings now shows a permanent list of sections down the left side,
+with whichever section you're looking at on the right — no need to keep going back to
+the Settings home screen between changes. The Settings home screen itself now also
+shows a small card up top with your name, email, and a badge confirming whether you're
+the admin — a quick way to confirm which account you're using, now that more than one
+real account exists.
 
 ---
 

@@ -207,12 +207,31 @@ SPEC.md phase — a cross-cutting initiative requested directly by the owner)
       remind-me), and the new Admin page (crew/module-access changes).
 - [x] Workout: a small "your crew logged N sessions this week" stat strip,
       a natural fit now that crews are real groups instead of "everyone."
-- [ ] Not yet touched: Shopping/Calendar/Settings' own forms still use
-      plain `<select>`/ad-hoc markup rather than the new primitives, and
-      Settings doesn't yet have a two-column desktop layout. Left for a
-      future pass rather than claimed as done — the highest-value items
-      (the admin system itself, the design foundation, and the most-used
-      module) came first.
+
+### Part 4 — Finishing the sweep (Shopping, Calendar, Settings, and every
+remaining plain `<select>` app-wide)
+- [x] Shopping: category/unit pickers now use `Select`; new feature — a
+      "Groceries budget remaining" banner pulling from Money's real
+      period-aware budget calculation (the SPEC.md Part B4 Shopping↔Finance
+      hook, never actually wired up until now), hidden for accounts without
+      Money access.
+- [x] Calendar: consolidated a second duplicated tab bar (Agenda's
+      Today/Week toggle) onto `Segmented`; list motion + toast feedback
+      added to Agenda/Reminders/reminder-form; the hand-rolled "On/Off"
+      sync pill replaced with the real `Switch`. New feature — Agenda items
+      are no longer read-only: tapping a reminder jumps to the Reminders
+      tab, tapping a task jumps to Tasks.
+- [x] Settings: every remaining plain `<select>` app-wide (Money's 5 forms,
+      Money settings + CSV import wizard, Tasks' add-row, Workout's
+      exercise picker/manager) now uses `Select` — the only two left are
+      deliberate ultra-compact inline per-row pickers where the primitive's
+      chevron would dominate. New two-column desktop layout
+      (`settings-links.ts` + `settings-nav.tsx` shared between the mobile
+      index and the persistent desktop sidebar, removing the duplication
+      between them) via `settings/layout.tsx` — mobile unchanged. New
+      feature — an account card on the Settings index (avatar initial,
+      name, email, role badge), useful now that multiple real accounts
+      exist in the system.
 
 ### Resolved
 The second `role = 'owner'` account (`antonyalbert03@gmail.com`, "Albert")
