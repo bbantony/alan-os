@@ -38,6 +38,34 @@ export function buildRRuleString(opts: RecurrenceOptions): string | null {
   }
 }
 
+// The inverse of buildRRuleString, for pre-filling an edit form from a
+// stored rrule — restores the actual weekday/interval/month-day instead of
+// just the preset type, so re-saving a form the user didn't touch a
+// particular field on doesn't silently reset it (e.g. an "every Wednesday"
+// routine/task defaulting back to Monday just because its edit dialog only
+// recovered the preset, not the day). `fallbackPreset` is what an
+// unrecognized or absent rrule maps to — "none" for a one-off task, "daily"
+// for a routine/reminder that must always repeat.
+export function parseRecurrenceFromRRule(
+  rruleText: string | null,
+  fallbackPreset: RecurrencePreset = "none"
+): { preset: RecurrencePreset; weekday: number; intervalDays: string; monthDay: string } {
+  const fallback = { preset: fallbackPreset, weekday: 0, intervalDays: "2", monthDay: "1" };
+  if (!rruleText) return fallback;
+  if (rruleText.includes("BYDAY=MO,TU,WE,TH,FR")) return { ...fallback, preset: "weekdays" };
+  const weeklyMatch = rruleText.match(/FREQ=WEEKLY;BYDAY=(\w\w)/);
+  if (weeklyMatch) {
+    const idx = DAY_CODES.indexOf(weeklyMatch[1]);
+    return { ...fallback, preset: "weekly", weekday: idx >= 0 ? idx : 0 };
+  }
+  const monthlyMatch = rruleText.match(/FREQ=MONTHLY;BYMONTHDAY=(\d+)/);
+  if (monthlyMatch) return { ...fallback, preset: "monthly", monthDay: monthlyMatch[1] };
+  const everyNMatch = rruleText.match(/FREQ=DAILY;INTERVAL=(\d+)/);
+  if (everyNMatch) return { ...fallback, preset: "every_n_days", intervalDays: everyNMatch[1] };
+  if (rruleText.includes("FREQ=DAILY")) return { ...fallback, preset: "daily" };
+  return fallback;
+}
+
 export function describeRRule(rruleText: string): string {
   try {
     const rule = RRule.fromString(rruleText);

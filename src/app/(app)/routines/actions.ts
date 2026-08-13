@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayInAppTimezone } from "@/lib/time";
 import { computeStreak } from "@/lib/streaks";
 import { isDueOnDate, firstReminderInstant, type RecurrenceOptions, buildRRuleString } from "@/lib/reminders/rrule";
+import { syncToGcal, removeFromGcal } from "@/lib/gcal/sync";
 import type { TaskCategory } from "@/lib/tasks/types";
 import type { Routine, RoutineCompletion, RoutineStep, RoutineWithProgress } from "@/lib/routines/types";
 
@@ -118,6 +119,20 @@ export async function createRoutine(input: {
     });
   }
 
+  if (input.timeOfDay) {
+    const startIso = firstReminderInstant(rrule, input.timeOfDay).toISOString();
+    await syncToGcal({
+      supabase,
+      userId: user.id,
+      table: "routines",
+      rowId: input.id,
+      existingEventId: null,
+      title: input.title.trim(),
+      startIso,
+      recurrence: [rrule],
+    });
+  }
+
   revalidatePath("/tasks");
   revalidatePath("/today");
   return {};
@@ -136,6 +151,13 @@ export async function updateRoutine(input: {
   const { supabase, user } = await requireUser();
   const rrule = buildRRuleString(input.recurrence) ?? "RRULE:FREQ=DAILY";
   const trimmedTitle = input.title.trim();
+
+  const { data: existingRoutine } = await supabase
+    .from("routines")
+    .select("gcal_event_id")
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   const { error } = await supabase
     .from("routines")
@@ -191,6 +213,18 @@ export async function updateRoutine(input: {
     await supabase.from("reminders").delete().eq("id", existingReminder.id);
   }
 
+  const startIso = input.timeOfDay ? firstReminderInstant(rrule, input.timeOfDay).toISOString() : null;
+  await syncToGcal({
+    supabase,
+    userId: user.id,
+    table: "routines",
+    rowId: input.id,
+    existingEventId: existingRoutine?.gcal_event_id ?? null,
+    title: trimmedTitle,
+    startIso,
+    recurrence: [rrule],
+  });
+
   revalidatePath("/tasks");
   revalidatePath("/today");
   return {};
@@ -198,8 +232,20 @@ export async function updateRoutine(input: {
 
 export async function archiveRoutine(input: { id: string }) {
   const { supabase, user } = await requireUser();
+  const { data: existing } = await supabase
+    .from("routines")
+    .select("gcal_event_id")
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
   await supabase.from("routines").update({ active: false }).eq("id", input.id).eq("user_id", user.id);
   await supabase.from("reminders").delete().eq("linked_routine_id", input.id).eq("user_id", user.id);
+
+  if (existing?.gcal_event_id) {
+    await removeFromGcal({ supabase, userId: user.id, table: "routines", rowId: input.id, existingEventId: existing.gcal_event_id });
+  }
+
   revalidatePath("/tasks");
   revalidatePath("/today");
 }

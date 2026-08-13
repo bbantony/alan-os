@@ -36,4 +36,5 @@ export interface Task {
   // (src/lib/reminders/rrule.ts) — same RecurrencePreset vocabulary, same
   // DST-aware next-occurrence math, just stored on a different table.
   rrule: string | null;
+  gcal_event_id: string | null;
 }

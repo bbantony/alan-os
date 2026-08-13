@@ -42,7 +42,9 @@ export function CalendarConnect({
       <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-3">
         <div>
           <p className="text-sm font-medium">Connected</p>
-          <p className="text-xs text-muted-foreground">Syncing your primary calendar</p>
+          <p className="text-xs text-muted-foreground">
+            Tasks, routines, and reminders with a time sync here automatically
+          </p>
         </div>
         <Switch checked={syncEnabled} onCheckedChange={handleToggle} aria-label="Toggle calendar sync" />
       </div>

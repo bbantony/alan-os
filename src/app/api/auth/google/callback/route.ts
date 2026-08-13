@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { encryptRefreshToken, exchangeCodeForTokens } from "@/lib/gcal/client";
+import { backfillGcalSync } from "@/lib/gcal/sync";
 
 export async function GET(request: Request) {
   const supabase = await createClient();
@@ -39,6 +40,9 @@ export async function GET(request: Request) {
       },
       { onConflict: "user_id" }
     );
+    // So existing tasks/routines/reminders don't stay invisible on the
+    // calendar until each one happens to be edited — one-time, idempotent.
+    await backfillGcalSync(supabase, user.id);
   } catch (err) {
     return fail((err as Error).message || "Could not connect Google Calendar.");
   }

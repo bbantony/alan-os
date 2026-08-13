@@ -171,30 +171,34 @@ Redesigned later in response to feedback that the original version was cluttered
 confusing — this is the current version.
 
 1. Tap **Tasks**. Type a task, pick which section it belongs in (**Now, Today, This
-   Week, This Month,** or **Someday**), and tap **+**. That's it for the fast path —
-   everything else below is optional and lives one tap away, not crammed into the
-   quick-add row.
-2. **Tap any task's title** (not its checkbox) to open its details: category, a due
-   date, notes, **Repeat**, and **Remind me** — all in one place instead of scattered
-   across the row.
-3. **Recurring tasks** (new): in a task's details, set **Repeat** to Daily, Weekdays,
-   Weekly, Every N days, or Monthly — you'll need a due date set first, since that's
-   what tells it when to come back. When you complete a repeating task, it checks off
-   like normal and a fresh copy appears automatically at its next due date — you never
-   have to re-type a chore you do every week.
-4. Turn on **Remind me** in the same details screen (once a due date is set) to get a
-   push notification when it's due — works for one-time and repeating tasks alike; a
-   repeating task's reminder repeats right along with it.
-5. Tap the small **+** next to any task to add a subtask underneath it (one level —
+   Week, This Month,** or **Someday**), and tap **+**. That's it for the fast path.
+2. Want to set a due date, category, repeat, or reminder right when you create it
+   instead of going back afterward? Tap **More options** just under the add row before
+   tapping **+** — it expands in place (no extra screen) with all of that, then
+   collapses itself back down once you've added the task.
+4. **Tap any task's title** (not its checkbox) to open its details later: category, a
+   due date, notes, **Repeat**, and **Remind me** — all in one place instead of
+   scattered across the row.
+5. **Recurring tasks**: in a task's details (or in **More options** at creation), set
+   **Repeat** to Daily, Weekdays, Weekly, Every N days, or Monthly — you'll need a due
+   date set first, since that's what tells it when to come back. When you complete a
+   repeating task, it checks off like normal and a fresh copy appears automatically at
+   its next due date — you never have to re-type a chore you do every week.
+6. Turn on **Remind me** (once a due date is set) to get a push notification when it's
+   due — works for one-time and repeating tasks alike; a repeating task's reminder
+   repeats right along with it. If Google Calendar is connected, a due date also shows
+   up there automatically — see "Google Calendar sync" below.
+7. Tap the small **+** next to any task to add a subtask underneath it (one level —
    subtasks can't have their own subtasks).
-6. Tap a task's empty checkbox to complete it. If it still has unfinished subtasks,
+8. Tap a task's empty checkbox to complete it. If it still has unfinished subtasks,
    you'll be asked to confirm first.
-7. Every task shows a small category tag under its title now (unless it's Personal,
+9. Every task shows a small category tag under its title now (unless it's Personal,
    the default) — Work tasks live in the same list as everything else instead of a
-   separate collapsible section, sorted purely by Now/Today/This Week/etc.
-8. Tap **Completed** near the bottom to see everything you've finished (and undo one
-   if you tapped it by mistake). Your weekly "done" count shows at the top of the page
-   and on the Today dashboard.
+   separate collapsible section, sorted purely by Now/Today/This Week/etc. Each section
+   also shows how many you've finished there today, once you've finished at least one.
+10. Tap **Completed** near the bottom to see everything you've finished (and undo one
+    if you tapped it by mistake). Your weekly "done" count shows at the top of the page
+    and on the Today dashboard.
 
 ### Today dashboard
 
@@ -342,6 +346,24 @@ This part needs a few clicks in Google's own site first.
    `GOOGLE_CLIENT_SECRET` with the Client secret.
 9. Back in Alan OS, go to **More → Settings → Calendar & Reminders** and tap
    **Connect Google Calendar**.
+
+### Google Calendar sync
+
+Once connected, this is fully automatic — nothing to turn on per item:
+
+- Any **task with a due date** shows up as its own block on your calendar. Complete or
+  delete the task and the block disappears; edit the due date and the block moves.
+- Any **routine with a time of day** shows up as a real repeating event on your
+  calendar (e.g. daily at 9am), whether or not you also turned on its push reminder.
+- Any **standalone reminder** (made from Calendar → Reminders, not tied to a task or
+  routine) shows up the same way, repeating if it repeats.
+- A task or routine's own push reminder does **not** also add a second, separate
+  calendar entry — the task/routine's due date already covers that, so nothing doubles
+  up.
+- The one on/off switch for all of this lives in **Settings → Calendar & Reminders** —
+  turning it off pauses new syncing without disconnecting your account.
+- Connecting for the first time also fills in your calendar with anything you already
+  had due — you don't lose history from before you connected.
 
 ### One-time setup #3 — turn on reminder delivery ✅ done (2026-08-12)
 
@@ -693,21 +715,24 @@ Routine itself.
 ### Using Routines
 
 1. Open **Tasks**. At the top, above your regular task list, you'll see a **Your
-   Routines** section.
+   Routines** section — collapsed into a small row of icons by default so it doesn't
+   crowd out your actual tasks. Tap the **Your Routines** heading to expand it into the
+   full set of cards, and tap again to collapse it back down. Tapping an icon in the
+   collapsed row still marks it done (or opens its checklist) without expanding.
 2. Tap **+ Add routine** to create one: give it a name, pick an icon, choose how often
    it repeats (daily, weekdays, weekly on certain days, every N days, or monthly), and
    optionally a rough time of day. If you want a reminder, set a time and flip the
    switch.
 3. If it's a multi-step routine (like "Morning Routine: make bed, stretch, review
-   today"), turn on **Checklist** and add each step — tapping the card opens a small
+   today"), turn on **Checklist** and add each step — tapping it opens a small
    checklist instead of marking it done in one tap.
 4. Each routine shows a little flame with a number next to it — that's your current
    streak (same idea as the Workout streak). Missing a single day here and there won't
    reset it, but missing two days in the same week will.
 5. To change anything about a routine later — its name, icon, category, time, repeat
-   schedule, checklist steps, or reminder — tap the small pencil icon on its card. That
-   opens the same screen you used to create it, already filled in. Tapping the card
-   itself still just marks it done (or opens its checklist).
+   schedule, checklist steps, or reminder — expand the section and tap the small pencil
+   icon on its card. That opens the same screen you used to create it, already filled
+   in.
 6. Done with a routine for good? Open it with the pencil icon and tap **Archive** — its
    streak history goes with it.
 

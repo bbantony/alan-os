@@ -8,10 +8,10 @@ import { buildRRuleString, nextOccurrenceUtc, type RecurrenceOptions } from "@/l
 import { sendPush, type PushSubscriptionRow } from "@/lib/push/send";
 import {
   createEvent as gcalCreateEvent,
-  deleteEvent as gcalDeleteEvent,
   getOwnGcalConnection,
   listEvents as gcalListEvents,
 } from "@/lib/gcal/client";
+import { syncToGcal, removeFromGcal } from "@/lib/gcal/sync";
 import { getTasks } from "@/app/(app)/tasks/actions";
 import type { Task } from "@/lib/tasks/types";
 import type { Reminder, TopGoal } from "@/lib/reminders/types";
@@ -38,32 +38,11 @@ export async function getReminders(): Promise<Reminder[]> {
   return (data as Reminder[]) ?? [];
 }
 
-async function mirrorReminderToGcal(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
-  reminderId: string,
-  title: string,
-  remindAtIso: string
-) {
-  const connection = await getOwnGcalConnection();
-  if (!connection) return;
-  const start = new Date(remindAtIso);
-  const end = new Date(start.getTime() + 15 * 60000);
-  const event = await gcalCreateEvent(connection.refresh_token_encrypted, connection.calendar_id, {
-    title,
-    startIso: start.toISOString(),
-    endIso: end.toISOString(),
-    reminderMinutesBefore: 0,
-  });
-  await supabase.from("reminders").update({ gcal_event_id: event.id }).eq("id", reminderId).eq("user_id", userId);
-}
-
 export async function createReminder(input: {
   title: string;
   notes: string | null;
   remindAt: string; // ISO
   recurrence: RecurrenceOptions;
-  mirrorToGcal: boolean;
   linkedTaskId?: string | null;
 }): Promise<{ reminder?: Reminder; error?: string }> {
   const { supabase, user } = await requireUser();
@@ -88,7 +67,6 @@ export async function createReminder(input: {
       notes: input.notes,
       remind_at: input.remindAt,
       rrule,
-      mirror_to_gcal: input.mirrorToGcal,
       linked_task_id: input.linkedTaskId ?? null,
     })
     .select("*")
@@ -96,13 +74,21 @@ export async function createReminder(input: {
 
   if (error || !reminder) return { error: error?.message ?? "Could not save reminder." };
 
-  if (input.mirrorToGcal) {
-    try {
-      await mirrorReminderToGcal(supabase, user.id, reminder.id, input.title.trim(), input.remindAt);
-    } catch {
-      // Push delivery is the primary channel — a GCal mirror failure
-      // shouldn't block saving the reminder itself.
-    }
+  // Only a genuinely standalone reminder (not linked to a task/routine) gets
+  // its own calendar mirror — a task/routine-linked one already gets a
+  // calendar block from the task's due date or routine's time-of-day itself,
+  // so mirroring the reminder too would double it up.
+  if (!input.linkedTaskId) {
+    await syncToGcal({
+      supabase,
+      userId: user.id,
+      table: "reminders",
+      rowId: reminder.id,
+      existingEventId: null,
+      title: input.title.trim(),
+      startIso: input.remindAt,
+      recurrence: rrule ? [rrule] : null,
+    });
   }
 
   revalidatePath("/calendar");
@@ -116,10 +102,16 @@ export async function updateReminder(input: {
   notes: string | null;
   remindAt: string;
   recurrence: RecurrenceOptions;
-  mirrorToGcal: boolean;
 }): Promise<{ reminder?: Reminder; error?: string }> {
   const { supabase, user } = await requireUser();
   const rrule = buildRRuleString(input.recurrence);
+
+  const { data: existing } = await supabase
+    .from("reminders")
+    .select("gcal_event_id, linked_task_id, linked_routine_id")
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
 
   const { data: reminder, error } = await supabase
     .from("reminders")
@@ -128,7 +120,6 @@ export async function updateReminder(input: {
       notes: input.notes,
       remind_at: input.remindAt,
       rrule,
-      mirror_to_gcal: input.mirrorToGcal,
     })
     .eq("id", input.id)
     .eq("user_id", user.id)
@@ -136,6 +127,20 @@ export async function updateReminder(input: {
     .single();
 
   if (error || !reminder) return { error: error?.message ?? "Could not update reminder." };
+
+  if (existing && !existing.linked_task_id && !existing.linked_routine_id) {
+    await syncToGcal({
+      supabase,
+      userId: user.id,
+      table: "reminders",
+      rowId: input.id,
+      existingEventId: existing.gcal_event_id,
+      title: input.title.trim(),
+      startIso: input.remindAt,
+      recurrence: rrule ? [rrule] : null,
+    });
+  }
+
   revalidatePath("/calendar");
   revalidatePath("/today");
   return { reminder: reminder as Reminder };
@@ -203,14 +208,7 @@ export async function deleteReminder(input: { id: string }) {
   await supabase.from("reminders").delete().eq("id", input.id).eq("user_id", user.id);
 
   if (reminder?.gcal_event_id) {
-    const connection = await getOwnGcalConnection();
-    if (connection) {
-      try {
-        await gcalDeleteEvent(connection.refresh_token_encrypted, connection.calendar_id, reminder.gcal_event_id);
-      } catch {
-        // Reminder is already gone from our side either way.
-      }
-    }
+    await removeFromGcal({ supabase, userId: user.id, table: "reminders", rowId: input.id, existingEventId: reminder.gcal_event_id });
   }
 
   revalidatePath("/calendar");

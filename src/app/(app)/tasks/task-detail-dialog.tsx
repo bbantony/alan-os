@@ -8,8 +8,9 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
-import { buildRRuleString } from "@/lib/reminders/rrule";
-import { RECURRENCE_PRESET_LABELS, type RecurrencePreset } from "@/lib/reminders/types";
+import { RecurrencePicker } from "@/components/recurrence-picker";
+import { buildRRuleString, parseRecurrenceFromRRule } from "@/lib/reminders/rrule";
+import type { RecurrencePreset } from "@/lib/reminders/types";
 import {
   TASK_HORIZONS,
   TASK_HORIZON_LABELS,
@@ -21,23 +22,12 @@ import {
 import { deleteTask, updateTask } from "./actions";
 
 const PRESETS: RecurrencePreset[] = ["none", "daily", "weekdays", "weekly", "every_n_days", "monthly"];
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function isoToDateTimeLocal(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function presetFromRRule(rrule: string | null): RecurrencePreset {
-  if (!rrule) return "none";
-  if (rrule.includes("BYDAY=MO,TU,WE,TH,FR")) return "weekdays";
-  if (rrule.includes("FREQ=WEEKLY")) return "weekly";
-  if (rrule.includes("FREQ=MONTHLY")) return "monthly";
-  if (rrule.includes("FREQ=DAILY") && rrule.includes("INTERVAL=")) return "every_n_days";
-  if (rrule.includes("FREQ=DAILY")) return "daily";
-  return "custom";
 }
 
 export function TaskDetailDialog({
@@ -58,10 +48,11 @@ export function TaskDetailDialog({
   const [horizon, setHorizon] = useState<TaskHorizon>(task.horizon);
   const [category, setCategory] = useState<TaskCategory>(task.category);
   const [dueAt, setDueAt] = useState(isoToDateTimeLocal(task.due_at));
-  const [preset, setPreset] = useState<RecurrencePreset>(presetFromRRule(task.rrule));
-  const [weekday, setWeekday] = useState(0);
-  const [intervalDays, setIntervalDays] = useState("2");
-  const [monthDay, setMonthDay] = useState("1");
+  const parsedRRule = parseRecurrenceFromRRule(task.rrule, "none");
+  const [preset, setPreset] = useState<RecurrencePreset>(parsedRRule.preset);
+  const [weekday, setWeekday] = useState(parsedRRule.weekday);
+  const [intervalDays, setIntervalDays] = useState(parsedRRule.intervalDays);
+  const [monthDay, setMonthDay] = useState(parsedRRule.monthDay);
   const [remindMe, setRemindMe] = useState(hasReminder);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,62 +145,17 @@ export function TaskDetailDialog({
             <Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Repeat</label>
-            <Select value={preset} onChange={(e) => setPreset(e.target.value as RecurrencePreset)}>
-              {PRESETS.map((p) => (
-                <option key={p} value={p}>
-                  {RECURRENCE_PRESET_LABELS[p]}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          {preset === "weekly" && (
-            <div className="flex flex-wrap gap-1.5">
-              {WEEKDAY_LABELS.map((label, i) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setWeekday(i)}
-                  className={
-                    "tap-press rounded-full border px-2.5 py-1 text-xs " +
-                    (weekday === i ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted")
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-          {preset === "every_n_days" && (
-            <div className="flex items-center gap-2 text-sm">
-              Every
-              <Input
-                type="number"
-                inputMode="numeric"
-                value={intervalDays}
-                onChange={(e) => setIntervalDays(e.target.value)}
-                className="w-16"
-              />
-              days
-            </div>
-          )}
-          {preset === "monthly" && (
-            <div className="flex items-center gap-2 text-sm">
-              On day
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={31}
-                value={monthDay}
-                onChange={(e) => setMonthDay(e.target.value)}
-                className="w-16"
-              />
-              of the month
-            </div>
-          )}
+          <RecurrencePicker
+            presets={PRESETS}
+            preset={preset}
+            onPresetChange={setPreset}
+            weekday={weekday}
+            onWeekdayChange={setWeekday}
+            intervalDays={intervalDays}
+            onIntervalDaysChange={setIntervalDays}
+            monthDay={monthDay}
+            onMonthDayChange={setMonthDay}
+          />
 
           {preset !== "none" && !dueAt && (
             <p className="text-xs text-destructive">A repeating task needs a due date so it knows when to recur.</p>

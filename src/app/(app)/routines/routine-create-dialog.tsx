@@ -9,36 +9,15 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { RECURRENCE_PRESET_LABELS, type RecurrencePreset } from "@/lib/reminders/types";
+import { RecurrencePicker } from "@/components/recurrence-picker";
+import { parseRecurrenceFromRRule } from "@/lib/reminders/rrule";
+import type { RecurrencePreset } from "@/lib/reminders/types";
 import { TASK_CATEGORY_LABELS, type TaskCategory } from "@/lib/tasks/types";
 import { getRoutineIcon, AVAILABLE_ROUTINE_ICON_NAMES } from "@/lib/routines/icon-registry";
 import type { RoutineWithProgress } from "@/lib/routines/types";
 import { archiveRoutine, createRoutine, updateRoutine } from "./actions";
 
 const PRESETS: RecurrencePreset[] = ["daily", "weekdays", "weekly", "every_n_days", "monthly"];
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const DAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
-
-function parseRRuleForForm(rrule: string | null): {
-  preset: RecurrencePreset;
-  weekday: number;
-  intervalDays: string;
-  monthDay: string;
-} {
-  const fallback = { preset: "daily" as RecurrencePreset, weekday: 0, intervalDays: "2", monthDay: "1" };
-  if (!rrule) return fallback;
-  if (rrule.includes("BYDAY=MO,TU,WE,TH,FR")) return { ...fallback, preset: "weekdays" };
-  const weeklyMatch = rrule.match(/FREQ=WEEKLY;BYDAY=(\w\w)/);
-  if (weeklyMatch) {
-    const idx = DAY_CODES.indexOf(weeklyMatch[1]);
-    return { ...fallback, preset: "weekly", weekday: idx >= 0 ? idx : 0 };
-  }
-  const monthlyMatch = rrule.match(/FREQ=MONTHLY;BYMONTHDAY=(\d+)/);
-  if (monthlyMatch) return { ...fallback, preset: "monthly", monthDay: monthlyMatch[1] };
-  const everyNMatch = rrule.match(/FREQ=DAILY;INTERVAL=(\d+)/);
-  if (everyNMatch) return { ...fallback, preset: "every_n_days", intervalDays: everyNMatch[1] };
-  return fallback;
-}
 
 export function RoutineFormDialog({
   open,
@@ -57,7 +36,7 @@ export function RoutineFormDialog({
   onArchived?: (id: string) => void;
   initialTitle?: string;
 }) {
-  const parsedRRule = parseRRuleForForm(existing?.rrule ?? null);
+  const parsedRRule = parseRecurrenceFromRRule(existing?.rrule ?? null, "daily");
 
   const [title, setTitle] = useState(existing?.title ?? initialTitle ?? "");
   const [icon, setIcon] = useState(existing?.icon ?? AVAILABLE_ROUTINE_ICON_NAMES[0]);
@@ -187,48 +166,17 @@ export function RoutineFormDialog({
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Repeats</label>
-            <Select value={preset} onChange={(e) => setPreset(e.target.value as RecurrencePreset)}>
-              {PRESETS.map((p) => (
-                <option key={p} value={p}>
-                  {RECURRENCE_PRESET_LABELS[p]}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          {preset === "weekly" && (
-            <div className="flex flex-wrap gap-1.5">
-              {WEEKDAY_LABELS.map((label, i) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setWeekday(i)}
-                  className={cn(
-                    "tap-press rounded-full border px-2.5 py-1 text-xs",
-                    weekday === i ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-          {preset === "every_n_days" && (
-            <div className="flex items-center gap-2 text-sm">
-              Every
-              <Input type="number" inputMode="numeric" value={intervalDays} onChange={(e) => setIntervalDays(e.target.value)} className="w-16" />
-              days
-            </div>
-          )}
-          {preset === "monthly" && (
-            <div className="flex items-center gap-2 text-sm">
-              On day
-              <Input type="number" inputMode="numeric" min={1} max={31} value={monthDay} onChange={(e) => setMonthDay(e.target.value)} className="w-16" />
-              of the month
-            </div>
-          )}
+          <RecurrencePicker
+            presets={PRESETS}
+            preset={preset}
+            onPresetChange={setPreset}
+            weekday={weekday}
+            onWeekdayChange={setWeekday}
+            intervalDays={intervalDays}
+            onIntervalDaysChange={setIntervalDays}
+            monthDay={monthDay}
+            onMonthDayChange={setMonthDay}
+          />
 
           <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
             <span className="text-sm">

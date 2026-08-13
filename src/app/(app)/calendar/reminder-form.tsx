@@ -42,7 +42,6 @@ export function ReminderForm({
   const [weekday, setWeekday] = useState(0);
   const [intervalDays, setIntervalDays] = useState("2");
   const [monthDay, setMonthDay] = useState("1");
-  const [mirrorToGcal, setMirrorToGcal] = useState(existing?.mirror_to_gcal ?? false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -68,14 +67,12 @@ export function ReminderForm({
           notes: notes.trim() || null,
           remindAt,
           recurrence,
-          mirrorToGcal,
         })
       : await createReminder({
           title: title.trim(),
           notes: notes.trim() || null,
           remindAt,
           recurrence,
-          mirrorToGcal,
         });
 
     setSaving(false);
@@ -175,17 +172,9 @@ export function ReminderForm({
             </div>
           )}
 
-          <label className={cn("flex items-center gap-2 text-sm", !gcalConnected && "opacity-50")}>
-            <input
-              type="checkbox"
-              checked={mirrorToGcal}
-              disabled={!gcalConnected}
-              onChange={(e) => setMirrorToGcal(e.target.checked)}
-              className="size-4 rounded border-input"
-            />
-            Also add to Google Calendar
-            {!gcalConnected && <span className="text-xs text-muted-foreground">(connect it in Settings first)</span>}
-          </label>
+          {gcalConnected && (
+            <p className="text-xs text-muted-foreground">This will also sync to your Google Calendar automatically.</p>
+          )}
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 

@@ -103,7 +103,18 @@ export async function listEvents(
 export async function createEvent(
   refreshTokenEncrypted: string,
   calendarId: string,
-  input: { title: string; startIso: string; endIso: string; reminderMinutesBefore?: number }
+  input: {
+    title: string;
+    startIso: string;
+    endIso: string;
+    reminderMinutesBefore?: number;
+    // RFC5545 RRULE lines (e.g. ["RRULE:FREQ=DAILY"]) — the exact format
+    // src/lib/reminders/rrule.ts already produces, so a routine's or
+    // reminder's own rrule text can be passed straight through to make this
+    // a real recurring Google Calendar series instead of a one-off event
+    // that would otherwise need re-editing on every future occurrence.
+    recurrence?: string[] | null;
+  }
 ): Promise<GcalEvent> {
   const calendar = await calendarClientFor(refreshTokenEncrypted);
   const { data } = await calendar.events.insert({
@@ -112,6 +123,7 @@ export async function createEvent(
       summary: input.title,
       start: { dateTime: input.startIso },
       end: { dateTime: input.endIso },
+      recurrence: input.recurrence ?? undefined,
       reminders:
         input.reminderMinutesBefore !== undefined
           ? { useDefault: false, overrides: [{ method: "popup", minutes: input.reminderMinutesBefore }] }
@@ -125,7 +137,7 @@ export async function updateEvent(
   refreshTokenEncrypted: string,
   calendarId: string,
   eventId: string,
-  input: { title?: string; startIso?: string; endIso?: string }
+  input: { title?: string; startIso?: string; endIso?: string; recurrence?: string[] | null }
 ): Promise<GcalEvent> {
   const calendar = await calendarClientFor(refreshTokenEncrypted);
   const { data } = await calendar.events.patch({
@@ -135,6 +147,7 @@ export async function updateEvent(
       ...(input.title ? { summary: input.title } : {}),
       ...(input.startIso ? { start: { dateTime: input.startIso } } : {}),
       ...(input.endIso ? { end: { dateTime: input.endIso } } : {}),
+      ...(input.recurrence !== undefined ? { recurrence: input.recurrence ?? undefined } : {}),
     },
   });
   return toGcalEvent(data);

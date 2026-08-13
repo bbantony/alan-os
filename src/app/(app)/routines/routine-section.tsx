@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Pencil, Plus, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -28,6 +28,9 @@ export function RoutineSection({
   const [prefillTitle, setPrefillTitle] = useState<string | undefined>(undefined);
   const [checklistFor, setChecklistFor] = useState<RoutineWithProgress | null>(null);
   const [editingRoutine, setEditingRoutine] = useState<RoutineWithProgress | null>(null);
+  // Collapsed by default — a compact strip so Tasks (the thing that felt
+  // messy) gets top billing on page load; tap to expand into the full grid.
+  const [expanded, setExpanded] = useState(false);
 
   async function handleComplete(routine: RoutineWithProgress) {
     if (routine.completedToday) {
@@ -60,7 +63,14 @@ export function RoutineSection({
   return (
     <div className="mb-8">
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your Routines</h2>
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          disabled={routines.length === 0}
+          className="tap-press flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground disabled:cursor-default"
+        >
+          {routines.length > 0 && (expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />)}
+          Your Routines{routines.length > 0 && ` · ${routines.length}`}
+        </button>
         <button
           onClick={() => {
             setPrefillTitle(undefined);
@@ -95,7 +105,7 @@ export function RoutineSection({
 
       {routines.length === 0 ? (
         <p className="text-sm text-muted-foreground">No routines yet — add one for something you want to do on a schedule.</p>
-      ) : (
+      ) : expanded ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <AnimatePresence initial={false}>
             {routines.map((routine) => {
@@ -146,6 +156,30 @@ export function RoutineSection({
               );
             })}
           </AnimatePresence>
+        </div>
+      ) : (
+        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {routines.map((routine) => {
+            const Icon = getRoutineIcon(routine.icon);
+            const done = !!routine.completedToday;
+            const isChecklist = routine.steps.length > 1;
+            return (
+              <button
+                key={routine.id}
+                onClick={() => (isChecklist ? setChecklistFor(routine) : handleComplete(routine))}
+                className={cn(
+                  "tap-press flex w-16 shrink-0 flex-col items-center gap-1 rounded-xl border px-2 py-2",
+                  done ? "border-primary/40 bg-primary/5" : "border-border bg-surface"
+                )}
+              >
+                <div className={cn("flex size-8 items-center justify-center rounded-lg", done ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                  {done ? <Check className="size-4" /> : <Icon className="size-4" />}
+                </div>
+                <span className="w-full truncate text-center text-[10px] font-medium">{routine.title}</span>
+                <StreakBadge current={routine.streak.current} className="scale-90" />
+              </button>
+            );
+          })}
         </div>
       )}
 

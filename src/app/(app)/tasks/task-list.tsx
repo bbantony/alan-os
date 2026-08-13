@@ -6,6 +6,8 @@ import { Bell, BellRing, Check, ChevronDown, ChevronRight, Plus, Repeat, Trash2 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { RecurrencePicker } from "@/components/recurrence-picker";
 import {
   Dialog,
   DialogContent,
@@ -19,13 +21,15 @@ import { toast } from "@/components/ui/toast";
 import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone } from "@/lib/time";
-import { describeRRule } from "@/lib/reminders/rrule";
+import { buildRRuleString, describeRRule } from "@/lib/reminders/rrule";
+import type { RecurrencePreset } from "@/lib/reminders/types";
 import { createReminderFromTask } from "@/app/(app)/calendar/actions";
 import {
   TASK_HORIZONS,
   TASK_HORIZON_LABELS,
   TASK_CATEGORY_LABELS,
   type Task,
+  type TaskCategory,
   type TaskHorizon,
 } from "@/lib/tasks/types";
 import {
@@ -36,14 +40,18 @@ import {
 } from "./actions";
 import { TaskDetailDialog } from "./task-detail-dialog";
 
+const QUICK_ADD_PRESETS: RecurrencePreset[] = ["none", "daily", "weekdays", "weekly", "every_n_days", "monthly"];
+
 export function TaskList({
   initialTasks,
   weeklyDoneCount,
   initialReminderTaskIds,
+  initialDoneTodayByHorizon,
 }: {
   initialTasks: Task[];
   weeklyDoneCount: number;
   initialReminderTaskIds: string[];
+  initialDoneTodayByHorizon: Record<TaskHorizon, number>;
 }) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [title, setTitle] = useState("");
@@ -55,6 +63,19 @@ export function TaskList({
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Task[] | null>(null);
+  const [doneTodayByHorizon, setDoneTodayByHorizon] = useState(initialDoneTodayByHorizon);
+  const [countedTaskIds, setCountedTaskIds] = useState<Set<string>>(new Set());
+
+  // "More options" quick-add panel — collapsed by default so a bare quick
+  // task stays exactly as fast as it always was (type + Enter).
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [quickCategory, setQuickCategory] = useState<TaskCategory>("personal");
+  const [quickDueAt, setQuickDueAt] = useState("");
+  const [quickPreset, setQuickPreset] = useState<RecurrencePreset>("none");
+  const [quickWeekday, setQuickWeekday] = useState(0);
+  const [quickIntervalDays, setQuickIntervalDays] = useState("2");
+  const [quickMonthDay, setQuickMonthDay] = useState("1");
+  const [quickRemindMe, setQuickRemindMe] = useState(false);
 
   const topLevel = tasks.filter((t) => !t.parent_task_id);
   const subtasksOf = useMemo(() => {
@@ -69,11 +90,33 @@ export function TaskList({
     return map;
   }, [tasks]);
 
+  function resetMoreOptions() {
+    setShowMoreOptions(false);
+    setQuickCategory("personal");
+    setQuickDueAt("");
+    setQuickPreset("none");
+    setQuickWeekday(0);
+    setQuickIntervalDays("2");
+    setQuickMonthDay("1");
+    setQuickRemindMe(false);
+  }
+
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = title.trim();
     if (!trimmed) return;
     const id = crypto.randomUUID();
+
+    const dueAtIso = quickDueAt ? new Date(quickDueAt).toISOString() : null;
+    const rrule =
+      quickPreset === "weekly"
+        ? buildRRuleString({ preset: quickPreset, weekday: quickWeekday })
+        : quickPreset === "every_n_days"
+          ? buildRRuleString({ preset: quickPreset, intervalDays: Number(quickIntervalDays) || 2 })
+          : quickPreset === "monthly"
+            ? buildRRuleString({ preset: quickPreset, monthDay: Number(quickMonthDay) || 1 })
+            : buildRRuleString({ preset: quickPreset });
+
     const optimistic: Task = {
       id,
       user_id: "",
@@ -81,16 +124,28 @@ export function TaskList({
       title: trimmed,
       notes: null,
       horizon,
-      due_at: null,
-      category: "personal",
+      due_at: dueAtIso,
+      category: quickCategory,
       completed_at: null,
       sort_order: 0,
       created_at: new Date().toISOString(),
-      rrule: null,
+      rrule,
+      gcal_event_id: null,
     };
     setTasks((prev) => [...prev, optimistic]);
+    if (dueAtIso && quickRemindMe) setRemindedIds((prev) => new Set(prev).add(id));
     setTitle("");
-    await createTask({ id, title: trimmed, horizon, category: "personal" });
+    const category = quickCategory;
+    resetMoreOptions();
+    await createTask({
+      id,
+      title: trimmed,
+      horizon,
+      category,
+      dueAt: dueAtIso,
+      rrule,
+      remindMe: quickRemindMe,
+    });
   }
 
   async function handleRemindMe(task: Task) {
@@ -116,6 +171,7 @@ export function TaskList({
       sort_order: 0,
       created_at: new Date().toISOString(),
       rrule: null,
+      gcal_event_id: null,
     };
     setTasks((prev) => [...prev, optimistic]);
     setSubtaskTitle("");
@@ -132,6 +188,8 @@ export function TaskList({
   async function completeTask(task: Task) {
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     setCompletedTasks(null);
+    setDoneTodayByHorizon((prev) => ({ ...prev, [task.horizon]: (prev[task.horizon] ?? 0) + 1 }));
+    setCountedTaskIds((prev) => new Set(prev).add(task.id));
     const result = await setTaskCompleted({ id: task.id, completed: true });
     if (result.nextTask) {
       setTasks((prev) => [...prev, result.nextTask!]);
@@ -166,6 +224,17 @@ export function TaskList({
   async function handleUndoComplete(task: Task) {
     setCompletedTasks((prev) => (prev ? prev.filter((t) => t.id !== task.id) : prev));
     setTasks((prev) => [...prev, { ...task, completed_at: null }]);
+    // Only back out of today's count if this task was actually completed in
+    // this same session — undoing something from a prior day (reachable via
+    // this same Completed archive) shouldn't decrement today's tally.
+    if (countedTaskIds.has(task.id)) {
+      setDoneTodayByHorizon((prev) => ({ ...prev, [task.horizon]: Math.max(0, (prev[task.horizon] ?? 0) - 1) }));
+      setCountedTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
+    }
     await setTaskCompleted({ id: task.id, completed: false });
   }
 
@@ -178,27 +247,76 @@ export function TaskList({
         </span>
       </div>
 
-      <form onSubmit={handleAdd} className="my-4 flex gap-2">
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Add a task…"
-          className="flex-1"
-        />
-        <Select value={horizon} onChange={(e) => setHorizon(e.target.value as TaskHorizon)} className="w-32 shrink-0">
-          {TASK_HORIZONS.map((h) => (
-            <option key={h} value={h}>
-              {TASK_HORIZON_LABELS[h]}
-            </option>
-          ))}
-        </Select>
-        <Button type="submit" size="icon" aria-label="Add task">
-          <Plus className="size-4" />
-        </Button>
+      <form onSubmit={handleAdd} className="my-4 space-y-2">
+        <div className="flex gap-2">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Add a task…"
+            className="flex-1"
+          />
+          <Select value={horizon} onChange={(e) => setHorizon(e.target.value as TaskHorizon)} className="w-32 shrink-0">
+            {TASK_HORIZONS.map((h) => (
+              <option key={h} value={h}>
+                {TASK_HORIZON_LABELS[h]}
+              </option>
+            ))}
+          </Select>
+          <Button type="submit" size="icon" aria-label="Add task">
+            <Plus className="size-4" />
+          </Button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowMoreOptions((v) => !v)}
+          className="tap-press flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-foreground"
+        >
+          {showMoreOptions ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          More options
+        </button>
+
+        {showMoreOptions && (
+          <div className="space-y-2 rounded-lg border border-dashed border-border p-2.5">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Category</label>
+                <Select value={quickCategory} onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}>
+                  {Object.entries(TASK_CATEGORY_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date (optional)</label>
+                <Input type="datetime-local" value={quickDueAt} onChange={(e) => setQuickDueAt(e.target.value)} />
+              </div>
+            </div>
+
+            <RecurrencePicker
+              presets={QUICK_ADD_PRESETS}
+              preset={quickPreset}
+              onPresetChange={setQuickPreset}
+              weekday={quickWeekday}
+              onWeekdayChange={setQuickWeekday}
+              intervalDays={quickIntervalDays}
+              onIntervalDaysChange={setQuickIntervalDays}
+              monthDay={quickMonthDay}
+              onMonthDayChange={setQuickMonthDay}
+            />
+
+            <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+              <span className="text-sm">
+                Remind me
+                {!quickDueAt && <span className="block text-xs text-muted-foreground">Set a due date first</span>}
+              </span>
+              <Switch checked={quickRemindMe} onCheckedChange={setQuickRemindMe} disabled={!quickDueAt} />
+            </label>
+          </div>
+        )}
       </form>
-      <p className="mb-4 -mt-2 text-xs text-muted-foreground">
-        Tap a task afterward to set a category, due date, repeat, or reminder.
-      </p>
 
       {tasks.length === 0 && (
         <EmptyState
@@ -211,11 +329,13 @@ export function TaskList({
       <div className="space-y-6">
         {TASK_HORIZONS.map((h) => {
           const inHorizon = topLevel.filter((t) => t.horizon === h);
-          if (inHorizon.length === 0) return null;
+          const doneToday = doneTodayByHorizon[h] ?? 0;
+          if (inHorizon.length === 0 && doneToday === 0) return null;
           return (
             <TaskSection
               key={h}
               label={TASK_HORIZON_LABELS[h]}
+              doneToday={doneToday}
               tasks={inHorizon}
               subtasksOf={subtasksOf}
               addingSubtaskFor={addingSubtaskFor}
@@ -318,6 +438,7 @@ export function TaskList({
 
 function TaskSection({
   label,
+  doneToday,
   tasks,
   subtasksOf,
   addingSubtaskFor,
@@ -332,6 +453,7 @@ function TaskSection({
   remindedIds,
 }: {
   label: string;
+  doneToday: number;
   tasks: Task[];
   subtasksOf: Map<string, Task[]>;
   addingSubtaskFor: string | null;
@@ -347,9 +469,16 @@ function TaskSection({
 }) {
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </h2>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </h2>
+        {doneToday > 0 && (
+          <span className="text-xs font-medium text-primary">
+            {tasks.length > 0 ? `${doneToday} done today` : `All clear — ${doneToday} done today`}
+          </span>
+        )}
+      </div>
       <ul className="space-y-1">
         <AnimatePresence initial={false}>
           {tasks.map((task) => (

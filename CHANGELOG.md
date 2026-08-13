@@ -1034,3 +1034,108 @@ cron-job.org step done (2026-08-12) instead of pending, and MANUAL.md's "One-tim
 #3" is marked done at the top (instructions kept below in case the cron-job.org account
 ever needs to be re-created). The only owner action still open anywhere in the app is
 Google Calendar's OAuth credentials.
+
+## 21. "All tasks/routines/reminders sync to calendar, make sure it does" + inline task creation + Tasks page redesign
+
+Three requests in one message: full automatic Google Calendar sync (not the narrow
+opt-in it was), a way to set a task's due date/category/repeat/reminder while creating
+it instead of reopening it afterward, and a Tasks page that felt "like a mess" with "no
+payoff" despite Alan liking the underlying Now/Today/This Week/This Month/Someday
+structure. Per CLAUDE.md's "come up with a plan first" precedent and Alan's own "suggest
+your best ideas before execution," this went through plan-mode with three concrete
+AskUserQuestion decisions put to him directly before any code: quick-add style (kept the
+fast one-line bar with an expandable "more options" panel, over replacing it with a
+dialog every time), payoff style (progress counts + an "All clear" state, no confetti),
+and Routines' placement (collapsed strip by default, over the always-expanded grid).
+
+**What was actually wrong with Google Calendar sync, found by reading the code:**
+- Only the standalone Calendar → Reminders form had an "Also add to Google Calendar"
+  checkbox — Tasks and Routines had no path to Google Calendar at all, not even
+  indirectly through their own reminders.
+- Worse, the checkbox's own mechanism was broken for anything recurring: it mirrored a
+  reminder to Google Calendar once, lazily, the first time the cron dispatcher saw it
+  fire — and never touched that event again. A "daily at 9am" reminder with the
+  checkbox on would show as one single stale one-off event in Google Calendar forever,
+  not a real repeating series, because nothing ever re-created or advanced it.
+
+**What changed, one by one:**
+- New migration `0021_calendar_sync_columns.sql` adds `gcal_event_id` to `tasks` and
+  `routines` (matching the column `reminders` already had).
+- `src/lib/gcal/client.ts`'s `createEvent`/`updateEvent` now accept an optional
+  `recurrence` field, passed straight through to Google's own `recurrence` API —
+  reusing the exact RRULE text this app already stores (`src/lib/reminders/rrule.ts`),
+  since it's already in the format Google expects. This is what fixes the
+  never-advances bug: a recurring reminder/routine now becomes one real Google
+  Calendar recurring series, created once, with Google's own calendar handling every
+  future occurrence — nothing to re-touch on each fire.
+- New `src/lib/gcal/sync.ts`: `syncToGcal()`/`removeFromGcal()`, the one place a
+  task/routine/reminder's mirrored event gets created, moved, turned into/out of a
+  recurring series, or deleted — called eagerly at create/edit/complete/delete time
+  (not lazily on a reminder's first fire, the old design's actual bug). A task mirrors
+  as its own one-off event (each due date is genuinely a separate DB row in this app's
+  own task-recurrence model); a routine or standalone reminder mirrors as one native
+  recurring series (both are a single persistent row whose own rrule already advances,
+  matching Google's recurrence model directly). Wired into `createTask`/`updateTask`/
+  `setTaskCompleted`/`deleteTask`, `createRoutine`/`updateRoutine`/`archiveRoutine`, and
+  `createReminder`/`updateReminder`/`deleteReminder` (calendar/actions.ts) — a
+  task/routine-linked reminder does *not* separately mirror itself anymore, since that
+  would double up with the task/routine's own calendar entry now that it has one.
+- Sync is unconditional once connected — the old per-reminder checkbox is gone
+  entirely from `reminder-form.tsx`; the existing Settings → Calendar master
+  `sync_enabled` switch is still the one on/off control, now covering everything
+  instead of nothing.
+- New `backfillGcalSync()`, called right after a successful OAuth connect
+  (`/api/auth/google/callback/route.ts`) — so connecting for the first time doesn't
+  leave every task/routine/reminder made before that moment invisible on the calendar.
+- The now-dead lazy-mirror-on-first-fire block was deleted from the cron dispatcher
+  (`src/app/api/cron/reminders/route.ts`) — sync happens at creation/edit time now, so
+  the dispatcher has nothing left to do for Google Calendar.
+
+**Inline task creation:** the Tasks quick-add bar (title + horizon + submit) is
+untouched for speed — still exactly type-and-go. A new "More options" toggle beneath it
+expands, in place, into category/due-date-time/repeat/reminder — all wired into
+`createTask`, which already accepted these fields (added by an earlier phase) but the
+UI never sent them. Also added a `notes` field to `createTask` itself, which was
+missing it even though `updateTask` already had it.
+
+**Tasks page — decluttered, given real payoff:**
+- Routines now default to a collapsed single-row strip (small icon chips, tap to
+  complete/open-checklist directly) instead of the always-expanded grid competing with
+  Tasks for the same screen space on load — tap the "Your Routines" heading to expand
+  into the full grid.
+- Each horizon section now shows a live "N done today" count, and a section that's
+  been fully cleared out shows a friendly "All clear — N done today" line instead of
+  just silently disappearing the way it used to (zero feedback for finishing
+  everything in a section was the literal "no payoff" Alan described). New
+  `getTodayCompletionCountsByHorizon()` seeds this per page load; the client then
+  tracks its own live increments as things get checked off in the same session
+  (undoing a task only decrements if it was completed in *this* session, so undoing
+  something from the "Completed" archive from a prior day can't miscount today's
+  tally).
+
+**Also de-duplicated while touching this code:** the repeat-preset + weekday-buttons +
+interval/monthday-inputs block was independently copy-pasted in `TaskDetailDialog` and
+the routine form already — adding a third near-identical copy for the new inline panel
+was the trigger to finally extract it into one shared `src/components/recurrence-picker.tsx`,
+used by all three now. Along the way, added `parseRecurrenceFromRRule()` in `rrule.ts`
+and fixed a real pre-existing bug it exposed: re-opening an "every Wednesday" task or
+routine and saving without touching the weekday picker silently reset it to Monday,
+because the old per-file parse functions only recovered the preset type, not the
+actual weekday/interval/month-day values.
+
+**Verified:** full `npm run build` + `npx tsc --noEmit` + eslint all clean. Connected
+directly to the live database to confirm the new `gcal_event_id` columns exist,
+nullable, on all three tables, and a real insert/update round trip against them works;
+confirmed Alan has no `gcal_connections` row yet, so every new sync code path is
+currently a safe, harmless no-op until he finishes the Google OAuth credentials step
+(unchanged owner action from Phase 3) — nothing in this change touches existing
+behavior until that happens. Could not click through the new inline panel or the
+collapsed Routines strip in a live browser from this session (no interactive browser
+attached); relied on `next build`'s full compile of every route plus careful review
+instead — flagged to Alan to try both by hand and report back.
+
+**What Alan needs to do to see the calendar sync itself work:** finish the Google OAuth
+credentials step (MANUAL.md "One-time setup #2" — Google Cloud Console → OAuth client →
+paste `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` into Vercel), same as it's been since
+Phase 3. Everything else in this entry (inline task creation, the Tasks page redesign)
+works right now regardless of that.

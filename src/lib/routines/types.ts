@@ -17,6 +17,7 @@ export interface Routine {
   time_of_day: string | null;
   active: boolean;
   created_at: string;
+  gcal_event_id: string | null;
 }
 
 export interface RoutineCompletion {

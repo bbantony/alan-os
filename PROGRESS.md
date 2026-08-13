@@ -329,17 +329,57 @@ diagnosis.
       correctly rolls forward to the true next occurrence. See CHANGELOG.md
       entry 19.
 
+### Part 7 — Full Google Calendar sync + inline task creation + Tasks page redesign
+- [x] **Automatic, full Google Calendar sync.** Every task with a due date,
+      every routine with a time of day, and every standalone reminder now
+      mirrors to Google Calendar on its own — no per-item toggle (the old
+      "Also add to Google Calendar" checkbox is gone). A routine/reminder
+      that repeats mirrors as one real recurring Google Calendar event
+      (Google's own `recurrence` field, fed the same RRULE text this app
+      already stores) instead of the old one-off mirror that never advanced
+      past its first occurrence. A task/routine's own push reminder no
+      longer double-mirrors — the due date/time-of-day already covers the
+      calendar side. Connecting for the first time backfills existing data
+      so nothing already on the books stays invisible. New migration
+      `0021_calendar_sync_columns.sql`, new `src/lib/gcal/sync.ts`. Still
+      waiting on the same owner action as always for this to go live: Google
+      OAuth credentials (Phase 3, above) — the code is fully wired and
+      dormant/harmless without it.
+- [x] **Inline task creation.** The Tasks quick-add bar stays exactly as
+      fast as it was (type + Enter), with a new "More options" toggle that
+      expands in place for due date/time, category, repeat, and reminder —
+      no trip back into the task afterward needed unless you want one.
+- [x] **Tasks page decluttered + given real payoff.** Routines now default
+      to a collapsed one-row strip (tap to expand into the full grid) so
+      Tasks gets top billing instead of competing with it. Horizon sections
+      now show live "N done today" counts and a friendly "All clear" line
+      once a section empties out — previously a cleared section just
+      silently vanished with zero feedback.
+- [x] Shared `RecurrencePicker` component extracted (was duplicated in
+      `TaskDetailDialog`, the routine form, and now the new inline panel);
+      new `parseRecurrenceFromRRule()` helper fixes a pre-existing bug where
+      re-saving an edited task/routine without touching the weekday/interval
+      picker would silently reset it to the default.
+- [x] Full plan researched and approved via plan-mode before any code, per
+      the owner's request to "suggest your best ideas before execution";
+      three concrete UX decisions (quick-add style, payoff style, Routines
+      layout) put to the owner directly rather than assumed. Verified:
+      build/typecheck/lint clean; the new `gcal_event_id` columns and a
+      real insert/update round trip confirmed against the live database.
+
 ---
 
 Next session: the Admin/Design overhaul and the Routines + One Timeline
-unification (Parts 1-6 above) are both complete and deployed, and the
-post-launch routine bug fix (view/edit screen + wrong-time reminder, see
-Part 6's last bullet and CHANGELOG.md entry 19) is also complete and
-deployed. Nothing is currently in progress. The natural next step is "Read
-SPEC.md. Phase 5 is complete and deployed. Execute Phase 6 only" (Journal &
-Vinyl) — once the owner actions from Phases 3 and 5 are done (Google OAuth
-credentials, the cron-job.org pinger, and the Gemini API key; none of
-Phase 6 depends on them, but full reminders/calendar delivery and AI
-receipt scanning still do) — unless the owner has a new, more pressing
-request instead, which should take priority the same way Admin/Design and
-Routines both did.
+unification (Parts 1-7 above) are all complete and deployed — including the
+post-launch routine bug fix (Part 6's last bullet, CHANGELOG.md entry 19)
+and the full Google Calendar sync + inline task creation + Tasks page
+redesign (Part 7, CHANGELOG.md entry 21). Nothing is currently in progress.
+The two owner actions left anywhere in the app: creating the Google OAuth
+credentials (Phase 3, MANUAL.md "One-time setup #2" — the cron-job.org
+pinger from the same old list is now done) and the optional Gemini API key
+(Phase 5, still upgrades receipt scanning/CSV categorization from manual to
+automatic whenever it happens, not blocking). The natural next step is
+"Read SPEC.md. Phase 5 is complete and deployed. Execute Phase 6 only"
+(Journal & Vinyl) — Phase 6 doesn't depend on either remaining owner action
+— unless the owner has a new, more pressing request instead, which should
+take priority the same way every prior session's detour did.
