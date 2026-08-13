@@ -22,6 +22,16 @@ async function getConnection(supabase: SupabaseClient, userId: string): Promise<
   return data as GcalConnection;
 }
 
+// Best-effort readable message out of a googleapis error — these carry the
+// real reason (invalid_grant, insufficient scope, etc.) in response.data,
+// not in .message, which googleapis leaves as a generic HTTP status line.
+function describeGcalError(err: unknown): string {
+  const e = err as { message?: string; response?: { status?: number; data?: unknown } };
+  const detail = e?.response?.data ? JSON.stringify(e.response.data) : undefined;
+  const status = e?.response?.status ? ` (HTTP ${e.response.status})` : "";
+  return `${detail ?? e?.message ?? String(err)}${status}`;
+}
+
 // The one place a task/routine/reminder's mirrored Google Calendar event
 // gets created, moved, or turned into/out of a recurring series — called
 // eagerly at create/edit time (not lazily on a reminder's first fire, which
@@ -29,7 +39,8 @@ async function getConnection(supabase: SupabaseClient, userId: string): Promise<
 // mirror never advanced past its first occurrence). `startIso: null` means
 // "no longer scheduled" (a due date was cleared) and deletes any existing
 // event instead of creating one. A calendar mirror failing never blocks
-// saving the underlying row — this always swallows its own errors.
+// saving the underlying row — callers that don't care about the outcome can
+// just ignore the returned result.
 export async function syncToGcal(params: {
   supabase: SupabaseClient;
   userId: string;
@@ -40,14 +51,14 @@ export async function syncToGcal(params: {
   startIso: string | null;
   durationMinutes?: number;
   recurrence?: string[] | null;
-}): Promise<void> {
+}): Promise<{ ok: boolean; error?: string }> {
   const { supabase, userId, table, rowId, existingEventId, title, startIso, durationMinutes = 30, recurrence } = params;
   const connection = await getConnection(supabase, userId);
-  if (!connection) return;
+  if (!connection) return { ok: true };
 
   if (!startIso) {
     await removeFromGcal(params);
-    return;
+    return { ok: true };
   }
 
   const start = new Date(startIso);
@@ -70,8 +81,10 @@ export async function syncToGcal(params: {
       });
       await supabase.from(table).update({ gcal_event_id: event.id }).eq("id", rowId).eq("user_id", userId);
     }
-  } catch {
+    return { ok: true };
+  } catch (err) {
     // Push/DB save already went through — a calendar mirror failure isn't fatal.
+    return { ok: false, error: describeGcalError(err) };
   }
 }
 
@@ -101,10 +114,23 @@ export async function removeFromGcal(params: {
 // Run once right after a Google Calendar connection is created, so existing
 // tasks/routines/reminders don't stay invisible on the calendar until they
 // happen to be edited. Only touches rows that don't already have a mirrored
-// event, so it's safe to call more than once.
-export async function backfillGcalSync(supabase: SupabaseClient, userId: string): Promise<void> {
+// event, so it's safe to call more than once. Returns a summary so the
+// caller can surface a real error instead of silent, invisible failure.
+export async function backfillGcalSync(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<{ synced: number; failed: number; firstError: string | null }> {
+  const result = { synced: 0, failed: 0, firstError: null as string | null };
+  function record(outcome: { ok: boolean; error?: string }) {
+    if (outcome.ok) result.synced += 1;
+    else {
+      result.failed += 1;
+      if (!result.firstError) result.firstError = outcome.error ?? "Unknown error";
+    }
+  }
+
   const connection = await getConnection(supabase, userId);
-  if (!connection) return;
+  if (!connection) return result;
 
   const [{ data: tasks }, { data: routines }, { data: reminders }] = await Promise.all([
     supabase
@@ -132,31 +158,37 @@ export async function backfillGcalSync(supabase: SupabaseClient, userId: string)
   ]);
 
   for (const t of tasks ?? []) {
-    await syncToGcal({ supabase, userId, table: "tasks", rowId: t.id, existingEventId: null, title: t.title, startIso: t.due_at });
+    record(await syncToGcal({ supabase, userId, table: "tasks", rowId: t.id, existingEventId: null, title: t.title, startIso: t.due_at }));
   }
   for (const r of routines ?? []) {
     const startIso = firstReminderInstant(r.rrule, r.time_of_day as string).toISOString();
-    await syncToGcal({
-      supabase,
-      userId,
-      table: "routines",
-      rowId: r.id,
-      existingEventId: null,
-      title: r.title,
-      startIso,
-      recurrence: r.rrule ? [r.rrule] : null,
-    });
+    record(
+      await syncToGcal({
+        supabase,
+        userId,
+        table: "routines",
+        rowId: r.id,
+        existingEventId: null,
+        title: r.title,
+        startIso,
+        recurrence: r.rrule ? [r.rrule] : null,
+      })
+    );
   }
   for (const rem of reminders ?? []) {
-    await syncToGcal({
-      supabase,
-      userId,
-      table: "reminders",
-      rowId: rem.id,
-      existingEventId: null,
-      title: rem.title,
-      startIso: rem.remind_at,
-      recurrence: rem.rrule ? [rem.rrule] : null,
-    });
+    record(
+      await syncToGcal({
+        supabase,
+        userId,
+        table: "reminders",
+        rowId: rem.id,
+        existingEventId: null,
+        title: rem.title,
+        startIso: rem.remind_at,
+        recurrence: rem.rrule ? [rem.rrule] : null,
+      })
+    );
   }
+
+  return result;
 }

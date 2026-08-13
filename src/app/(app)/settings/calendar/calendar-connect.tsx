@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/toast";
-import { disconnectGcal, setGcalSyncEnabled } from "@/app/(app)/calendar/actions";
+import { disconnectGcal, retryGcalSync, setGcalSyncEnabled } from "@/app/(app)/calendar/actions";
 
 export function CalendarConnect({
   status,
@@ -13,6 +13,20 @@ export function CalendarConnect({
 }) {
   const [syncEnabled, setSyncEnabled] = useState(status.syncEnabled);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  async function handleSyncNow() {
+    setSyncing(true);
+    const result = await retryGcalSync();
+    setSyncing(false);
+    if (result.failed > 0) {
+      toast.error(`${result.synced} synced, ${result.failed} failed: ${result.firstError}`);
+    } else if (result.synced > 0) {
+      toast.success(`${result.synced} item(s) synced to Google Calendar`);
+    } else {
+      toast.success("Everything's already synced");
+    }
+  }
 
   async function handleToggle(next: boolean) {
     setSyncEnabled(next);
@@ -48,6 +62,9 @@ export function CalendarConnect({
         </div>
         <Switch checked={syncEnabled} onCheckedChange={handleToggle} aria-label="Toggle calendar sync" />
       </div>
+      <Button type="button" variant="outline" className="w-full" onClick={handleSyncNow} disabled={syncing}>
+        {syncing ? "Syncing…" : "Sync now"}
+      </Button>
       <Button type="button" variant="outline" className="w-full" onClick={handleDisconnect} disabled={disconnecting}>
         {disconnecting ? "Disconnecting…" : "Disconnect"}
       </Button>

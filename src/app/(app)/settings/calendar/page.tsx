@@ -5,7 +5,7 @@ import { PushDevices } from "./push-devices";
 export default async function CalendarSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; connected?: string }>;
+  searchParams: Promise<{ error?: string; connected?: string; syncWarning?: string }>;
 }) {
   const [status, devices, params] = await Promise.all([getGcalStatus(), getPushSubscriptions(), searchParams]);
 
@@ -18,9 +18,14 @@ export default async function CalendarSettingsPage({
           {params.error}
         </p>
       )}
-      {params.connected && (
+      {params.connected && !params.syncWarning && (
         <p className="mb-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
           Google Calendar connected.
+        </p>
+      )}
+      {params.syncWarning && (
+        <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {params.syncWarning}
         </p>
       )}
 
