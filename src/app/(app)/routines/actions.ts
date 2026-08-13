@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { todayInAppTimezone, zonedTimeToUtc } from "@/lib/time";
+import { todayInAppTimezone } from "@/lib/time";
 import { computeStreak } from "@/lib/streaks";
-import { isDueOnDate, type RecurrenceOptions, buildRRuleString } from "@/lib/reminders/rrule";
+import { isDueOnDate, firstReminderInstant, type RecurrenceOptions, buildRRuleString } from "@/lib/reminders/rrule";
 import type { TaskCategory } from "@/lib/tasks/types";
 import type { Routine, RoutineCompletion, RoutineStep, RoutineWithProgress } from "@/lib/routines/types";
 
@@ -31,10 +31,12 @@ export async function getRoutines(): Promise<RoutineWithProgress[]> {
   if (!routines || routines.length === 0) return [];
 
   const routineIds = routines.map((r) => r.id);
-  const [{ data: steps }, { data: completions }] = await Promise.all([
+  const [{ data: steps }, { data: completions }, { data: linkedReminders }] = await Promise.all([
     supabase.from("routine_steps").select("*").in("routine_id", routineIds).order("sort_order", { ascending: true }),
     supabase.from("routine_completions").select("*").in("routine_id", routineIds).eq("user_id", user.id),
+    supabase.from("reminders").select("linked_routine_id").in("linked_routine_id", routineIds).eq("user_id", user.id),
   ]);
+  const remindedRoutineIds = new Set((linkedReminders ?? []).map((r) => r.linked_routine_id as string));
 
   const stepsByRoutine = new Map<string, RoutineStep[]>();
   for (const s of (steps as RoutineStep[]) ?? []) {
@@ -58,6 +60,7 @@ export async function getRoutines(): Promise<RoutineWithProgress[]> {
       steps: stepsByRoutine.get(r.id) ?? [],
       streak: computeStreak(dates, today),
       completedToday: routineCompletions.find((c) => c.completed_date === today) ?? null,
+      hasReminder: remindedRoutineIds.has(r.id),
     };
   });
 }
@@ -105,10 +108,7 @@ export async function createRoutine(input: {
   );
 
   if (input.remindMe && input.timeOfDay) {
-    const today = todayInAppTimezone();
-    const [y, m, d] = today.split("-").map(Number);
-    const [hh, mm] = input.timeOfDay.split(":").map(Number);
-    const remindAt = zonedTimeToUtc({ year: y, month: m, day: d, hour: hh, minute: mm, second: 0 }).toISOString();
+    const remindAt = firstReminderInstant(rrule, input.timeOfDay).toISOString();
     await supabase.from("reminders").insert({
       user_id: user.id,
       title: input.title.trim(),
@@ -116,6 +116,79 @@ export async function createRoutine(input: {
       rrule,
       linked_routine_id: input.id,
     });
+  }
+
+  revalidatePath("/tasks");
+  revalidatePath("/today");
+  return {};
+}
+
+export async function updateRoutine(input: {
+  id: string;
+  title: string;
+  icon: string;
+  category: TaskCategory;
+  recurrence: RecurrenceOptions;
+  timeOfDay?: string | null;
+  steps: string[];
+  remindMe?: boolean;
+}): Promise<{ error?: string }> {
+  const { supabase, user } = await requireUser();
+  const rrule = buildRRuleString(input.recurrence) ?? "RRULE:FREQ=DAILY";
+  const trimmedTitle = input.title.trim();
+
+  const { error } = await supabase
+    .from("routines")
+    .update({
+      title: trimmedTitle,
+      icon: input.icon,
+      category: input.category,
+      rrule,
+      time_of_day: input.timeOfDay ?? null,
+    })
+    .eq("id", input.id)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+
+  const newStepTitles = (input.steps.length > 0 ? input.steps : [trimmedTitle]).map((s) => s.trim());
+  const { data: currentSteps } = await supabase
+    .from("routine_steps")
+    .select("title")
+    .eq("routine_id", input.id)
+    .order("sort_order", { ascending: true });
+  const currentTitles = (currentSteps ?? []).map((s) => s.title as string);
+  if (JSON.stringify(currentTitles) !== JSON.stringify(newStepTitles)) {
+    await supabase.from("routine_steps").delete().eq("routine_id", input.id);
+    await supabase.from("routine_steps").insert(
+      newStepTitles.map((title, i) => ({ routine_id: input.id, title, sort_order: i }))
+    );
+  }
+
+  const { data: existingReminder } = await supabase
+    .from("reminders")
+    .select("id")
+    .eq("linked_routine_id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (input.remindMe && input.timeOfDay) {
+    const remindAt = firstReminderInstant(rrule, input.timeOfDay).toISOString();
+    if (existingReminder) {
+      await supabase
+        .from("reminders")
+        .update({ title: trimmedTitle, remind_at: remindAt, rrule, status: "active" })
+        .eq("id", existingReminder.id);
+    } else {
+      await supabase.from("reminders").insert({
+        user_id: user.id,
+        title: trimmedTitle,
+        remind_at: remindAt,
+        rrule,
+        linked_routine_id: input.id,
+      });
+    }
+  } else if (existingReminder) {
+    await supabase.from("reminders").delete().eq("id", existingReminder.id);
   }
 
   revalidatePath("/tasks");

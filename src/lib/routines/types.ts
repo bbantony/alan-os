@@ -34,4 +34,5 @@ export interface RoutineWithProgress extends Routine {
   steps: RoutineStep[];
   streak: { current: number; longest: number };
   completedToday: RoutineCompletion | null;
+  hasReminder: boolean;
 }

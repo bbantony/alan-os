@@ -12,47 +12,69 @@ import { cn } from "@/lib/utils";
 import { RECURRENCE_PRESET_LABELS, type RecurrencePreset } from "@/lib/reminders/types";
 import { TASK_CATEGORY_LABELS, type TaskCategory } from "@/lib/tasks/types";
 import { getRoutineIcon, AVAILABLE_ROUTINE_ICON_NAMES } from "@/lib/routines/icon-registry";
-import { createRoutine } from "./actions";
+import type { RoutineWithProgress } from "@/lib/routines/types";
+import { archiveRoutine, createRoutine, updateRoutine } from "./actions";
 
 const PRESETS: RecurrencePreset[] = ["daily", "weekdays", "weekly", "every_n_days", "monthly"];
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
-export function RoutineCreateDialog({
+function parseRRuleForForm(rrule: string | null): {
+  preset: RecurrencePreset;
+  weekday: number;
+  intervalDays: string;
+  monthDay: string;
+} {
+  const fallback = { preset: "daily" as RecurrencePreset, weekday: 0, intervalDays: "2", monthDay: "1" };
+  if (!rrule) return fallback;
+  if (rrule.includes("BYDAY=MO,TU,WE,TH,FR")) return { ...fallback, preset: "weekdays" };
+  const weeklyMatch = rrule.match(/FREQ=WEEKLY;BYDAY=(\w\w)/);
+  if (weeklyMatch) {
+    const idx = DAY_CODES.indexOf(weeklyMatch[1]);
+    return { ...fallback, preset: "weekly", weekday: idx >= 0 ? idx : 0 };
+  }
+  const monthlyMatch = rrule.match(/FREQ=MONTHLY;BYMONTHDAY=(\d+)/);
+  if (monthlyMatch) return { ...fallback, preset: "monthly", monthDay: monthlyMatch[1] };
+  const everyNMatch = rrule.match(/FREQ=DAILY;INTERVAL=(\d+)/);
+  if (everyNMatch) return { ...fallback, preset: "every_n_days", intervalDays: everyNMatch[1] };
+  return fallback;
+}
+
+export function RoutineFormDialog({
   open,
+  existing,
   onClose,
   onCreated,
+  onUpdated,
+  onArchived,
   initialTitle,
 }: {
   open: boolean;
+  existing?: RoutineWithProgress | null;
   onClose: () => void;
-  onCreated: () => void;
+  onCreated?: () => void;
+  onUpdated?: () => void;
+  onArchived?: (id: string) => void;
   initialTitle?: string;
 }) {
-  const [title, setTitle] = useState(initialTitle ?? "");
-  const [icon, setIcon] = useState(AVAILABLE_ROUTINE_ICON_NAMES[0]);
-  const [category, setCategory] = useState<TaskCategory>("personal");
-  const [preset, setPreset] = useState<RecurrencePreset>("daily");
-  const [weekday, setWeekday] = useState(0);
-  const [intervalDays, setIntervalDays] = useState("2");
-  const [monthDay, setMonthDay] = useState("1");
-  const [timeOfDay, setTimeOfDay] = useState("");
-  const [remindMe, setRemindMe] = useState(false);
-  const [isChecklist, setIsChecklist] = useState(false);
-  const [steps, setSteps] = useState<string[]>([]);
+  const parsedRRule = parseRRuleForForm(existing?.rrule ?? null);
+
+  const [title, setTitle] = useState(existing?.title ?? initialTitle ?? "");
+  const [icon, setIcon] = useState(existing?.icon ?? AVAILABLE_ROUTINE_ICON_NAMES[0]);
+  const [category, setCategory] = useState<TaskCategory>(existing?.category ?? "personal");
+  const [preset, setPreset] = useState<RecurrencePreset>(parsedRRule.preset);
+  const [weekday, setWeekday] = useState(parsedRRule.weekday);
+  const [intervalDays, setIntervalDays] = useState(parsedRRule.intervalDays);
+  const [monthDay, setMonthDay] = useState(parsedRRule.monthDay);
+  const [timeOfDay, setTimeOfDay] = useState(existing?.time_of_day ?? "");
+  const [remindMe, setRemindMe] = useState(existing?.hasReminder ?? false);
+  const [isChecklist, setIsChecklist] = useState((existing?.steps.length ?? 0) > 1);
+  const [steps, setSteps] = useState<string[]>(
+    (existing?.steps.length ?? 0) > 1 ? (existing?.steps.map((s) => s.title) ?? []) : []
+  );
   const [stepDraft, setStepDraft] = useState("");
   const [saving, setSaving] = useState(false);
-
-  function reset() {
-    setTitle("");
-    setIcon(AVAILABLE_ROUTINE_ICON_NAMES[0]);
-    setCategory("personal");
-    setPreset("daily");
-    setTimeOfDay("");
-    setRemindMe(false);
-    setIsChecklist(false);
-    setSteps([]);
-    setStepDraft("");
-  }
+  const [archiving, setArchiving] = useState(false);
 
   function addStep() {
     const trimmed = stepDraft.trim();
@@ -61,46 +83,68 @@ export function RoutineCreateDialog({
     setStepDraft("");
   }
 
+  function buildRecurrence() {
+    return preset === "weekly"
+      ? { preset, weekday }
+      : preset === "every_n_days"
+        ? { preset, intervalDays: Number(intervalDays) || 2 }
+        : preset === "monthly"
+          ? { preset, monthDay: Number(monthDay) || 1 }
+          : { preset };
+  }
+
   async function handleSave() {
     const trimmed = title.trim();
     if (!trimmed) return;
     setSaving(true);
 
-    const recurrence =
-      preset === "weekly"
-        ? { preset, weekday }
-        : preset === "every_n_days"
-          ? { preset, intervalDays: Number(intervalDays) || 2 }
-          : preset === "monthly"
-            ? { preset, monthDay: Number(monthDay) || 1 }
-            : { preset };
-
-    const result = await createRoutine({
-      id: crypto.randomUUID(),
-      title: trimmed,
-      icon,
-      category,
-      recurrence,
-      timeOfDay: timeOfDay || null,
-      steps: isChecklist ? steps : [],
-      remindMe,
-    });
+    const recurrence = buildRecurrence();
+    const result = existing
+      ? await updateRoutine({
+          id: existing.id,
+          title: trimmed,
+          icon,
+          category,
+          recurrence,
+          timeOfDay: timeOfDay || null,
+          steps: isChecklist ? steps : [],
+          remindMe,
+        })
+      : await createRoutine({
+          id: crypto.randomUUID(),
+          title: trimmed,
+          icon,
+          category,
+          recurrence,
+          timeOfDay: timeOfDay || null,
+          steps: isChecklist ? steps : [],
+          remindMe,
+        });
 
     setSaving(false);
     if (result.error) {
       toast.error(result.error);
       return;
     }
-    toast.success("Routine created");
-    reset();
-    onCreated();
+    toast.success(existing ? "Routine updated" : "Routine created");
+    if (existing) onUpdated?.();
+    else onCreated?.();
+  }
+
+  async function handleArchive() {
+    if (!existing) return;
+    setArchiving(true);
+    await archiveRoutine({ id: existing.id });
+    setArchiving(false);
+    toast.success("Routine archived");
+    onArchived?.(existing.id);
   }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New routine</DialogTitle>
+          <DialogTitle>{existing ? "Edit routine" : "New routine"}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
@@ -236,14 +280,22 @@ export function RoutineCreateDialog({
             <Switch checked={remindMe} onCheckedChange={setRemindMe} disabled={!timeOfDay} />
           </label>
 
-          <Button
-            type="button"
-            className="w-full"
-            onClick={handleSave}
-            disabled={saving || !title.trim() || (isChecklist && steps.length === 0)}
-          >
-            {saving ? "Saving…" : "Create routine"}
-          </Button>
+          <div className="flex gap-2 pt-1">
+            {existing && (
+              <Button type="button" variant="outline" className="flex-1 text-destructive" onClick={handleArchive} disabled={archiving || saving}>
+                <Trash2 className="size-4" />
+                Archive
+              </Button>
+            )}
+            <Button
+              type="button"
+              className="flex-1"
+              onClick={handleSave}
+              disabled={saving || archiving || !title.trim() || (isChecklist && steps.length === 0)}
+            >
+              {saving ? "Saving…" : existing ? "Save" : "Create routine"}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

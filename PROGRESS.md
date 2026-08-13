@@ -319,15 +319,26 @@ diagnosis.
       the live database (schema/RLS/cascade-delete, a full routine lifecycle
       round trip, the recurring-task-reminder fix, `isDueOnDate` against
       daily/weekly/every-N-days patterns) both before and after building.
+- [x] **Bug fix, post-launch**: routines had no view/edit screen (only
+      create), and a new routine's first reminder could fire immediately
+      instead of at its scheduled time whenever that time had already
+      passed today. Added a shared create/edit form (pencil icon on every
+      routine card, always visible — the old delete icon was hover-only and
+      unreachable on a phone) and a `firstReminderInstant()` helper that
+      correctly rolls forward to the true next occurrence. See CHANGELOG.md
+      entry 19.
 
 ---
 
 Next session: the Admin/Design overhaul and the Routines + One Timeline
-unification (Parts 1-6 above) are both complete and deployed. Nothing is
-currently in progress. The natural next step is "Read SPEC.md. Phase 5 is
-complete and deployed. Execute Phase 6 only" (Journal & Vinyl) — once the
-owner actions from Phases 3 and 5 are done (Google OAuth credentials, the
-cron-job.org pinger, and the Gemini API key; none of Phase 6 depends on
-them, but full reminders/calendar delivery and AI receipt scanning still
-do) — unless the owner has a new, more pressing request instead, which
-should take priority the same way Admin/Design and Routines both did.
+unification (Parts 1-6 above) are both complete and deployed, and the
+post-launch routine bug fix (view/edit screen + wrong-time reminder, see
+Part 6's last bullet and CHANGELOG.md entry 19) is also complete and
+deployed. Nothing is currently in progress. The natural next step is "Read
+SPEC.md. Phase 5 is complete and deployed. Execute Phase 6 only" (Journal &
+Vinyl) — once the owner actions from Phases 3 and 5 are done (Google OAuth
+credentials, the cron-job.org pinger, and the Gemini API key; none of
+Phase 6 depends on them, but full reminders/calendar delivery and AI
+receipt scanning still do) — unless the owner has a new, more pressing
+request instead, which should take priority the same way Admin/Design and
+Routines both did.

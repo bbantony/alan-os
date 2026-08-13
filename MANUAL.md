@@ -699,8 +699,12 @@ Routine itself.
 4. Each routine shows a little flame with a number next to it — that's your current
    streak (same idea as the Workout streak). Missing a single day here and there won't
    reset it, but missing two days in the same week will.
-5. Done with a routine for good? Tap the trash icon that appears when you hover/press
-   on its card to archive it — its streak history goes with it.
+5. To change anything about a routine later — its name, icon, category, time, repeat
+   schedule, checklist steps, or reminder — tap the small pencil icon on its card. That
+   opens the same screen you used to create it, already filled in. Tapping the card
+   itself still just marks it done (or opens its checklist).
+6. Done with a routine for good? Open it with the pencil icon and tap **Archive** — its
+   streak history goes with it.
 
 ### The "you keep adding this" nudge
 

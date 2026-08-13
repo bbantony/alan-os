@@ -917,3 +917,65 @@ routine was first built from the server's local wall clock instead of the app's
 `zonedTimeToUtc` helper, which would have drifted against Vercel's UTC runtime exactly
 like the timezone bug class already fixed elsewhere this session — corrected before
 committing, not after.
+
+## 19. Routines had no way to view/edit them, and the test reminder fired at the wrong time
+
+Alan tried out push notifications (worked) and set up a routine in Tasks, but found two
+problems: there was no way to open a routine again to see or change its schedule, and
+the test routine's reminder notification arrived at the wrong time.
+
+**What was actually wrong (found by reading the routine-reminder code, not guessing):**
+- The wrong-time bug was real and in the code, not a delivery-timing fluke. When a
+  routine's reminder is created, the app has to pick the very first moment it should
+  fire. It was always computing that as "today, at the time you picked" — with no check
+  for whether that time had already passed today, or whether today even matches the
+  routine's repeat pattern (e.g. a "every Wednesday" routine created on a Tuesday). If
+  the chosen time was already in the past for today, the reminder was already "due" the
+  moment it was created — so instead of waiting until the picked time, it fired on the
+  very next check (within a few minutes), which is exactly what "wrong time" would look
+  and feel like. Every reminder *after* the first one was already computed correctly
+  (that part was tested and verified in entry 18) — only the very first firing had this
+  bug.
+- There was no view/edit screen for a routine at all — tapping a routine card only
+  toggled it done (or opened its checklist, for multi-step routines). The only other
+  control was a delete icon that only appeared on mouse hover, which doesn't exist on a
+  phone — so on Alan's actual device (a PWA on Android) there was no way to reach it
+  either. Both problems boiled down to the same gap: routines were create-only.
+
+**What changed, one by one:**
+- New `firstReminderInstant()` helper in `src/lib/reminders/rrule.ts`: given a routine's
+  repeat pattern and a wall-clock time, it checks whether today both matches the pattern
+  and is still upcoming — if so, uses today; otherwise it rolls forward to the true next
+  occurrence via the existing DST-aware recurrence math. `createRoutine` and the new
+  `updateRoutine` (below) both now use this instead of the old "always today" logic, so
+  a routine's first reminder — and any reminder after a schedule edit — lands on the
+  correct day and time, not just every fire after the first.
+- New "Edit routine" screen: tapping a pencil icon (always visible, not a hover-only
+  icon that a touchscreen can't trigger) on any routine card now opens the same form
+  used to create one, pre-filled with its current title, icon, category, time, repeat
+  schedule, checklist steps, and reminder toggle. Saving updates all of it in place;
+  archiving (with its own button in the same screen) works the same as before. The
+  create and edit forms are now one shared component (`RoutineFormDialog`, replacing
+  `RoutineCreateDialog`) instead of two, matching how the Calendar reminder form already
+  unifies create/edit.
+- New `updateRoutine` server action mirrors `createRoutine`: updates the routine row,
+  replaces its checklist steps only if they actually changed (so completing today's
+  checklist isn't reset by an unrelated edit like renaming), and creates, updates, or
+  deletes its linked reminder depending on the new reminder toggle/time — using the same
+  `firstReminderInstant` fix so an edited schedule's next reminder is correct too.
+- `getRoutines()` now also reports whether each routine has a reminder turned on
+  (`hasReminder`), so the edit screen's "Remind me" switch reflects the routine's real
+  state instead of always starting off.
+- Routine cards were rearranged slightly to fit the new always-visible edit icon next to
+  the streak badge, without changing the tap-to-complete / tap-to-open-checklist
+  behavior underneath it.
+
+**Verified:** full production build and typecheck both pass clean. Traced the exact
+"today at chosen time, unconditionally" bug in `createRoutine`'s old code and confirmed
+by hand that it would fire immediately whenever the picked time had already passed —
+matching what Alan reported — and that `firstReminderInstant` produces the correct
+future instant for that same input.
+
+**Next step for Alan to see it work:** create (or edit) a routine with a reminder set
+for a time later today, then wait for that time — it should now arrive on schedule
+instead of immediately. The pencil icon on any routine card opens editing.

@@ -102,3 +102,30 @@ export function isDueOnDate(rruleText: string, dtstartDateStr: string, dateStr: 
   const dayEnd = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
   return rule.between(dayStart, dayEnd, true).length > 0;
 }
+
+// The correct first remind_at for a brand-new (or just-edited) recurring
+// reminder anchored to a wall-clock "time of day" rather than a specific
+// picked date+time (routines' "Around what time?" field, unlike the
+// Calendar reminder form which has the user pick an explicit date). Naively
+// using today's date at that time — what the routine reminder code used to
+// do — is wrong in two ways: if that time has already passed today, the
+// reminder is already "due" and fires on the very next cron tick instead of
+// waiting for its real next occurrence; and if today doesn't match the
+// rrule's own pattern (e.g. "weekly on Wednesday" set up on a Monday), it
+// fires on the wrong day entirely. Both are fixed by checking today against
+// the rrule and rolling forward to the true next occurrence whenever
+// today's slot isn't a valid, still-upcoming one.
+export function firstReminderInstant(rruleText: string, timeOfDay: string, nowUtc: Date = new Date()): Date {
+  const [hh, mm] = timeOfDay.split(":").map(Number);
+  const now = utcToZonedParts(nowUtc, APP_TIMEZONE);
+  const todayStr = `${now.year}-${String(now.month).padStart(2, "0")}-${String(now.day).padStart(2, "0")}`;
+  const todayCandidate = zonedTimeToUtc(
+    { year: now.year, month: now.month, day: now.day, hour: hh || 0, minute: mm || 0, second: 0 },
+    APP_TIMEZONE
+  );
+
+  if (isDueOnDate(rruleText, todayStr, todayStr) && todayCandidate > nowUtc) {
+    return todayCandidate;
+  }
+  return nextOccurrenceUtc(rruleText, todayCandidate) ?? todayCandidate;
+}

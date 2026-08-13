@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Check, Pencil, Plus, Sparkles } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
@@ -12,8 +12,8 @@ import { StreakBadge } from "@/components/streak-badge";
 import { getRoutineIcon } from "@/lib/routines/icon-registry";
 import type { RoutineWithProgress } from "@/lib/routines/types";
 import type { RoutineSuggestion } from "./actions";
-import { archiveRoutine, completeRoutineToday, getRoutines, uncompleteRoutineToday } from "./actions";
-import { RoutineCreateDialog } from "./routine-create-dialog";
+import { completeRoutineToday, getRoutines, uncompleteRoutineToday } from "./actions";
+import { RoutineFormDialog } from "./routine-create-dialog";
 
 export function RoutineSection({
   initialRoutines,
@@ -27,7 +27,7 @@ export function RoutineSection({
   const [creating, setCreating] = useState(false);
   const [prefillTitle, setPrefillTitle] = useState<string | undefined>(undefined);
   const [checklistFor, setChecklistFor] = useState<RoutineWithProgress | null>(null);
-  const [confirmArchive, setConfirmArchive] = useState<RoutineWithProgress | null>(null);
+  const [editingRoutine, setEditingRoutine] = useState<RoutineWithProgress | null>(null);
 
   async function handleComplete(routine: RoutineWithProgress) {
     if (routine.completedToday) {
@@ -48,13 +48,6 @@ export function RoutineSection({
     const { streak } = await completeRoutineToday({ routineId: routine.id, stepsDone: stepIds });
     setRoutines((prev) => prev.map((r) => (r.id === routine.id ? { ...r, streak } : r)));
     toast.success(`"${routine.title}" done — ${streak.current} day streak`);
-  }
-
-  async function handleArchive(routine: RoutineWithProgress) {
-    setRoutines((prev) => prev.filter((r) => r.id !== routine.id));
-    setConfirmArchive(null);
-    await archiveRoutine({ id: routine.id });
-    toast.success("Routine archived");
   }
 
   function handleSuggestionAccept(title: string) {
@@ -119,33 +112,35 @@ export function RoutineSection({
                   exit="exit"
                   transition={LIST_ITEM_TRANSITION}
                   className={cn(
-                    "group relative rounded-xl border p-3 text-left",
+                    "relative rounded-xl border p-3 text-left",
                     done ? "border-primary/40 bg-primary/5" : "border-border bg-surface"
                   )}
                 >
+                  <div className="mb-2 flex w-full items-center justify-between">
+                    <div className={cn("flex size-8 items-center justify-center rounded-lg", done ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                      {done ? <Check className="size-4" /> : <Icon className="size-4" />}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <StreakBadge current={routine.streak.current} />
+                      <button
+                        onClick={() => setEditingRoutine(routine)}
+                        className="tap-press text-muted-foreground/60 hover:text-foreground"
+                        aria-label="Edit routine"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
+                    </div>
+                  </div>
                   <button
                     onClick={() => (isChecklist ? setChecklistFor(routine) : handleComplete(routine))}
-                    className="tap-press flex w-full flex-col items-start gap-2"
+                    className="tap-press flex w-full flex-col items-start gap-1 text-left"
                   >
-                    <div className="flex w-full items-center justify-between">
-                      <div className={cn("flex size-8 items-center justify-center rounded-lg", done ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                        {done ? <Check className="size-4" /> : <Icon className="size-4" />}
-                      </div>
-                      <StreakBadge current={routine.streak.current} />
-                    </div>
                     <p className={cn("truncate text-sm font-medium", done && "text-muted-foreground line-through")}>{routine.title}</p>
                     {isChecklist && (
                       <p className="text-xs text-muted-foreground">
                         {(routine.completedToday?.steps_done.length ?? 0)}/{routine.steps.length} steps
                       </p>
                     )}
-                  </button>
-                  <button
-                    onClick={() => setConfirmArchive(routine)}
-                    className="tap-press absolute right-2 top-2 opacity-0 group-hover:opacity-100 text-muted-foreground/50 hover:text-destructive"
-                    aria-label="Archive routine"
-                  >
-                    <Trash2 className="size-3.5" />
                   </button>
                 </motion.div>
               );
@@ -154,7 +149,8 @@ export function RoutineSection({
         </div>
       )}
 
-      <RoutineCreateDialog
+      <RoutineFormDialog
+        key={creating ? (prefillTitle ?? "blank") : "closed"}
         open={creating}
         initialTitle={prefillTitle}
         onClose={() => setCreating(false)}
@@ -162,6 +158,22 @@ export function RoutineSection({
           setCreating(false);
           const fresh = await getRoutines();
           setRoutines(fresh);
+        }}
+      />
+
+      <RoutineFormDialog
+        key={editingRoutine?.id ?? "none"}
+        open={!!editingRoutine}
+        existing={editingRoutine}
+        onClose={() => setEditingRoutine(null)}
+        onUpdated={async () => {
+          setEditingRoutine(null);
+          const fresh = await getRoutines();
+          setRoutines(fresh);
+        }}
+        onArchived={(id) => {
+          setRoutines((prev) => prev.filter((r) => r.id !== id));
+          setEditingRoutine(null);
         }}
       />
 
@@ -175,25 +187,6 @@ export function RoutineSection({
           }}
         />
       )}
-
-      <Dialog open={!!confirmArchive} onOpenChange={(open) => !open && setConfirmArchive(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Archive this routine?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            &ldquo;{confirmArchive?.title}&rdquo; and its streak history will be hidden — this can&apos;t be undone.
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmArchive(null)}>
-              Cancel
-            </Button>
-            <Button className="text-destructive" variant="outline" onClick={() => confirmArchive && handleArchive(confirmArchive)}>
-              Archive
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
