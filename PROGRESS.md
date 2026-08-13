@@ -71,12 +71,12 @@ See `SPEC.md` for the full specification.
       devices, not just an in-app celebration
 - [ ] **Owner action**: create Google OAuth credentials (Google Cloud
       Console) and paste into Vercel env vars — see MANUAL.md for exact steps
-- [ ] **Owner action**: sign up for a free cron-job.org account and point it
-      at `/api/cron/reminders` with the bearer secret — see MANUAL.md
-      (Vercel's own free-tier cron can only run once/day, too infrequent for
-      timely reminders, so this external pinger is the real delivery clock;
-      a once-daily native Vercel Cron entry was added too, as a backup +
-      to keep the Supabase project from pausing on inactivity)
+- [x] **Owner action, done 2026-08-12**: cron-job.org account created,
+      pointed at `/api/cron/reminders` with the bearer secret, pinging every
+      1-5 minutes. Verified live: a real reminder fired on its own with no
+      manual trigger. Reminders (tasks and routines both) now arrive at
+      their actual scheduled time instead of waiting for the once-daily
+      Vercel Cron backup.
 
 ## Phase 4 — Finance core
 - [x] Accounts (chequing/credit card/investment/cash, CAD or INR, credit
@@ -137,9 +137,10 @@ the owner's own pending action.
 
 Phase 3 (Reminders & Calendar) is built, verified against the live database (migration
 + RLS + the full dispatcher pipeline were actually exercised end-to-end with real test
-data, not just read over), and deployed — but reminders won't actually be delivered
-and Google Calendar won't connect until the two owner actions above are done. See
-MANUAL.md's Phase 3 section for exact click-by-click steps.
+data, not just read over), and deployed. Reminders now actually arrive on time — the
+cron-job.org pinger owner action is done and confirmed live (see CHANGELOG.md entry 20).
+Google Calendar still won't connect until the OAuth-credentials owner action above is
+done — see MANUAL.md's Phase 3 section for exact click-by-click steps.
 
 Phase 4 (Finance core) is built, verified against the live database (RLS +
 seeded categories + a full budget-spend round trip were actually exercised

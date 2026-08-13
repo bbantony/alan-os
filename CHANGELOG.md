@@ -979,3 +979,58 @@ future instant for that same input.
 **Next step for Alan to see it work:** create (or edit) a routine with a reminder set
 for a time later today, then wait for that time — it should now arrive on schedule
 instead of immediately. The pencil icon on any routine card opens editing.
+
+## 20. "No notifications fired at all" — diagnosed as the missing cron-job.org step, then set it up live
+
+Right after entry 19 shipped, Alan created a new task and a new routine, both with
+reminders on, and got nothing. Separately, he'd been getting a reminder for an existing
+routine ("Brt") every morning at almost the same time — a time that didn't match what
+he'd actually set.
+
+**Diagnosis (no code was broken — confirmed by reading the live data, not guessing):**
+- Connected directly to the production Supabase database (using the same
+  `SUPABASE_DB_URL` `scripts/run-migration.mjs` already uses) and looked at Alan's
+  actual reminder rows. The new task and routine reminders were sitting there exactly
+  correctly scheduled — right title, right time, `status: active` — but `last_fired_at`
+  was `null`: the dispatcher had never once checked them.
+- Manually called the live dispatcher endpoint by hand (`/api/cron/reminders` with the
+  real `CRON_SECRET`) to test it directly. It worked perfectly — claimed all 3 overdue
+  reminders and pushed all 3 notifications immediately. This proved the entire pipeline
+  (RLS-bypassing RPCs, VAPID, the push subscription, the service worker) was never the
+  problem.
+- That left one explanation, and it matched both symptoms at once: the cron-job.org
+  pinger from Phase 3 (MANUAL.md's "One-time setup #3") had never actually been done.
+  The only thing checking for due reminders was the once-a-day native Vercel Cron
+  backup (`vercel.json`, fixed at 13:00 UTC daily — see entry 9). A brand-new reminder
+  just sits overdue for up to 24 hours until that single daily check happens to run.
+  And "Brt" firing every morning at "almost the same random time" was that exact same
+  daily check — Vercel's free-tier cron doesn't guarantee an exact minute, so it landed
+  within roughly an hour of 13:00 UTC (~8am Winnipeg in summer) each day, never at the
+  time Alan had actually picked for the routine.
+- No code fix was needed or made — the dispatcher, the RPCs, and this session's own
+  `firstReminderInstant()` fix from entry 19 were all already correct. The gap was
+  purely the missing outside-service setup step.
+
+**What happened next:** walked Alan through creating the cron-job.org account and the
+cronjob live, including reading his screen back to him field-by-field (their UI showed
+an unrelated "Requires HTTP authentication" username/password section he was right to
+ignore — the actual mechanism is the separate custom-header section) and giving him the
+real `CRON_SECRET` value directly instead of making him hunt through `.env.local`. He
+ran cron-job.org's built-in "Perform test run," which came back `200 OK` with
+`{"claimed":0,"pushed":0,"mirrored":0}` — a genuine success (0 just means nothing was
+overdue at that exact second, since the manual trigger above had already cleared
+everything out). He then created a fresh test reminder a couple minutes out and
+confirmed it fired on its own, no manual trigger — end-to-end proof the whole chain
+now works unattended.
+
+**Also answered:** whether any of this costs money. It doesn't — cron-job.org's free
+tier needs no card and supports 1-minute pings; a ping every 1-5 minutes is roughly
+1,440-43,200 tiny requests/month against Vercel and Supabase, nowhere near either
+platform's free-tier allowance, consistent with this project's "free tiers only" rule
+(CLAUDE.md).
+
+**Docs updated to match:** PROGRESS.md's Phase 3 owner-action checklist now shows the
+cron-job.org step done (2026-08-12) instead of pending, and MANUAL.md's "One-time setup
+#3" is marked done at the top (instructions kept below in case the cron-job.org account
+ever needs to be re-created). The only owner action still open anywhere in the app is
+Google Calendar's OAuth credentials.

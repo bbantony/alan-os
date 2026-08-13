@@ -343,7 +343,12 @@ This part needs a few clicks in Google's own site first.
 9. Back in Alan OS, go to **More → Settings → Calendar & Reminders** and tap
    **Connect Google Calendar**.
 
-### One-time setup #3 — turn on reminder delivery
+### One-time setup #3 — turn on reminder delivery ✅ done (2026-08-12)
+
+**This is done.** cron-job.org is set up and pinging `/api/cron/reminders`
+every 1-5 minutes, confirmed live with a real reminder that fired on its
+own with no manual trigger. Left below for reference/in case it ever needs
+to be re-created (e.g. a new cron-job.org account).
 
 Reminders won't actually fire on time until this last step is done. The free
 hosting plan this app runs on only allows checking for due reminders once a
