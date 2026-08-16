@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppTimezone } from "@/lib/time";
-import { sessionBests, detectNewPrs, type NewPr } from "@/lib/workout/pr";
+import {
+  sessionBests,
+  detectNewPrs,
+  reportablePrs,
+  type NewPr,
+} from "@/lib/workout/pr";
 import { computeStreak, startOfWeek } from "@/lib/workout/streaks";
 import { sendPush, type PushSubscriptionRow } from "@/lib/push/send";
 import type {
@@ -280,6 +285,9 @@ export async function logWorkout(input: {
     const newPrs = detectNewPrs(session, priorBests);
 
     if (newPrs.length > 0) {
+      // Every result is written — including the opening baseline for an
+      // exercise that has never been logged, because the ledger is what future
+      // sessions compare against.
       await supabase.from("prs").insert(
         newPrs.map((pr) => ({
           user_id: user.id,
@@ -289,7 +297,12 @@ export async function logWorkout(input: {
           workout_id: workoutId,
         }))
       );
-      for (const pr of newPrs) {
+
+      // Only records that actually beat something get announced. The first
+      // time you ever log an exercise you are not setting three personal
+      // records, you are establishing a starting point — reporting that as a
+      // PR is what made the whole feature meaningless.
+      for (const pr of reportablePrs(newPrs)) {
         allNewPrs.push({ ...pr, exerciseId: ex.exerciseId, exerciseName: ex.exerciseName });
       }
     }
@@ -373,6 +386,54 @@ export async function deleteWorkout(input: { id: string }) {
   await supabase.from("workouts").delete().eq("id", input.id).eq("user_id", user.id);
   revalidatePath("/workout");
   revalidatePath("/today");
+}
+
+/**
+ * The exercises from your most recent resistance session, in the order you did
+ * them. Powers "Repeat last session", which is the fastest possible start for
+ * anyone training on a rotation — the common case is doing the same five lifts
+ * as last Monday, and picking them one by one every time is pure friction.
+ *
+ * Returns exercise ids only; the client resolves them against its own list and
+ * pulls each one's history the same way it does for a template.
+ */
+export async function getLastResistanceSession(): Promise<{
+  workoutDate: string;
+  exerciseIds: string[];
+} | null> {
+  const { supabase, user } = await requireUser();
+
+  const { data: workout } = await supabase
+    .from("workouts")
+    .select("id, workout_date")
+    .eq("user_id", user.id)
+    .eq("type", "resistance")
+    .order("workout_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!workout) return null;
+
+  const { data: sets } = await supabase
+    .from("workout_sets")
+    .select("exercise_id, set_number")
+    .eq("workout_id", workout.id)
+    .order("set_number", { ascending: true });
+
+  // Preserve the order they were performed in rather than sorting — a session
+  // read back in a different order to the one you did it in is disorienting.
+  const seen = new Set<string>();
+  const exerciseIds: string[] = [];
+  for (const row of (sets as { exercise_id: string }[]) ?? []) {
+    if (!seen.has(row.exercise_id)) {
+      seen.add(row.exercise_id);
+      exerciseIds.push(row.exercise_id);
+    }
+  }
+
+  if (exerciseIds.length === 0) return null;
+  return { workoutDate: workout.workout_date as string, exerciseIds };
 }
 
 // ---------- Templates ----------

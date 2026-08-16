@@ -1,17 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Plus, Search } from "lucide-react";
+import { Check, Plus, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Tag } from "@/components/ui/tag";
+import { cn } from "@/lib/utils";
 import { findPossibleDuplicate } from "@/lib/workout/exercise-match";
 import {
   EQUIPMENT_LABELS,
@@ -26,23 +21,41 @@ import { addExercise } from "../actions";
 const MUSCLE_GROUPS = Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[];
 const EQUIPMENT_TYPES = Object.keys(EQUIPMENT_LABELS) as EquipmentType[];
 
+/**
+ * Full-screen, multi-select exercise picker.
+ *
+ * Replaces a small modal that added exactly one exercise per open, reached
+ * from a 36px dashed square at the end of a horizontally-scrolling chip row.
+ * Building a five-exercise session meant five round trips through a scroll,
+ * a tap, a search and a dialog — which is what Alan described as "very
+ * inefficient", and he was right.
+ *
+ * Three things fix it: it fills the screen, it's grouped by body part so you
+ * can find things without typing, and you tick as many as you want and add
+ * them all at once. Recently used floats to the top because the honest truth
+ * is that most sessions reuse the same handful of lifts.
+ */
 export function ExercisePicker({
   exercises,
   recentExerciseIds,
   excludeIds,
   onSelect,
   onExerciseCreated,
-  compact,
+  open,
+  onOpenChange,
 }: {
   exercises: Exercise[];
   recentExerciseIds: string[];
+  /** Already in the session — shown as locked-in rather than hidden. */
   excludeIds: string[];
-  onSelect: (exercise: Exercise) => void;
+  /** Called once with everything ticked, in the order they were ticked. */
+  onSelect: (exercises: Exercise[]) => void;
   onExerciseCreated: (exercise: Exercise) => void;
-  compact?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
   const [addingNew, setAddingNew] = useState(false);
   const [newName, setNewName] = useState("");
   const [newMuscleGroup, setNewMuscleGroup] = useState<MuscleGroup>("chest");
@@ -50,25 +63,43 @@ export function ExercisePicker({
   const [error, setError] = useState<string | null>(null);
   const [confirmDuplicate, setConfirmDuplicate] = useState<Exercise | null>(null);
 
-  const available = useMemo(
-    () => exercises.filter((e) => !excludeIds.includes(e.id)),
-    [exercises, excludeIds]
+  const inSession = useMemo(() => new Set(excludeIds), [excludeIds]);
+  const byId = useMemo(() => new Map(exercises.map((e) => [e.id, e])), [exercises]);
+
+  const key = query.trim().toLowerCase();
+  const matches = (e: Exercise) => !key || e.name.toLowerCase().includes(key);
+
+  // Recently used, minus anything already in the session — the shortcut only
+  // helps if it isn't full of things you've already got.
+  const recent = useMemo(
+    () =>
+      recentExerciseIds
+        .map((id) => byId.get(id))
+        .filter((e): e is Exercise => !!e && !inSession.has(e.id) && matches(e))
+        .slice(0, 6),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [recentExerciseIds, byId, inSession, key]
   );
 
-  const filtered = useMemo(() => {
-    const key = query.trim().toLowerCase();
-    const list = key ? available.filter((e) => e.name.toLowerCase().includes(key)) : available;
-    const recentIndex = new Map(recentExerciseIds.map((id, i) => [id, i]));
-    return [...list].sort((a, b) => {
-      const ra = recentIndex.get(a.id) ?? Infinity;
-      const rb = recentIndex.get(b.id) ?? Infinity;
-      if (ra !== rb) return ra - rb;
-      return a.name.localeCompare(b.name);
-    });
-  }, [available, query, recentExerciseIds]);
+  const recentIds = useMemo(() => new Set(recent.map((e) => e.id)), [recent]);
+
+  const groups = useMemo(
+    () =>
+      MUSCLE_GROUPS.map((group) => ({
+        group,
+        items: exercises
+          .filter((e) => e.muscle_group === group && matches(e) && !recentIds.has(e.id))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      })).filter((g) => g.items.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [exercises, key, recentIds]
+  );
+
+  const totalMatches = recent.length + groups.reduce((n, g) => n + g.items.length, 0);
 
   function reset() {
     setQuery("");
+    setPicked([]);
     setAddingNew(false);
     setNewName("");
     setNewEquipment("other");
@@ -76,10 +107,19 @@ export function ExercisePicker({
     setConfirmDuplicate(null);
   }
 
-  function pick(exercise: Exercise) {
-    onSelect(exercise);
-    setOpen(false);
+  function close() {
+    onOpenChange(false);
     reset();
+  }
+
+  function toggle(id: string) {
+    setPicked((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  }
+
+  function confirm() {
+    const chosen = picked.map((id) => byId.get(id)).filter((e): e is Exercise => !!e);
+    if (chosen.length > 0) onSelect(chosen);
+    close();
   }
 
   async function handleCreate(force = false) {
@@ -95,161 +135,328 @@ export function ExercisePicker({
       }
     }
 
-    const result = await addExercise({ name: trimmed, muscleGroup: newMuscleGroup, equipment: newEquipment });
+    const result = await addExercise({
+      name: trimmed,
+      muscleGroup: newMuscleGroup,
+      equipment: newEquipment,
+    });
     if (result.error || !result.exercise) {
       setError(result.error ?? "Couldn't add that exercise.");
       return;
     }
     onExerciseCreated(result.exercise);
-    pick(result.exercise);
+    // A brand-new exercise is almost certainly wanted in this session, so it
+    // arrives already ticked rather than making you find it again.
+    setPicked((prev) => [...prev, result.exercise!.id]);
+    setAddingNew(false);
+    setNewName("");
+    setConfirmDuplicate(null);
   }
 
+  if (!open) return null;
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) reset();
-      }}
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add exercises"
+      className="fixed inset-0 z-50 flex flex-col bg-background"
     >
-      {compact ? (
-        <DialogTrigger
-          render={
-            <button
-              type="button"
-              className="tap-press flex size-9 shrink-0 items-center justify-center border-2 border-dashed border-hairline text-muted-foreground transition-colors hover:border-solid hover:border-rule hover:bg-muted hover:text-foreground"
-              aria-label="Add exercise"
+      {/* ---------------- Header ---------------- */}
+      <div className="shrink-0 border-b-2 border-rule bg-surface">
+        <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 px-4 pt-4 pb-3">
+          <div className="min-w-0">
+            <p className="micro-sm text-muted-foreground">Build your session</p>
+            <h2 className="display mt-1">Add exercises</h2>
+          </div>
+          <button
+            type="button"
+            onClick={close}
+            aria-label="Close"
+            className="tap-press flex size-9 shrink-0 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-muted"
+          >
+            <X className="size-4" strokeWidth={2.5} />
+          </button>
+        </div>
+
+        <div className="mx-auto max-w-2xl px-4 pb-3">
+          <div className="relative">
+            <Search
+              className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
+              strokeWidth={2.5}
             />
-          }
-        >
-          <Plus className="size-4" />
-        </DialogTrigger>
-      ) : (
-        <DialogTrigger render={<Button type="button" variant="outline" className="w-full gap-1.5" />}>
-          <Plus className="size-4" />
-          Add exercise
-        </DialogTrigger>
-      )}
-      <DialogContent className="max-h-[70vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Add exercise</DialogTitle>
-        </DialogHeader>
-
-        {!addingNew ? (
-          <>
-            <div className="relative">
-              <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search exercises…"
-                className="pl-8"
-                autoFocus
-              />
-            </div>
-
-            <ul className="max-h-64 space-y-1 overflow-y-auto">
-              {filtered.map((exercise) => (
-                <li key={exercise.id}>
-                  <button
-                    type="button"
-                    onClick={() => pick(exercise)}
-                    className="flex w-full items-center justify-between px-2 py-2 text-left text-sm hover:bg-muted"
-                  >
-                    <span>
-                      {exercise.name}
-                      {EQUIPMENT_TAGS[exercise.equipment] && (
-                        <span className="ml-1.5 micro-sm border border-hairline px-1 py-0.5 text-muted-foreground">
-                          {EQUIPMENT_TAGS[exercise.equipment]}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {MUSCLE_GROUP_LABELS[exercise.muscle_group]}
-                    </span>
-                  </button>
-                </li>
-              ))}
-              {filtered.length === 0 && (
-                <p className="px-2 py-4 text-center text-xs text-muted-foreground">No matches.</p>
-              )}
-            </ul>
-
-            <Button
-              type="button"
-              variant="ghost"
-              className="gap-1.5"
-              onClick={() => {
-                setNewName(query);
-                setAddingNew(true);
-              }}
-            >
-              <Plus className="size-4" />
-              Add a new exercise
-            </Button>
-          </>
-        ) : (
-          <div className="space-y-3">
             <Input
-              value={newName}
-              onChange={(e) => {
-                setNewName(e.target.value);
-                setConfirmDuplicate(null);
-              }}
-              placeholder="Exercise name"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search exercises…"
+              aria-label="Search exercises"
+              className="h-11 pl-10"
               autoFocus
             />
-            <Select value={newMuscleGroup} onChange={(e) => setNewMuscleGroup(e.target.value as MuscleGroup)}>
-              {MUSCLE_GROUPS.map((mg) => (
-                <option key={mg} value={mg}>
-                  {MUSCLE_GROUP_LABELS[mg]}
-                </option>
-              ))}
-            </Select>
+          </div>
+        </div>
+      </div>
 
-            <div>
-              <label className="micro-sm mb-1.5 block text-muted-foreground">Equipment</label>
-              <Select value={newEquipment} onChange={(e) => setNewEquipment(e.target.value as EquipmentType)}>
-                {EQUIPMENT_TYPES.map((eq) => (
-                  <option key={eq} value={eq}>
-                    {EQUIPMENT_LABELS[eq]}
-                  </option>
-                ))}
-              </Select>
-              {newEquipment === "barbell" && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Barbell exercises let you enter plate weight instead of the total.
-                </p>
-              )}
-            </div>
+      {/* ---------------- Scrolling list ---------------- */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-2xl px-4 py-4">
+          {addingNew ? (
+            <div className="border-2 border-rule bg-surface">
+              <p className="micro border-b-2 border-rule px-3 py-2">New exercise</p>
+              <div className="flex flex-col gap-3 p-3">
+                <div>
+                  <label className="micro-sm mb-1.5 block text-muted-foreground">Name</label>
+                  <Input
+                    value={newName}
+                    onChange={(e) => {
+                      setNewName(e.target.value);
+                      setConfirmDuplicate(null);
+                    }}
+                    placeholder="e.g. Incline Dumbbell Press"
+                    autoFocus
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="micro-sm mb-1.5 block text-muted-foreground">
+                      Body part
+                    </label>
+                    <Select
+                      value={newMuscleGroup}
+                      onChange={(e) => setNewMuscleGroup(e.target.value as MuscleGroup)}
+                    >
+                      {MUSCLE_GROUPS.map((mg) => (
+                        <option key={mg} value={mg}>
+                          {MUSCLE_GROUP_LABELS[mg]}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="micro-sm mb-1.5 block text-muted-foreground">
+                      Equipment
+                    </label>
+                    <Select
+                      value={newEquipment}
+                      onChange={(e) => setNewEquipment(e.target.value as EquipmentType)}
+                    >
+                      {EQUIPMENT_TYPES.map((eq) => (
+                        <option key={eq} value={eq}>
+                          {EQUIPMENT_LABELS[eq]}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                </div>
 
-            {confirmDuplicate && (
-              <div className="border-2 border-accent p-3 text-xs">
-                <p className="mb-2">Did you mean &ldquo;{confirmDuplicate.name}&rdquo;?</p>
+                {newEquipment === "barbell" && (
+                  <p className="micro-sm text-muted-foreground">
+                    Barbell lets you enter plate weight instead of the total.
+                  </p>
+                )}
+
+                {confirmDuplicate && (
+                  <div className="border-2 border-accent p-3">
+                    <p className="text-sm">
+                      Did you mean &ldquo;{confirmDuplicate.name}&rdquo;?
+                    </p>
+                    <div className="mt-2 flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          toggle(confirmDuplicate.id);
+                          setAddingNew(false);
+                          setNewName("");
+                          setConfirmDuplicate(null);
+                        }}
+                      >
+                        Use that
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCreate(true)}
+                      >
+                        Add as new
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {error && (
+                  <p className="border-2 border-destructive px-3 py-2 text-sm text-destructive">
+                    {error}
+                  </p>
+                )}
+
                 <div className="flex gap-2">
-                  <Button type="button" size="xs" onClick={() => pick(confirmDuplicate)}>
-                    Use that
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => {
+                      setAddingNew(false);
+                      setConfirmDuplicate(null);
+                    }}
+                  >
+                    Cancel
                   </Button>
-                  <Button type="button" size="xs" variant="outline" onClick={() => handleCreate(true)}>
-                    Add as new
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    disabled={!newName.trim()}
+                    onClick={() => handleCreate()}
+                  >
+                    Create
                   </Button>
                 </div>
               </div>
-            )}
-
-            {error && <p className="text-xs text-destructive">{error}</p>}
-
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" className="flex-1" onClick={() => setAddingNew(false)}>
-                Back
-              </Button>
-              <Button type="button" className="flex-1" onClick={() => handleCreate()}>
-                Add
-              </Button>
             </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {recent.length > 0 && (
+                <ExerciseGroup
+                  label="Recent"
+                  items={recent}
+                  picked={picked}
+                  onToggle={toggle}
+                />
+              )}
+
+              {groups.map(({ group, items }) => (
+                <ExerciseGroup
+                  key={group}
+                  label={MUSCLE_GROUP_LABELS[group]}
+                  items={items}
+                  picked={picked}
+                  onToggle={toggle}
+                />
+              ))}
+
+              {totalMatches === 0 && (
+                <div className="hatch border-2 border-rule px-4 py-8 text-center">
+                  <p className="micro-sm text-muted-foreground">
+                    {key ? `Nothing matching “${query}”` : "No exercises yet"}
+                  </p>
+                </div>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                block
+                onClick={() => {
+                  setNewName(query);
+                  setAddingNew(true);
+                }}
+              >
+                <Plus className="size-4" strokeWidth={3} />
+                {key ? `Create “${query}”` : "Create a new exercise"}
+              </Button>
+
+              {inSession.size > 0 && (
+                <p className="micro-sm text-center text-muted-foreground">
+                  {inSession.size} already in this session
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ---------------- Confirm bar ---------------- */}
+      {!addingNew && (
+        <div
+          className="shrink-0 border-t-2 border-rule bg-surface"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
+          <div className="mx-auto max-w-2xl p-3">
+            <Button
+              type="button"
+              block
+              size="lg"
+              variant="invert"
+              disabled={picked.length === 0}
+              onClick={confirm}
+            >
+              {picked.length === 0
+                ? "Pick some exercises"
+                : `Add ${picked.length} exercise${picked.length === 1 ? "" : "s"}`}
+            </Button>
           </div>
-        )}
-      </DialogContent>
-    </Dialog>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExerciseGroup({
+  label,
+  items,
+  picked,
+  onToggle,
+}: {
+  label: string;
+  items: Exercise[];
+  picked: string[];
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <section className="border-2 border-rule bg-surface">
+      <p className="micro border-b-2 border-rule px-3 py-2">{label}</p>
+      <ul>
+        {items.map((exercise, i) => {
+          const isPicked = picked.includes(exercise.id);
+          const order = picked.indexOf(exercise.id) + 1;
+          return (
+            <li key={exercise.id} className={cn(i > 0 && "border-t border-hairline")}>
+              <button
+                type="button"
+                onClick={() => onToggle(exercise.id)}
+                aria-pressed={isPicked}
+                className={cn(
+                  "tap-press flex w-full items-center gap-3 px-3 py-3 text-left transition-colors",
+                  isPicked ? "bg-foreground text-background" : "hover:bg-muted"
+                )}
+              >
+                {/* The tick carries a number, so when you've picked five you
+                    can see the order they'll be added in. */}
+                <span
+                  className={cn(
+                    "flex size-6 shrink-0 items-center justify-center border-2",
+                    isPicked
+                      ? "border-background bg-background text-foreground"
+                      : "border-rule"
+                  )}
+                >
+                  {isPicked ? (
+                    <span className="micro-sm tabular">{order}</span>
+                  ) : (
+                    <Check className="size-3 opacity-0" strokeWidth={3} />
+                  )}
+                </span>
+
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                  {exercise.name}
+                </span>
+
+                {EQUIPMENT_TAGS[exercise.equipment] && (
+                  <Tag
+                    className={cn(
+                      "shrink-0",
+                      isPicked && "border-background/50 text-background/80"
+                    )}
+                  >
+                    {EQUIPMENT_TAGS[exercise.equipment]}
+                  </Tag>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

@@ -1,13 +1,20 @@
 import { todayInAppTimezone } from "@/lib/time";
-import { getExercises, getRecentExerciseIds, getTemplates, getWeightUnit } from "../actions";
+import {
+  getExercises,
+  getLastResistanceSession,
+  getRecentExerciseIds,
+  getTemplates,
+  getWeightUnit,
+} from "../actions";
 import { NewWorkoutForm } from "./new-workout-form";
 
 export default async function NewWorkoutPage() {
-  const [exercises, recentExerciseIds, templates, weightUnit] = await Promise.all([
+  const [exercises, recentExerciseIds, templates, weightUnit, lastSession] = await Promise.all([
     getExercises(),
     getRecentExerciseIds(),
     getTemplates(),
     getWeightUnit(),
+    getLastResistanceSession(),
   ]);
 
   return (
@@ -17,6 +24,7 @@ export default async function NewWorkoutPage() {
       templates={templates}
       weightUnit={weightUnit}
       todayDate={todayInAppTimezone()}
+      lastSession={lastSession}
     />
   );
 }

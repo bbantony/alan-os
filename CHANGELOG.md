@@ -1405,3 +1405,131 @@ blocks, and every new utility (`border-rule`, `border-hairline`, `bg-hairline`, 
 schema, no RLS, no server action, no money maths — the 65 logic `.ts` files are untouched
 apart from `profile.ts`'s theme normalisation), so the risk is cosmetic, but Alan should
 walk each screen and report anything that reads wrong.
+
+## 25. Page transitions, a rebuilt Workout logging flow, and personal records that mean something
+
+Four requests in one message: page transitions should be consistent and more Bauhaus;
+the Workout module needs work, specifically that adding an exercise to a session via "a
+small bar of exercises that I have to scroll through horizontally" is "very
+inefficient"; "forget the new PR thing… change it to make more sense and also make it a
+lot better"; and a new logo, shown as options for Alan to choose. He also asked to be
+asked questions first, so the three build decisions below were put to him directly
+before any code was written.
+
+**His answers:** the PR complaint was specifically the banner on workout feed cards;
+adding exercises should be a full-screen picker where you tick several at once, grouped
+by body part; and within a session he wants one exercise at a time with a big Next
+button. Logo went to a second round (see the end of this entry).
+
+### Page transitions — the wipe
+
+Every route change is now one gesture: a hard vertical edge travels left to right across
+the viewport and the new page is revealed behind it, like a printer's bar passing over a
+sheet. Pure CSS (`page-reveal` + `wipe-edge` keyframes in globals.css), keyed on the
+pathname.
+
+The old transition was a Framer fade-and-rise inside `AnimatePresence mode="wait"`. Three
+problems: a fade reads as organic in an app where nothing else does; a fade has no
+direction, so every screen change looked identical and gave no sense of having gone
+anywhere; and `mode="wait"` held the new page back until the old one finished leaving,
+adding a beat to every single navigation. The replacement drops Framer here entirely — no
+exit animation to wait for, the new page starts painting immediately, and the whole thing
+runs on the compositor.
+
+**A bug caught in the new code before it shipped:** the reveal was first written with
+`animation-fill-mode: both`, which leaves `clip-path: inset(0 0 0 0)` applied to the page
+wrapper permanently. An element with a clip-path becomes the containing block for any
+`position: fixed` descendant — so every full-screen overlay rendered inside a page (the
+new exercise picker, immediately) would have been positioned and clipped against the page
+content instead of the viewport. Fixed by dropping the fill-mode so the clip only exists
+while the animation runs. The edge keeps `forwards`, or it would snap back to the left of
+the screen and sit there.
+
+### Adding exercises — full-screen, grouped, multi-select
+
+`exercise-picker.tsx` rewritten. It was a small modal that added exactly one exercise per
+open, reached from a 36px dashed square at the end of a horizontally-scrolling chip row —
+so building a five-exercise session meant five round trips through a scroll, a tap, a
+search and a dialog. Now:
+
+- Fills the screen, with a large search field focused on open.
+- Grouped by body part (`muscle_group`, which the schema already had and nothing used),
+  so you can find things without typing.
+- **Recently used floats to the top**, minus anything already in the session — most
+  sessions reuse the same handful of lifts.
+- Tick as many as you want; the tick shows a **number**, so with five picked you can see
+  the order they'll be added in. One "Add 5 exercises" button closes it.
+- Creating a new exercise happens inline and arrives already ticked, rather than making
+  you find it again afterwards.
+- `settings/workout/template-editor.tsx` now uses this same component instead of the old
+  single-select one, so building a template and building a session are the same job done
+  the same way.
+
+### Inside a session — one exercise at a time
+
+`new-workout-form.tsx` restructured around Alan's pick:
+
+- A position strip: "Exercise 2 of 5", a segmented progress bar (one cell per exercise,
+  filled once it has sets), and a tap-to-open running order so "one at a time" never
+  means "lost". Jumping straight to any exercise from that list works.
+- Big **Prev / Next** as a single ruled control, sized for a hand mid-set. Next is the
+  inverted block until you reach the last exercise.
+- The active exercise slides in horizontally on the shared mechanical curve, so moving
+  through the session has the same directional feel as moving between pages.
+- **New: "Repeat last session"** on the start screen, powered by a new
+  `getLastResistanceSession()` action that returns the previous resistance workout's
+  exercise ids *in the order they were performed*. Training on a rotation means most
+  sessions are last week's session again, and picking those five lifts one at a time
+  every time is pure friction.
+- Save is now labelled with what it will save ("Finish session · 14 sets") and is
+  disabled until at least one set exists, rather than until at least one exercise does.
+
+### Personal records — made to mean something
+
+The complaint was the feed banner, but the banner was a symptom. The real problems, in
+order:
+
+1. **Three records per exercise, every time.** `weight`, `est_1rm` and `volume` were all
+   announced. Volume is the total weight moved in a session, so it goes up whenever you
+   add a set — a volume "record" is nearly free.
+2. **The first time you ever logged an exercise you set three PRs at once**, because no
+   prior entry counted as beating everything. That is not a thing that happened.
+3. **The banner said nothing.** "New PR — Bench Press": no number, no lift, no sense of
+   whether it mattered.
+
+Between 1 and 2, within a fortnight of using the app every session had a PR banner on it
+and the word had stopped meaning anything. Fixes:
+
+- `detectNewPrs` now returns `previousValue` alongside each record, `null` when it's an
+  opening baseline. New `reportablePrs()` filters those out. `logWorkout` still **writes**
+  every result to the ledger — future sessions need something to compare against — but
+  only announces the ones that beat something.
+- New `headlinePr` / `headlinePrsByExercise` pick **one** record per exercise, ranked
+  weight → est_1rm → volume, so a card shows "Bench Press — heaviest ever" instead of
+  three near-identical lines about the same lift.
+- `PR_KIND_LABELS` gives the three kinds plain names: *Heaviest ever*, *Strongest set*,
+  *Biggest session*.
+- The feed card shows the **actual figure**, converted to the reader's unit. Volume is
+  formatted separately (rounded, with a unit suffix) rather than dressed up as a weight,
+  because it's weight × reps and much larger. The first record on a card is the shout —
+  one inverted accent block — and any others are quiet supporting rows.
+- The save-time celebration now names the margin: "Bench Press: heaviest ever — up from
+  185 lb", instead of unexplained confetti.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit` and `eslint` all clean. Not verified: nobody has
+logged in and walked the new picker or the one-at-a-time flow on a phone.
+
+### Still open — the logo
+
+Six marks were put to Alan (Trio, The A, A/O, Quadrant, Eclipse, Aperture). He liked 01,
+03 and 04, wanted the name more obvious, and wanted Quadrant's colours. A second round of
+four was drawn — **Spelled** (the name with both As as red triangles and the O as a blue
+circle), **Lockup** (Quadrant plus the name set large in two lines), **A·O Tile** (red
+triangle A and blue circle O locked into one ink tile) and **Stacked** (A/O recoloured,
+name set wide beneath) — but the artifact host was returning 502s throughout, so the
+options have not reached him yet. Nothing in the app's branding has changed. Next session:
+republish that page, get a number, and apply it to the nav wordmark, sidebar, login,
+signup, favicon and the PWA icons in `public/icons/` (regenerated via
+`scripts/gen-icons.mjs`).

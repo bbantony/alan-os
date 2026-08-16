@@ -575,6 +575,70 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* ===========================================================================
+   PAGE TRANSITION — the wipe
+   ---------------------------------------------------------------------------
+   Every route change is one gesture: a hard vertical edge travels left to
+   right across the screen and the new page is revealed behind it, like a
+   printer's bar passing over a sheet.
+
+   This replaces a soft fade-and-rise, which had two problems. It read as
+   organic in an app where nothing else does, and because a fade has no
+   direction it gave no sense of having *gone somewhere* — every screen change
+   looked identical to every other. A directional wipe is unmistakably a
+   transition, is over in a quarter of a second, and is the same everywhere.
+
+   The edge and the reveal share one duration and one curve so they read as a
+   single object rather than two effects that happen to overlap.
+   =========================================================================== */
+
+@keyframes page-reveal {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes wipe-edge {
+  from { transform: translateX(0); }
+  to   { transform: translateX(101vw); }
+}
+
+/* No fill-mode, deliberately. `clip-path` is only set while the animation is
+   actually running, and reverts to `none` the moment it finishes.
+   With `both` the final `inset(0 0 0 0)` would stick permanently — and an
+   element with a clip-path becomes the containing block for any
+   `position: fixed` descendant. Every full-screen overlay rendered inside a
+   page (the exercise picker, for one) would then be positioned and clipped
+   against the page content instead of the viewport. */
+.page-enter {
+  animation: page-reveal 240ms cubic-bezier(0.22, 0, 0, 1);
+}
+
+/* The edge does keep its end state — without it the bar would snap back to
+   the left of the screen and sit there. Parked off-screen at 101vw it costs
+   nothing, and it's a sibling of the content rather than a child, so it isn't
+   caught by the clip above. */
+.wipe-edge {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  background: var(--primary);
+  z-index: 60;
+  pointer-events: none;
+  animation: wipe-edge 240ms cubic-bezier(0.22, 0, 0, 1) forwards;
+}
+
+/* Motion: Reduced — the page simply appears. The CSS override further up
+   already flattens the durations, but clip-path would still be mid-animation
+   for a frame, so the reveal is removed outright rather than sped up. */
+:root[data-motion="reduced"] .page-enter { animation: none; clip-path: none; }
+:root[data-motion="reduced"] .wipe-edge { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter { animation: none; clip-path: none; }
+  .wipe-edge { display: none; }
+}
+
+/* ===========================================================================
    TEXTURE
    ---------------------------------------------------------------------------
    One restrained pattern, used for empty states and inert areas so a blank

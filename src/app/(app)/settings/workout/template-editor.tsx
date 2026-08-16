@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deleteTemplate, updateTemplate } from "@/app/(app)/workout/actions";
@@ -24,6 +24,7 @@ export function TemplateEditor({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(template.name);
   const [exerciseIds, setExerciseIds] = useState<string[]>(template.exercise_ids);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const exerciseById = new Map(exercises.map((e) => [e.id, e]));
 
@@ -88,11 +89,23 @@ export function TemplateEditor({
         </ul>
       )}
 
+      {/* The picker became full-screen and multi-select for the logging flow;
+          building a template is the same job, so it uses the same component
+          rather than a second, lesser copy. */}
+      <Button type="button" variant="outline" block onClick={() => setPickerOpen(true)}>
+        <Plus className="size-4" strokeWidth={3} />
+        Add exercises
+      </Button>
+
       <ExercisePicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
         exercises={exercises}
         recentExerciseIds={[]}
         excludeIds={exerciseIds}
-        onSelect={(exercise) => setExerciseIds((prev) => [...prev, exercise.id])}
+        onSelect={(chosen) =>
+          setExerciseIds((prev) => [...prev, ...chosen.map((e) => e.id)])
+        }
         onExerciseCreated={onExerciseCreated}
       />
 

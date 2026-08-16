@@ -1,15 +1,27 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
 import { useTheme } from "@/components/theme/theme-provider";
-import { PAGE_TRANSITION } from "@/lib/motion";
 
-// The "more animation" the owner asked for, applied everywhere at once:
-// every route change gets a brief fade + rise instead of an instant hard
-// cut. Respects the Settings -> Appearance "Motion: Reduced" preference —
-// that CSS override (globals.css) only catches transition/animation-duration,
-// not Framer Motion's own animation engine, so it's checked explicitly here.
+/**
+ * The one page transition, used on every route change in the app.
+ *
+ * Previously a Framer fade-and-rise inside `AnimatePresence mode="wait"`. Two
+ * things were wrong with it: it read as soft and organic in an app where
+ * nothing else does, and `mode="wait"` held the new page back until the old
+ * one had finished leaving — so every navigation cost an extra beat before
+ * anything appeared.
+ *
+ * Now it's a wipe (see globals.css): a hard vertical edge crosses the screen
+ * and the new page is revealed behind it. Pure CSS keyed on the pathname, so
+ * the new page starts painting immediately, there's no exit delay, and the
+ * whole thing is compositor-driven rather than running through React on every
+ * frame.
+ *
+ * The edge is a sibling of the content, not a child — the content animates
+ * `clip-path`, which would otherwise clip a fixed-position child to the very
+ * region being revealed.
+ */
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { theme } = useTheme();
@@ -18,16 +30,11 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   if (reduced) return <>{children}</>;
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={pathname}
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0 }}
-        transition={PAGE_TRANSITION}
-      >
+    <>
+      <span key={`edge-${pathname}`} className="wipe-edge" aria-hidden="true" />
+      <div key={`page-${pathname}`} className="page-enter">
         {children}
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </>
   );
 }

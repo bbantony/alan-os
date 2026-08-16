@@ -7,9 +7,31 @@ import { Panel } from "@/components/ui/panel";
 import { Tag } from "@/components/ui/tag";
 import { formatDuration, formatPace, formatRelativeTime } from "@/lib/workout/format";
 import { formatWeight } from "@/lib/workout/units";
-import { WORKOUT_TYPE_LABELS, type FeedWorkout, type WeightUnit } from "@/lib/workout/types";
+import { headlinePrsByExercise, PR_KIND_LABELS } from "@/lib/workout/pr";
+import {
+  WORKOUT_TYPE_LABELS,
+  type FeedWorkout,
+  type Pr,
+  type WeightUnit,
+} from "@/lib/workout/types";
 import { deleteWorkout } from "./actions";
 import { Reactions } from "./reactions";
+
+/**
+ * A record's value in the units the reader uses.
+ *
+ * Weight and estimated 1RM are a weight, so they format as one. Volume is
+ * weight × reps summed over a session — a much bigger number that isn't
+ * really "a weight" — so it's rounded and given its own unit suffix rather
+ * than being dressed up as one.
+ */
+function formatPrValue(pr: Pick<Pr, "kind" | "value">, unit: WeightUnit): string {
+  if (pr.kind === "volume") {
+    const converted = unit === "lbs" ? pr.value * 2.2046226218 : pr.value;
+    return `${Math.round(converted).toLocaleString()} ${unit}`;
+  }
+  return formatWeight(pr.value, unit);
+}
 
 function initials(name: string | null): string {
   if (!name) return "?";
@@ -39,7 +61,9 @@ export function FeedCard({
   const { workout, author, sets, run, prs, reactions } = feedItem;
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const hasPr = prs.length > 0;
+  // One headline per exercise rather than one row per record kind.
+  const headlines = headlinePrsByExercise(prs);
+  const hasPr = headlines.length > 0;
   const isMine = workout.user_id === currentUserId;
 
   const exerciseIds = [...new Set(sets.map((s) => s.exercise_id))];
@@ -55,15 +79,49 @@ export function FeedCard({
 
   return (
     <Panel className={cn(hasPr && "border-accent")}>
-      {/* A PR gets a solid banner across the top of the card rather than a
-          tinted background and a small line of text. It's the loudest thing
-          that happens in this module — it should look like it. */}
-      {hasPr && (
-        <div className="flex items-center gap-2 border-b-2 border-rule bg-accent px-3 py-2 text-accent-foreground">
-          <Trophy className="size-4 shrink-0" strokeWidth={2.5} />
-          <span className="micro-sm min-w-0 truncate">
-            New PR{prs.length > 1 ? "s" : ""} — {prs.map((p) => p.exercise_name).join(", ")}
-          </span>
+      {/* Records, stated as facts.
+          This replaces a solid banner reading "New PR — Bench Press", which
+          announced loudly that *something* had happened without saying what:
+          no number, no lift, no sense of whether it mattered. It also fired
+          three times per exercise (heaviest / strongest set / biggest
+          session) and fired on the very first time you ever logged a
+          movement, so within a fortnight every session had a PR banner and
+          the word stopped meaning anything.
+          Now: one headline per exercise, the most impressive kind wins, and
+          the actual figure is on screen. `headlinePrsByExercise` does the
+          picking; `reportablePrs` in the logging path stops opening baselines
+          being called records at all. */}
+      {headlines.length > 0 && (
+        <div className="border-b-2 border-rule">
+          {headlines.map((pr, i) => (
+            <div
+              key={pr.id}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2",
+                i > 0 && "border-t border-hairline",
+                // The first record is the shout; any others are supporting
+                // detail, so only one block per card is inverted.
+                i === 0 ? "bg-accent text-accent-foreground" : "bg-muted/50"
+              )}
+            >
+              <Trophy
+                className={cn("size-4 shrink-0", i > 0 && "text-accent")}
+                strokeWidth={2.5}
+              />
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                {pr.exercise_name}
+              </span>
+              <span
+                className={cn(
+                  "micro-sm shrink-0",
+                  i === 0 ? "text-accent-foreground/75" : "text-muted-foreground"
+                )}
+              >
+                {PR_KIND_LABELS[pr.kind]}
+              </span>
+              <span className="stat shrink-0 text-base">{formatPrValue(pr, weightUnit)}</span>
+            </div>
+          ))}
         </div>
       )}
 
