@@ -752,6 +752,122 @@ do right now, your routines due today (tap to check off), your tasks due or over
 today, your next calendar event, and (after 8pm) the evening planning ritual for
 tomorrow exactly as before. If you picked 3 goals for today last night, you'll now see
 how many of them actually got done, instead of that just disappearing.
+---
+
+## The redesign — everything looks different now
+
+The whole app was redesigned in one go. Nothing moved, nothing was removed, and
+none of your information changed — but almost every screen looks different, so
+this section walks you through what's new. If you're looking for how a feature
+*works*, all the sections above are still correct.
+
+### What changed, in one paragraph
+
+The old app was made of soft rounded cards floating on a background. The new one
+is built like an instrument panel: everything is square, framed with a thick
+black line, and the important number on any screen is now the biggest thing on
+it. Nothing floats. Nothing is decorative. If something looks loud, it's because
+it needs your attention.
+
+### The four things you'll notice first
+
+1. **Corners are square.** Every card, button, box and input. This is the single
+   biggest visual change and it's deliberate.
+2. **Big headings.** Every screen opens with its name in large heavy capitals —
+   TODAY, TASKS, MONEY — so you always know where you are at a glance.
+3. **Small capital labels everywhere.** Little grey uppercase text marks every
+   count, date, unit and category. That's the app labelling itself, the way a
+   dashboard in a car does.
+4. **Black blocks mean "this one matters".** Wherever you see white text on a
+   solid black block, that's the app pointing at the single most important thing
+   on that screen — the next thing to do, the amount you're logging, your running
+   total. There's only ever one per screen.
+
+### The Today page is completely rebuilt
+
+It now reads straight down, and each section answers one question:
+
+- **NOW** — a black block at the top with the one single next thing you should
+  do. If something's overdue, that's what it shows. There's a button right on it,
+  so you can tick a routine off or jump to the thing without scrolling.
+- **The four numbers** — due today, safe to spend, workout streak, shopping
+  items. **Tap any number to go straight to that part of the app.** That's true
+  everywhere now: if the app shows you a figure, tapping it takes you to where
+  that figure came from.
+- **The day** — all your routines, tasks and your next calendar appointment
+  merged into one list in time order, with the time down the left. A bar under
+  the heading fills up as you get through it. Anything whose time has passed and
+  isn't done yet turns amber.
+- **Today's focus** — the three goals you picked last night, or after 8pm, the
+  form to pick tomorrow's.
+- **Jump to** — a plain list of everywhere else in the app.
+
+**The four "coming soon" boxes are gone** (AI briefing, weather, world news,
+local news). They took up half the screen advertising things that don't exist
+yet. They're now one small grey line at the bottom, and they'll come back as real
+features when they're built.
+
+### The new "+" button
+
+There's a square **+** button floating at the bottom-right of every screen. Tap
+it and you get a short list: Task, Expense, Shopping item, Reminder, Workout.
+Pick one and it takes you straight into that form **with the cursor already in
+the box**, ready to type.
+
+This is not the old "+" button that was removed for doing nothing. This one
+genuinely works — it's a shortcut into forms that already existed, so it needed
+no new machinery.
+
+### Eight themes instead of eleven
+
+Settings → Appearance now offers eight colour themes, all rebuilt to suit the new
+look. Each one shows you a **tiny picture of the actual app** in that theme, so
+you can see how it'll feel rather than guessing from two colour bars:
+
+| Theme | What it's like |
+|---|---|
+| **Ink** | Paper, black, one signal red. The default and the most serious. |
+| **Blueprint** | Deep navy and drafting blue, like a technical drawing. |
+| **Primary** | The true Bauhaus red, blue and yellow. The bold one. |
+| **Concrete** | Warm greys and ochre. Same rigour, softer voice. |
+| **Signal** | High-visibility orange on stark white. Industrial. |
+| **Verdigris** | Deep green and copper on cool paper. |
+| **Oxblood** | Bone paper, deep red, brass. Quietly formal. |
+| **Monolith** | Pure black and white. Nothing to hide behind. |
+
+Every one has a proper dark version — switch with **Light / Dark / Auto** at the
+top of the same page.
+
+**Your old theme wasn't lost, it was translated.** Whatever you had before is
+automatically matched to the closest new one (British Racing Green becomes
+Verdigris, Navy/Cream becomes Blueprint, and so on). You don't have to do
+anything, but it's worth going in and trying the others — they look genuinely
+different now.
+
+There's also a new heading font, **Outfit**, and the default is now **Archivo**.
+Each font option is shown in its own typeface so you can pick by looking.
+
+### Small things that got better
+
+- **Buttons are bigger** — the standard button went from 32 to 40 pixels tall,
+  which matters a lot on a phone.
+- **Buttons press down.** Tap one and it physically shifts into its own shadow.
+- **Every settings page has a back arrow** now. Installed as an app on your home
+  screen, there was no browser back button to use.
+- **The Money page keeps your key numbers on screen** — safe to spend, spent, and
+  net — whichever tab you're on.
+- **The expense keypad has bigger keys** and shows the amount as a black block at
+  the top that stays visible while you pick a category.
+- **On a computer**, the left sidebar now lists Calendar, Journal, Vinyl and
+  Settings directly instead of hiding them behind "More".
+
+### If something looks wrong
+
+This was a big change and it wasn't possible to test every screen by hand in a
+browser during the build. If a screen looks broken, cramped, unreadable, or just
+wrong — say which screen and what looks off. Nothing about your data, money,
+reminders or accounts was touched, so anything wrong is cosmetic and quick to
+fix.
 
 ---
 

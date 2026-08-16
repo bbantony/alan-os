@@ -5,6 +5,9 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
+import { Panel, PanelHead } from "@/components/ui/panel";
+import { Segmented } from "@/components/ui/segmented";
+import { Stat, StatStrip } from "@/components/ui/stat";
 import { cn } from "@/lib/utils";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import { projectPayoff, type DebtInput } from "@/lib/finance/debt-payoff";
@@ -45,104 +48,175 @@ export function DebtsView({
     await deleteDebt({ id });
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <p className="text-xs font-medium text-muted-foreground">Total debt</p>
-        <p className="tabular font-heading text-2xl font-semibold">{formatCents(totalBalance)}</p>
-        {totalMinPayment > 0 && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{formatCents(totalMinPayment)}/mo in minimums</p>
+  if (debts.length === 0) {
+    return (
+      <>
+        <EmptyState
+          title="No debts tracked"
+          description="Add a debt to see a payoff plan."
+          action={
+            <Button onClick={() => setShowForm(true)}>
+              <Plus className="size-4" strokeWidth={3} />
+              New debt
+            </Button>
+          }
+        />
+        {showForm && (
+          <DebtForm
+            onClose={() => setShowForm(false)}
+            onSaved={(debt) => {
+              setShowForm(false);
+              onChanged((prev) => [...prev, debt]);
+            }}
+          />
         )}
-      </div>
+      </>
+    );
+  }
 
-      <Button type="button" className="w-full gap-1.5" onClick={() => setShowForm(true)}>
-        <Plus className="size-4" />
-        New debt
-      </Button>
+  return (
+    <div className="flex flex-col gap-4">
+      <StatStrip columns={2}>
+        <Stat
+          label="Total owed"
+          value={formatCents(totalBalance)}
+          tone="alert"
+          size="lg"
+          sub={`across ${debts.length} debt${debts.length > 1 ? "s" : ""}`}
+        />
+        <Stat
+          label="Minimums"
+          value={formatCents(totalMinPayment)}
+          size="lg"
+          sub="per month"
+        />
+      </StatStrip>
 
-      {debts.length === 0 ? (
-        <EmptyState title="No debts tracked" description="Add a debt to see a payoff plan." />
-      ) : (
-        <>
-          <ul className="space-y-2">
-            {debts.map((d) => (
-              <li key={d.id} className="rounded-xl border border-border bg-surface p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{d.name}</p>
-                    <p className="tabular text-xs text-muted-foreground">
-                      {formatCents(d.balance_cents)} · {d.interest_rate_pct}% APR · {formatCents(d.min_payment_cents)}/mo min
-                    </p>
-                  </div>
-                  <button onClick={() => handleDelete(d.id)} className="tap-press text-muted-foreground/40 hover:text-destructive">
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <div className="rounded-xl border border-border bg-surface p-4">
-            <h3 className="mb-3 text-sm font-semibold">Payoff plan</h3>
-            <div className="mb-3 flex gap-2">
+      <Panel>
+        <PanelHead
+          title="Debts"
+          count={debts.length}
+          action={
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              aria-label="New debt"
+              className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+            >
+              <Plus className="size-4" strokeWidth={3} />
+            </button>
+          }
+        />
+        <ul>
+          {debts.map((d, i) => (
+            <li
+              key={d.id}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5",
+                i > 0 && "border-t border-hairline"
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{d.name}</p>
+                <p className="micro-sm mt-0.5 tabular text-muted-foreground">
+                  {d.interest_rate_pct}% APR · {formatCents(d.min_payment_cents)}/mo min
+                </p>
+              </div>
+              <span className="stat shrink-0 text-lg">{formatCents(d.balance_cents)}</span>
               <button
-                onClick={() => setStrategy("avalanche")}
-                className={cn(
-                  "tap-press flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium",
-                  strategy === "avalanche" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-                )}
+                type="button"
+                onClick={() => handleDelete(d.id)}
+                className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+                aria-label={`Delete ${d.name}`}
               >
-                Avalanche (highest APR first)
+                <Trash2 className="size-4" />
               </button>
-              <button
-                onClick={() => setStrategy("snowball")}
-                className={cn(
-                  "tap-press flex-1 rounded-lg border px-3 py-1.5 text-xs font-medium",
-                  strategy === "snowball" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"
-                )}
-              >
-                Snowball (smallest balance first)
-              </button>
-            </div>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+
+      {/* ---------------- Payoff plan ---------------- */}
+      <Panel>
+        <PanelHead title="Payoff plan" />
+
+        <div className="flex flex-col gap-3 p-3">
+          {/* The two strategies were a pair of hand-rolled toggle buttons that
+              predated the Segmented control. Same choice, now the app's one
+              way of expressing a choice between two modes. */}
+          <Segmented
+            options={[
+              { value: "avalanche", label: "Avalanche" },
+              { value: "snowball", label: "Snowball" },
+            ]}
+            value={strategy}
+            onChange={setStrategy}
+          />
+          <p className="micro-sm text-muted-foreground">
+            {strategy === "avalanche"
+              ? "Highest interest rate first — cheapest overall."
+              : "Smallest balance first — quickest wins."}
+          </p>
+
+          <div>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">
+              Extra per month (optional)
+            </label>
             <Input
               type="number"
               inputMode="decimal"
               value={extra}
               onChange={(e) => setExtra(e.target.value)}
-              placeholder="Extra $/month toward payoff (optional)"
-              className="mb-3"
+              placeholder="0.00"
             />
-            {result && (
-              <div className="space-y-2">
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-muted-foreground">Time to debt-free</span>
-                  <span className="tabular text-sm font-semibold">
-                    {result.monthsToPayoff >= 600
-                      ? "600+ months"
-                      : `${Math.floor(result.monthsToPayoff / 12)}y ${result.monthsToPayoff % 12}m`}
-                  </span>
-                </div>
-                <div className="flex items-baseline justify-between">
-                  <span className="text-xs text-muted-foreground">Total interest paid</span>
-                  <span className="tabular text-sm font-semibold">{formatCents(result.totalInterestPaidCents)}</span>
-                </div>
-                {result.payoffOrder.length > 0 && (
-                  <div>
-                    <span className="text-xs text-muted-foreground">Payoff order</span>
-                    <ol className="mt-1 space-y-0.5 text-xs">
-                      {result.payoffOrder.map((id, i) => (
-                        <li key={id}>
-                          {i + 1}. {nameById.get(id) ?? "—"}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
+          </div>
+        </div>
+
+        {result && (
+          <>
+            <div className="grid grid-cols-2 gap-px border-t-2 border-rule bg-hairline">
+              <div className="bg-surface p-3">
+                <p className="micro-sm text-muted-foreground">Debt-free in</p>
+                <p className="stat mt-1 text-xl">
+                  {result.monthsToPayoff >= 600
+                    ? "600+ mo"
+                    : `${Math.floor(result.monthsToPayoff / 12)}y ${result.monthsToPayoff % 12}m`}
+                </p>
+              </div>
+              <div className="bg-surface p-3">
+                <p className="micro-sm text-muted-foreground">Interest paid</p>
+                <p className="stat mt-1 text-xl text-destructive">
+                  {formatCents(result.totalInterestPaidCents)}
+                </p>
+              </div>
+            </div>
+
+            {result.payoffOrder.length > 0 && (
+              <div className="border-t-2 border-rule">
+                <p className="micro border-b border-hairline px-3 py-2 text-muted-foreground">
+                  Order
+                </p>
+                <ol>
+                  {result.payoffOrder.map((id, i) => (
+                    <li
+                      key={id}
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2 text-sm",
+                        i > 0 && "border-t border-hairline"
+                      )}
+                    >
+                      <span className="micro-sm flex size-5 shrink-0 items-center justify-center border border-rule tabular">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 truncate">{nameById.get(id) ?? "—"}</span>
+                    </li>
+                  ))}
+                </ol>
               </div>
             )}
-          </div>
-        </>
-      )}
+          </>
+        )}
+      </Panel>
 
       {showForm && (
         <DebtForm

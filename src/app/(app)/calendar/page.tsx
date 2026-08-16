@@ -5,7 +5,7 @@ import { CalendarShell } from "./calendar-shell";
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; new?: string }>;
 }) {
   const [agenda, reminders, gcalStatus, params] = await Promise.all([
     getAgenda("today"),
@@ -28,6 +28,7 @@ export default async function CalendarPage({
       initialReminders={reminders}
       gcalConnected={gcalStatus.connected}
       groupBoundaries={{ todayEnd, weekEnd }}
+      autoOpenNew={params.new === "1"}
     />
   );
 }

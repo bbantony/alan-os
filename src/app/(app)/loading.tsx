@@ -8,7 +8,7 @@
 export default function Loading() {
   return (
     <div className="fixed inset-x-0 top-0 z-50 h-1 overflow-hidden" aria-hidden>
-      <div className="route-progress-bar h-full w-1/3 rounded-full bg-primary" />
+      <div className="route-progress-bar h-full w-1/3 bg-primary" />
     </div>
   );
 }

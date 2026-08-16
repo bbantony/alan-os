@@ -83,7 +83,7 @@ export function RemittanceForm({
             ))}
           </Select>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">CAD sent</label>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">CAD sent</label>
             <Input type="number" inputMode="decimal" value={cad} onChange={(e) => setCad(e.target.value)} placeholder="0.00" />
           </div>
           <div>

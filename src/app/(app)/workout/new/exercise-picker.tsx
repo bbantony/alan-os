@@ -117,7 +117,7 @@ export function ExercisePicker({
           render={
             <button
               type="button"
-              className="flex size-9 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
+              className="tap-press flex size-9 shrink-0 items-center justify-center border-2 border-dashed border-hairline text-muted-foreground transition-colors hover:border-solid hover:border-rule hover:bg-muted hover:text-foreground"
               aria-label="Add exercise"
             />
           }
@@ -154,12 +154,12 @@ export function ExercisePicker({
                   <button
                     type="button"
                     onClick={() => pick(exercise)}
-                    className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm hover:bg-muted"
+                    className="flex w-full items-center justify-between px-2 py-2 text-left text-sm hover:bg-muted"
                   >
                     <span>
                       {exercise.name}
                       {EQUIPMENT_TAGS[exercise.equipment] && (
-                        <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        <span className="ml-1.5 micro-sm border border-hairline px-1 py-0.5 text-muted-foreground">
                           {EQUIPMENT_TAGS[exercise.equipment]}
                         </span>
                       )}
@@ -208,7 +208,7 @@ export function ExercisePicker({
             </Select>
 
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Equipment</label>
+              <label className="micro-sm mb-1.5 block text-muted-foreground">Equipment</label>
               <Select value={newEquipment} onChange={(e) => setNewEquipment(e.target.value as EquipmentType)}>
                 {EQUIPMENT_TYPES.map((eq) => (
                   <option key={eq} value={eq}>
@@ -224,7 +224,7 @@ export function ExercisePicker({
             </div>
 
             {confirmDuplicate && (
-              <div className="rounded-lg border border-accent/40 bg-accent/10 p-2 text-xs">
+              <div className="border-2 border-accent p-3 text-xs">
                 <p className="mb-2">Did you mean &ldquo;{confirmDuplicate.name}&rdquo;?</p>
                 <div className="flex gap-2">
                   <Button type="button" size="xs" onClick={() => pick(confirmDuplicate)}>

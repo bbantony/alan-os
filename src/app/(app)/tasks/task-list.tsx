@@ -1,12 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Bell, BellRing, Check, ChevronDown, ChevronRight, Plus, Repeat, Trash2 } from "lucide-react";
+import {
+  Bell,
+  BellRing,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CornerDownRight,
+  Plus,
+  Repeat,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
+import { Tag, Micro } from "@/components/ui/tag";
 import { RecurrencePicker } from "@/components/recurrence-picker";
 import {
   Dialog,
@@ -40,18 +52,23 @@ import {
 } from "./actions";
 import { TaskDetailDialog } from "./task-detail-dialog";
 
-const QUICK_ADD_PRESETS: RecurrencePreset[] = ["none", "daily", "weekdays", "weekly", "every_n_days", "monthly"];
+const QUICK_ADD_PRESETS: RecurrencePreset[] = [
+  "none", "daily", "weekdays", "weekly", "every_n_days", "monthly",
+];
 
 export function TaskList({
   initialTasks,
   weeklyDoneCount,
   initialReminderTaskIds,
   initialDoneTodayByHorizon,
+  autoFocusNew = false,
 }: {
   initialTasks: Task[];
   weeklyDoneCount: number;
   initialReminderTaskIds: string[];
   initialDoneTodayByHorizon: Record<TaskHorizon, number>;
+  /** Set by the `?new=1` link the app-wide quick-add sends here. */
+  autoFocusNew?: boolean;
 }) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [title, setTitle] = useState("");
@@ -76,6 +93,14 @@ export function TaskList({
   const [quickIntervalDays, setQuickIntervalDays] = useState("2");
   const [quickMonthDay, setQuickMonthDay] = useState("1");
   const [quickRemindMe, setQuickRemindMe] = useState(false);
+
+  // Arriving from the app-wide quick-add should land with the cursor already
+  // in the box — otherwise "add a task" costs a tap on the menu and another
+  // on the field, which defeats the point of having the shortcut.
+  const titleRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (autoFocusNew) titleRef.current?.focus();
+  }, [autoFocusNew]);
 
   const topLevel = tasks.filter((t) => !t.parent_task_id);
   const subtasksOf = useMemo(() => {
@@ -193,7 +218,9 @@ export function TaskList({
     const result = await setTaskCompleted({ id: task.id, completed: true });
     if (result.nextTask) {
       setTasks((prev) => [...prev, result.nextTask!]);
-      toast.success(`"${task.title}" completed — repeats again ${task.rrule ? describeRRule(task.rrule) : ""}`.trim());
+      toast.success(
+        `"${task.title}" completed — repeats again ${task.rrule ? describeRRule(task.rrule) : ""}`.trim()
+      );
     }
   }
 
@@ -228,7 +255,10 @@ export function TaskList({
     // this same session — undoing something from a prior day (reachable via
     // this same Completed archive) shouldn't decrement today's tally.
     if (countedTaskIds.has(task.id)) {
-      setDoneTodayByHorizon((prev) => ({ ...prev, [task.horizon]: Math.max(0, (prev[task.horizon] ?? 0) - 1) }));
+      setDoneTodayByHorizon((prev) => ({
+        ...prev,
+        [task.horizon]: Math.max(0, (prev[task.horizon] ?? 0) - 1),
+      }));
       setCountedTaskIds((prev) => {
         const next = new Set(prev);
         next.delete(task.id);
@@ -238,159 +268,202 @@ export function TaskList({
     await setTaskCompleted({ id: task.id, completed: false });
   }
 
+  const visibleSections = TASK_HORIZONS.filter((h) => {
+    const inHorizon = topLevel.filter((t) => t.horizon === h);
+    return inHorizon.length > 0 || (doneTodayByHorizon[h] ?? 0) > 0;
+  });
+
   return (
-    <div>
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-semibold">Tasks</h1>
-        <span className="text-xs font-medium text-muted-foreground">
-          {weeklyDoneCount} done this week
-        </span>
-      </div>
-
-      <form onSubmit={handleAdd} className="my-4 space-y-2">
-        <div className="flex gap-2">
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Add a task…"
-            className="flex-1"
-          />
-          <Select value={horizon} onChange={(e) => setHorizon(e.target.value as TaskHorizon)} className="w-32 shrink-0">
-            {TASK_HORIZONS.map((h) => (
-              <option key={h} value={h}>
-                {TASK_HORIZON_LABELS[h]}
-              </option>
-            ))}
-          </Select>
-          <Button type="submit" size="icon" aria-label="Add task">
-            <Plus className="size-4" />
-          </Button>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowMoreOptions((v) => !v)}
-          className="tap-press flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-foreground"
-        >
-          {showMoreOptions ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-          More options
-        </button>
-
-        {showMoreOptions && (
-          <div className="space-y-2 rounded-lg border border-dashed border-border p-2.5">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Category</label>
-                <Select value={quickCategory} onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}>
-                  {Object.entries(TASK_CATEGORY_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date (optional)</label>
-                <Input type="datetime-local" value={quickDueAt} onChange={(e) => setQuickDueAt(e.target.value)} />
-              </div>
-            </div>
-
-            <RecurrencePicker
-              presets={QUICK_ADD_PRESETS}
-              preset={quickPreset}
-              onPresetChange={setQuickPreset}
-              weekday={quickWeekday}
-              onWeekdayChange={setQuickWeekday}
-              intervalDays={quickIntervalDays}
-              onIntervalDaysChange={setQuickIntervalDays}
-              monthDay={quickMonthDay}
-              onMonthDayChange={setQuickMonthDay}
+    <div className="flex flex-col gap-4">
+      {/* ---------------- Quick add ---------------- */}
+      <Panel>
+        <form onSubmit={handleAdd}>
+          <div className="flex items-stretch border-b-2 border-rule">
+            <Input
+              ref={titleRef}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Add a task…"
+              aria-label="New task"
+              className="h-11 flex-1 border-0 border-r-2 border-rule focus-visible:border-rule"
             />
-
-            <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
-              <span className="text-sm">
-                Remind me
-                {!quickDueAt && <span className="block text-xs text-muted-foreground">Set a due date first</span>}
-              </span>
-              <Switch checked={quickRemindMe} onCheckedChange={setQuickRemindMe} disabled={!quickDueAt} />
-            </label>
+            <button
+              type="submit"
+              aria-label="Add task"
+              className="tap-press flex w-12 shrink-0 items-center justify-center bg-primary text-primary-foreground transition-colors hover:brightness-95"
+            >
+              <Plus className="size-5" strokeWidth={3} />
+            </button>
           </div>
-        )}
-      </form>
 
-      {tasks.length === 0 && (
+          <div className="flex items-stretch">
+            <Select
+              value={horizon}
+              onChange={(e) => setHorizon(e.target.value as TaskHorizon)}
+              aria-label="When"
+              className="h-10 flex-1 border-0 border-r-2 border-rule text-xs focus-visible:border-rule"
+            >
+              {TASK_HORIZONS.map((h) => (
+                <option key={h} value={h}>
+                  {TASK_HORIZON_LABELS[h]}
+                </option>
+              ))}
+            </Select>
+            <button
+              type="button"
+              onClick={() => setShowMoreOptions((v) => !v)}
+              aria-expanded={showMoreOptions}
+              className="micro-sm tap-press flex w-36 shrink-0 items-center justify-center gap-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {showMoreOptions ? (
+                <ChevronDown className="size-3.5" />
+              ) : (
+                <ChevronRight className="size-3.5" />
+              )}
+              Options
+            </button>
+          </div>
+
+          {showMoreOptions && (
+            <div className="flex flex-col gap-3 border-t-2 border-rule bg-muted/30 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="micro-sm mb-1.5 block text-muted-foreground">Category</label>
+                  <Select
+                    value={quickCategory}
+                    onChange={(e) => setQuickCategory(e.target.value as TaskCategory)}
+                  >
+                    {Object.entries(TASK_CATEGORY_LABELS).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label className="micro-sm mb-1.5 block text-muted-foreground">Due</label>
+                  <Input
+                    type="datetime-local"
+                    value={quickDueAt}
+                    onChange={(e) => setQuickDueAt(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <RecurrencePicker
+                presets={QUICK_ADD_PRESETS}
+                preset={quickPreset}
+                onPresetChange={setQuickPreset}
+                weekday={quickWeekday}
+                onWeekdayChange={setQuickWeekday}
+                intervalDays={quickIntervalDays}
+                onIntervalDaysChange={setQuickIntervalDays}
+                monthDay={quickMonthDay}
+                onMonthDayChange={setQuickMonthDay}
+              />
+
+              <label className="flex items-center justify-between gap-3 border-2 border-rule bg-surface px-3 py-2.5">
+                <span>
+                  <span className="micro block">Remind me</span>
+                  {!quickDueAt && (
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      Set a due date first
+                    </span>
+                  )}
+                </span>
+                <Switch
+                  checked={quickRemindMe}
+                  onCheckedChange={setQuickRemindMe}
+                  disabled={!quickDueAt}
+                />
+              </label>
+            </div>
+          )}
+        </form>
+      </Panel>
+
+      {/* ---------------- Horizon sections ---------------- */}
+      {tasks.length === 0 && visibleSections.length === 0 ? (
         <EmptyState
           title="Nothing on your plate"
           description="Add a task above to get started."
           icon={<TasksIllustration className="size-8" />}
         />
+      ) : (
+        visibleSections.map((h) => (
+          <TaskSection
+            key={h}
+            label={TASK_HORIZON_LABELS[h]}
+            doneToday={doneTodayByHorizon[h] ?? 0}
+            tasks={topLevel.filter((t) => t.horizon === h)}
+            subtasksOf={subtasksOf}
+            addingSubtaskFor={addingSubtaskFor}
+            subtaskTitle={subtaskTitle}
+            onSubtaskTitleChange={setSubtaskTitle}
+            onStartAddSubtask={setAddingSubtaskFor}
+            onAddSubtask={handleAddSubtask}
+            onToggleComplete={handleToggleComplete}
+            onDelete={handleDelete}
+            onRemindMe={handleRemindMe}
+            onOpenDetail={setEditingTask}
+            remindedIds={remindedIds}
+          />
+        ))
       )}
 
-      <div className="space-y-6">
-        {TASK_HORIZONS.map((h) => {
-          const inHorizon = topLevel.filter((t) => t.horizon === h);
-          const doneToday = doneTodayByHorizon[h] ?? 0;
-          if (inHorizon.length === 0 && doneToday === 0) return null;
-          return (
-            <TaskSection
-              key={h}
-              label={TASK_HORIZON_LABELS[h]}
-              doneToday={doneToday}
-              tasks={inHorizon}
-              subtasksOf={subtasksOf}
-              addingSubtaskFor={addingSubtaskFor}
-              subtaskTitle={subtaskTitle}
-              onSubtaskTitleChange={setSubtaskTitle}
-              onStartAddSubtask={setAddingSubtaskFor}
-              onAddSubtask={handleAddSubtask}
-              onToggleComplete={handleToggleComplete}
-              onDelete={handleDelete}
-              onRemindMe={handleRemindMe}
-              onOpenDetail={setEditingTask}
-              remindedIds={remindedIds}
-            />
-          );
-        })}
-      </div>
-
-      <div className="mt-8">
+      {/* ---------------- Completed archive ---------------- */}
+      <Panel>
         <button
+          type="button"
           onClick={handleToggleCompletedArchive}
-          className="tap-press flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+          aria-expanded={showCompleted}
+          className="micro flex min-h-11 w-full items-center gap-1.5 px-3 py-2 text-left text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
-          {showCompleted ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          {showCompleted ? (
+            <ChevronDown className="size-3.5" />
+          ) : (
+            <ChevronRight className="size-3.5" />
+          )}
           Completed
         </button>
+
         {showCompleted && (
-          <ul className="mt-2 space-y-1">
-            {(completedTasks ?? []).map((task) => (
+          <ul className="border-t-2 border-rule">
+            {(completedTasks ?? []).map((task, i) => (
               <li
                 key={task.id}
-                className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2.5",
+                  i > 0 && "border-t border-hairline"
+                )}
               >
                 <button
+                  type="button"
                   onClick={() => handleUndoComplete(task)}
-                  className="tap-press flex size-5 shrink-0 items-center justify-center rounded-md border border-primary bg-primary text-primary-foreground"
-                  aria-label="Mark incomplete"
+                  className="tap-press flex size-5 shrink-0 items-center justify-center border-2 border-rule bg-foreground text-background"
+                  aria-label={`Mark ${task.title} not done`}
                 >
-                  <Check className="size-3.5" />
+                  <Check className="size-3" strokeWidth={3} />
                 </button>
-                <span className="flex-1 text-sm text-muted-foreground line-through">
+                <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground line-through">
                   {task.title}
                 </span>
               </li>
             ))}
             {completedTasks?.length === 0 && (
-              <li className="text-sm text-muted-foreground">Nothing completed yet.</li>
+              <PanelEmpty>Nothing completed yet.</PanelEmpty>
             )}
           </ul>
         )}
-      </div>
+      </Panel>
 
+      <Micro className="px-1">{weeklyDoneCount} done this week</Micro>
+
+      {/* ---------------- Dialogs ---------------- */}
       <Dialog open={!!confirmTask} onOpenChange={(open) => !open && setConfirmTask(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Complete this task?</DialogTitle>
+            <DialogTitle>Complete this?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             &ldquo;{confirmTask?.title}&rdquo; still has unfinished subtasks.
@@ -467,85 +540,105 @@ function TaskSection({
   onOpenDetail: (task: Task) => void;
   remindedIds: Set<string>;
 }) {
+  const cleared = tasks.length === 0 && doneToday > 0;
+
   return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {label}
-        </h2>
-        {doneToday > 0 && (
-          <span className="text-xs font-medium text-primary">
-            {tasks.length > 0 ? `${doneToday} done today` : `All clear — ${doneToday} done today`}
-          </span>
-        )}
-      </div>
-      <ul className="space-y-1">
-        <AnimatePresence initial={false}>
-          {tasks.map((task) => (
-            <motion.li
-              key={task.id}
-              layout
-              variants={listItemVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              transition={LIST_ITEM_TRANSITION}
-            >
-              <TaskRow
-                task={task}
-                onToggleComplete={() => onToggleComplete(task)}
-                onDelete={() => onDelete(task)}
-                onRemindMe={() => onRemindMe(task)}
-                onOpenDetail={() => onOpenDetail(task)}
-                reminded={remindedIds.has(task.id)}
-              />
-              {(subtasksOf.get(task.id) ?? []).length > 0 && (
-                <ul className="ml-7 mt-1 space-y-1">
-                  {(subtasksOf.get(task.id) ?? []).map((sub) => (
-                    <TaskRow
-                      key={sub.id}
-                      task={sub}
-                      subtle
-                      onToggleComplete={() => onToggleComplete(sub)}
-                      onDelete={() => onDelete(sub)}
-                    />
-                  ))}
-                </ul>
-              )}
-              {addingSubtaskFor === task.id ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    onAddSubtask(task);
-                  }}
-                  className="ml-7 mt-1 flex gap-2"
+    <Panel>
+      <PanelHead
+        title={label}
+        count={tasks.length > 0 ? tasks.length : undefined}
+        action={
+          doneToday > 0 ? (
+            <Tag tone="ok" filled={cleared}>
+              {doneToday} done
+            </Tag>
+          ) : null
+        }
+      />
+
+      {cleared ? (
+        <PanelEmpty>All clear — {doneToday} done today.</PanelEmpty>
+      ) : (
+        <ul>
+          <AnimatePresence initial={false}>
+            {tasks.map((task, i) => {
+              const subs = subtasksOf.get(task.id) ?? [];
+              return (
+                <motion.li
+                  key={task.id}
+                  layout
+                  variants={listItemVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                  transition={LIST_ITEM_TRANSITION}
+                  className={cn(i > 0 && "border-t border-hairline")}
                 >
-                  <Input
-                    autoFocus
-                    value={subtaskTitle}
-                    onChange={(e) => onSubtaskTitleChange(e.target.value)}
-                    placeholder="Subtask…"
-                    className="h-7 text-xs"
+                  <TaskRow
+                    task={task}
+                    onToggleComplete={() => onToggleComplete(task)}
+                    onDelete={() => onDelete(task)}
+                    onRemindMe={() => onRemindMe(task)}
+                    onOpenDetail={() => onOpenDetail(task)}
+                    reminded={remindedIds.has(task.id)}
                   />
-                  <Button type="submit" size="icon-sm">
-                    <Plus className="size-3.5" />
-                  </Button>
-                </form>
-              ) : (
-                !task.parent_task_id && (
-                  <button
-                    onClick={() => onStartAddSubtask(task.id)}
-                    className="tap-press ml-7 mt-1 text-xs text-muted-foreground/60 hover:text-foreground"
-                  >
-                    + subtask
-                  </button>
-                )
-              )}
-            </motion.li>
-          ))}
-        </AnimatePresence>
-      </ul>
-    </div>
+
+                  {/* Subtasks sit behind a left rule rather than on plain
+                      indentation — the rule is what makes the nesting legible
+                      at a glance in a dense list. */}
+                  {subs.length > 0 && (
+                    <ul className="ml-8 border-l-2 border-hairline">
+                      {subs.map((sub) => (
+                        <li key={sub.id}>
+                          <TaskRow
+                            task={sub}
+                            subtle
+                            onToggleComplete={() => onToggleComplete(sub)}
+                            onDelete={() => onDelete(sub)}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {addingSubtaskFor === task.id ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        onAddSubtask(task);
+                      }}
+                      className="ml-8 flex gap-2 border-l-2 border-hairline p-2"
+                    >
+                      <Input
+                        autoFocus
+                        value={subtaskTitle}
+                        onChange={(e) => onSubtaskTitleChange(e.target.value)}
+                        placeholder="Subtask…"
+                        className="h-8 text-sm"
+                      />
+                      <Button type="submit" size="icon-sm" aria-label="Add subtask">
+                        <Plus className="size-4" strokeWidth={3} />
+                      </Button>
+                    </form>
+                  ) : (
+                    !task.parent_task_id && (
+                      <button
+                        type="button"
+                        onClick={() => onStartAddSubtask(task.id)}
+                        className="micro-sm tap-press ml-8 flex items-center gap-1.5 border-l-2 border-hairline px-3 py-1.5 text-muted-foreground/70 hover:text-foreground"
+                      >
+                        <CornerDownRight className="size-3" />
+                        Subtask
+                      </button>
+                    )
+                  )}
+                </motion.li>
+              );
+            })}
+          </AnimatePresence>
+        </ul>
+      )}
+    </Panel>
   );
 }
 
@@ -566,54 +659,73 @@ function TaskRow({
   onOpenDetail?: () => void;
   reminded?: boolean;
 }) {
-  const subtitleParts: string[] = [];
+  const meta: string[] = [];
   if (task.due_at) {
-    subtitleParts.push(formatInAppTimezone(task.due_at, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }));
+    meta.push(
+      formatInAppTimezone(task.due_at, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    );
   }
-  if (task.category !== "personal") {
-    subtitleParts.push(TASK_CATEGORY_LABELS[task.category]);
-  }
+  if (task.category !== "personal") meta.push(TASK_CATEGORY_LABELS[task.category]);
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2",
-        subtle && "border-transparent bg-transparent py-1"
-      )}
-    >
+    <div className={cn("flex items-center gap-2 px-3", subtle ? "py-1.5" : "py-2.5")}>
       <button
+        type="button"
         onClick={onToggleComplete}
-        className="tap-press flex size-5 shrink-0 items-center justify-center rounded-md border border-border transition-colors hover:border-primary hover:bg-primary/10"
-        aria-label="Complete task"
-      />
+        className="group/check tap-press flex size-5 shrink-0 items-center justify-center border-2 border-rule transition-colors hover:bg-foreground hover:text-background"
+        aria-label={`Complete ${task.title}`}
+      >
+        {/* A ghost tick that fills in on hover, so the square reads as
+            something you check rather than a decorative box. */}
+        <Check
+          className="size-3 opacity-0 transition-opacity group-hover/check:opacity-100"
+          strokeWidth={3}
+        />
+      </button>
+
       <button
+        type="button"
         onClick={onOpenDetail}
         disabled={!onOpenDetail}
         className="min-w-0 flex-1 text-left disabled:cursor-default"
       >
-        <p className="truncate text-sm">{task.title}</p>
-        {subtitleParts.length > 0 && (
-          <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+        <span className={cn("block truncate", subtle ? "text-[0.8125rem]" : "text-sm")}>
+          {task.title}
+        </span>
+        {meta.length > 0 && (
+          <span className="micro-sm mt-0.5 flex items-center gap-1 truncate text-muted-foreground">
             {task.rrule && <Repeat className="size-3 shrink-0" />}
-            {subtitleParts.join(" · ")}
-          </p>
+            {meta.join(" · ")}
+          </span>
         )}
       </button>
+
       {!subtle && task.due_at && onRemindMe && (
         <button
+          type="button"
           onClick={onRemindMe}
           disabled={reminded}
-          className="tap-press shrink-0 text-muted-foreground/50 hover:text-foreground disabled:text-accent"
-          aria-label={reminded ? "Reminder set" : "Remind me"}
+          className={cn(
+            "tap-press shrink-0 transition-colors",
+            reminded ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"
+          )}
+          aria-label={reminded ? "Reminder set" : `Remind me about ${task.title}`}
           title={reminded ? "Reminder set" : "Remind me at the due time"}
         >
           {reminded ? <BellRing className="size-4" /> : <Bell className="size-4" />}
         </button>
       )}
+
       <button
+        type="button"
         onClick={onDelete}
-        className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
-        aria-label="Delete task"
+        className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+        aria-label={`Delete ${task.title}`}
       >
         <Trash2 className="size-4" />
       </button>

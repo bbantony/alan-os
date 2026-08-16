@@ -2,15 +2,26 @@
 
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Panel, PanelHead } from "@/components/ui/panel";
+import { Tag } from "@/components/ui/tag";
+import { cn } from "@/lib/utils";
 import { formatWeight } from "@/lib/workout/units";
-import { EQUIPMENT_TAGS, type DraftExercise, type DraftSet, type ExerciseHistoryEntry, type WeightUnit } from "@/lib/workout/types";
+import {
+  EQUIPMENT_TAGS,
+  type DraftExercise,
+  type DraftSet,
+  type ExerciseHistoryEntry,
+  type WeightUnit,
+} from "@/lib/workout/types";
 import { SetRow } from "./set-row";
 
 function formatShortDate(dateStr: string): string {
   if (!dateStr) return "";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(
-    new Date(`${dateStr}T00:00:00Z`)
-  );
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${dateStr}T00:00:00Z`));
 }
 
 // The single focused exercise being logged right now — history above, sets
@@ -35,42 +46,57 @@ export function ExercisePanel({
   onRemoveExercise: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="flex items-center gap-1.5 font-heading text-lg font-semibold">
-          {exercise.exerciseName}
+    <Panel>
+      <div className="flex items-center justify-between gap-3 border-b-2 border-rule px-3 py-2.5">
+        <p className="flex min-w-0 items-center gap-2">
+          <span className="display-sm truncate">{exercise.exerciseName}</span>
           {EQUIPMENT_TAGS[exercise.equipment] && (
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-              {EQUIPMENT_TAGS[exercise.equipment]}
-            </span>
+            <Tag>{EQUIPMENT_TAGS[exercise.equipment]}</Tag>
           )}
         </p>
         <button
+          type="button"
           onClick={onRemoveExercise}
-          className="tap-press rounded-full p-1.5 text-muted-foreground/40 hover:text-destructive"
-          aria-label="Remove exercise"
+          className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+          aria-label={`Remove ${exercise.exerciseName}`}
         >
           <Trash2 className="size-4" />
         </button>
       </div>
 
+      {/* Last time's numbers, right above where you type this time's — the
+          whole point of progressive overload is seeing both at once. */}
       {history.length > 0 && (
-        <div className="mb-3 rounded-lg bg-muted/40 p-2.5">
-          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            History
+        <div className="border-b-2 border-rule bg-muted/40">
+          <p className="micro-sm border-b border-hairline px-3 py-1.5 text-muted-foreground">
+            Last time
           </p>
-          <ul className="space-y-1">
+          <ul>
             {history.map((entry, i) => (
-              <li key={i} className="flex gap-2 text-xs">
-                <span className="w-11 shrink-0 text-muted-foreground">{formatShortDate(entry.workoutDate)}</span>
-                <span>{entry.sets.map((s) => `${formatWeight(s.weight_kg, unit)}×${s.reps}`).join(" · ")}</span>
+              <li
+                key={i}
+                className={cn(
+                  "flex gap-3 px-3 py-1.5 text-xs",
+                  i > 0 && "border-t border-hairline"
+                )}
+              >
+                <span className="micro-sm w-11 shrink-0 text-muted-foreground">
+                  {formatShortDate(entry.workoutDate)}
+                </span>
+                <span className="min-w-0 tabular">
+                  {entry.sets
+                    .map((s) => `${formatWeight(s.weight_kg, unit)}×${s.reps}`)
+                    .join("  ·  ")}
+                </span>
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      <div className="space-y-1.5">
+      <PanelHead title="Sets" count={exercise.sets.length} />
+
+      <div>
         {exercise.sets.map((set, i) => (
           <SetRow
             key={i}
@@ -84,10 +110,12 @@ export function ExercisePanel({
         ))}
       </div>
 
-      <Button type="button" variant="ghost" size="sm" className="mt-2 gap-1.5" onClick={onDuplicateLastSet}>
-        <Copy className="size-3.5" />
-        Duplicate last set
-      </Button>
-    </div>
+      <div className="border-t-2 border-rule p-2">
+        <Button type="button" variant="secondary" block onClick={onDuplicateLastSet}>
+          <Copy className="size-4" />
+          Duplicate last set
+        </Button>
+      </div>
+    </Panel>
   );
 }

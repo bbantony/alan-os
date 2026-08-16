@@ -114,12 +114,12 @@ export function TaskDetailDialog({
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Notes (optional)"
             rows={2}
-            className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring"
+            className="w-full border-2 border-rule bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring"
           />
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">When</label>
+              <label className="micro-sm mb-1.5 block text-muted-foreground">When</label>
               <Select value={horizon} onChange={(e) => setHorizon(e.target.value as TaskHorizon)}>
                 {TASK_HORIZONS.map((h) => (
                   <option key={h} value={h}>
@@ -129,7 +129,7 @@ export function TaskDetailDialog({
               </Select>
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Category</label>
+              <label className="micro-sm mb-1.5 block text-muted-foreground">Category</label>
               <Select value={category} onChange={(e) => setCategory(e.target.value as TaskCategory)}>
                 {Object.entries(TASK_CATEGORY_LABELS).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -141,7 +141,7 @@ export function TaskDetailDialog({
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Due date (optional)</label>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">Due date (optional)</label>
             <Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
           </div>
 
@@ -161,7 +161,7 @@ export function TaskDetailDialog({
             <p className="text-xs text-destructive">A repeating task needs a due date so it knows when to recur.</p>
           )}
 
-          <label className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+          <label className="flex items-center justify-between gap-2 border-2 border-rule px-3 py-2">
             <span className="text-sm">
               Remind me
               {!dueAt && <span className="block text-xs text-muted-foreground">Set a due date first</span>}

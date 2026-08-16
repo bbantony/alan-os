@@ -1,333 +1,327 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* ---------- Palettes (generated from src/lib/palettes.ts via scripts/gen-palette-css.mjs) ---------- */
+/* ===========================================================================
+   ALAN OS — "SWISS INSTRUMENT" DESIGN LANGUAGE
+   ---------------------------------------------------------------------------
+   The app is an instrument panel for a life, not a set of soft floating cards.
+   Three rules drive everything below:
 
-:root, :root[data-palette="british-racing-green"] {
-  --background: #FAF7F2;
+     1. STRUCTURE, NOT ELEVATION.  A panel is defined by a thick high-contrast
+        rule around it. Shadows are hard offsets used only on things that are
+        genuinely *above* the page (dialogs, pressed buttons) — never as a
+        decorative lift on every card. Radius is zero; circles are reserved for
+        things that are actually circular (avatars, rings, status dots).
+
+     2. TYPE CARRIES HIERARCHY.  Three registers do almost all the work:
+        a heavy tight display face for the one thing that matters on a screen,
+        normal body text for content, and a small mono uppercase micro-label
+        for everything that is metadata. If a screen looks flat, the fix is
+        almost always making the display bigger — not adding colour.
+
+     3. COLOUR IS SIGNAL.  The ground is paper or ink. `primary` means "this is
+        the live/active/important one". Semantic colours (late, done, warning)
+        are separate from the theme accent and never used decoratively.
+   =========================================================================== */
+
+/* ---------- Palettes (generated: node scripts/gen-palette-css.mjs) ---------- */
+
+:root, :root[data-palette="ink"] {
+  --background: #F1F0EC;
+  --surface: #FBFAF7;
+  --foreground: #121211;
+  --primary: #C4291F;
+  --primary-foreground: #FBFAF7;
+  --accent: #1F4E8C;
+  --accent-foreground: #FBFAF7;
+  --muted: #E2E1DB;
+  --muted-foreground: #5C5C55;
+  --rule: #121211;
+  --hairline: #CBCAC3;
+}
+
+.dark, .dark[data-palette="ink"] {
+  --background: #121211;
+  --surface: #1A1A18;
+  --foreground: #EDECE7;
+  --primary: #EC5A4C;
+  --primary-foreground: #121211;
+  --accent: #7FA6E0;
+  --accent-foreground: #121211;
+  --muted: #26251F;
+  --muted-foreground: #A3A29A;
+  --rule: #EDECE7;
+  --hairline: #38372F;
+}
+
+:root[data-palette="blueprint"] {
+  --background: #EDF1F6;
+  --surface: #FAFCFE;
+  --foreground: #0E1A2B;
+  --primary: #1B5FBF;
+  --primary-foreground: #FAFCFE;
+  --accent: #B0431A;
+  --accent-foreground: #FAFCFE;
+  --muted: #DCE3EC;
+  --muted-foreground: #4F5D6E;
+  --rule: #0E1A2B;
+  --hairline: #C2CDDA;
+}
+
+.dark[data-palette="blueprint"] {
+  --background: #0B1420;
+  --surface: #121E2E;
+  --foreground: #E5ECF5;
+  --primary: #5B9BEA;
+  --primary-foreground: #0B1420;
+  --accent: #E8845C;
+  --accent-foreground: #0B1420;
+  --muted: #1B2937;
+  --muted-foreground: #93A3B5;
+  --rule: #E5ECF5;
+  --hairline: #27384A;
+}
+
+:root[data-palette="primary"] {
+  --background: #F0F0F0;
   --surface: #FFFFFF;
-  --foreground: #14140F;
-  --primary: #004225;
-  --primary-foreground: #FAF7F2;
-  --accent: #C1662F;
-  --accent-foreground: #FAF7F2;
-  --muted: #EFE9DE;
-  --muted-foreground: #5B5C51;
-  --border: #E2DACB;
+  --foreground: #121212;
+  --primary: #CC1F1F;
+  --primary-foreground: #FFFFFF;
+  --accent: #1040C0;
+  --accent-foreground: #FFFFFF;
+  --muted: #E1E1E1;
+  --muted-foreground: #585858;
+  --rule: #121212;
+  --hairline: #C8C8C8;
 }
 
-.dark, .dark[data-palette="british-racing-green"] {
-  --background: #0B120E;
-  --surface: #121A15;
-  --foreground: #F3F1E9;
-  --primary: #2E7D52;
-  --primary-foreground: #0B120E;
-  --accent: #D98A50;
-  --accent-foreground: #0B120E;
-  --muted: #1B241D;
-  --muted-foreground: #9CA69B;
-  --border: #233028;
+.dark[data-palette="primary"] {
+  --background: #0F0F0F;
+  --surface: #181818;
+  --foreground: #F0F0F0;
+  --primary: #F2564A;
+  --primary-foreground: #0F0F0F;
+  --accent: #6D91EC;
+  --accent-foreground: #0F0F0F;
+  --muted: #242424;
+  --muted-foreground: #9E9E9E;
+  --rule: #F0F0F0;
+  --hairline: #353535;
 }
 
-:root[data-palette="navy-cream"] {
-  --background: #FAF6EC;
-  --surface: #FFFFFF;
-  --foreground: #161A24;
-  --primary: #1B2A4A;
-  --primary-foreground: #FAF6EC;
-  --accent: #D9A441;
-  --accent-foreground: #161A24;
-  --muted: #EFE7D3;
-  --muted-foreground: #5B5F6B;
-  --border: #E1D7BC;
+:root[data-palette="concrete"] {
+  --background: #E7E4DD;
+  --surface: #F5F3EE;
+  --foreground: #22221E;
+  --primary: #96631A;
+  --primary-foreground: #F5F3EE;
+  --accent: #3F5A52;
+  --accent-foreground: #F5F3EE;
+  --muted: #D8D4CA;
+  --muted-foreground: #5E5C53;
+  --rule: #22221E;
+  --hairline: #C3BFB3;
 }
 
-.dark[data-palette="navy-cream"] {
-  --background: #0B0E16;
-  --surface: #121728;
-  --foreground: #F2EFE3;
-  --primary: #4A6491;
-  --primary-foreground: #0B0E16;
-  --accent: #E0B15C;
-  --accent-foreground: #0B0E16;
-  --muted: #1A2032;
-  --muted-foreground: #9AA0AE;
-  --border: #232B41;
+.dark[data-palette="concrete"] {
+  --background: #171714;
+  --surface: #20201C;
+  --foreground: #EAE7DF;
+  --primary: #D9A44A;
+  --primary-foreground: #171714;
+  --accent: #82A99C;
+  --accent-foreground: #171714;
+  --muted: #2B2B26;
+  --muted-foreground: #A29E93;
+  --rule: #EAE7DF;
+  --hairline: #3C3B34;
 }
 
-:root[data-palette="burgundy-sand"] {
-  --background: #F7EFE3;
-  --surface: #FFFFFF;
-  --foreground: #1E1416;
-  --primary: #6B1E2B;
-  --primary-foreground: #F7EFE3;
-  --accent: #C99A5B;
-  --accent-foreground: #1E1416;
-  --muted: #EEE1CB;
-  --muted-foreground: #645449;
-  --border: #E2CFA9;
-}
-
-.dark[data-palette="burgundy-sand"] {
-  --background: #150B0D;
-  --surface: #1E1215;
-  --foreground: #F5ECE0;
-  --primary: #9C4655;
-  --primary-foreground: #150B0D;
-  --accent: #D4AD70;
-  --accent-foreground: #150B0D;
-  --muted: #271A1D;
-  --muted-foreground: #AE9A8E;
-  --border: #33242A;
-}
-
-:root[data-palette="charcoal-ice"] {
-  --background: #F3F6F8;
-  --surface: #FFFFFF;
-  --foreground: #171A1C;
-  --primary: #2B2E33;
-  --primary-foreground: #F3F6F8;
-  --accent: #5FA8D3;
-  --accent-foreground: #0E1216;
-  --muted: #E6EBEF;
-  --muted-foreground: #565D64;
-  --border: #D8E0E6;
-}
-
-.dark[data-palette="charcoal-ice"] {
-  --background: #0D0F11;
-  --surface: #16191C;
-  --foreground: #EDF1F4;
-  --primary: #9AA0A8;
-  --primary-foreground: #0D0F11;
-  --accent: #7EC1E8;
-  --accent-foreground: #0D0F11;
-  --muted: #1D2124;
-  --muted-foreground: #9BA3AA;
-  --border: #262B2F;
-}
-
-:root[data-palette="forest-moss"] {
-  --background: #F5F3EA;
-  --surface: #FFFFFF;
-  --foreground: #16190F;
-  --primary: #2F4F3E;
-  --primary-foreground: #F5F3EA;
-  --accent: #8A9A5B;
-  --accent-foreground: #16190F;
-  --muted: #E9E6D6;
-  --muted-foreground: #5B5F4D;
-  --border: #DCD7BE;
-}
-
-.dark[data-palette="forest-moss"] {
-  --background: #0C1210;
-  --surface: #141C17;
-  --foreground: #F0F1E6;
-  --primary: #5C8069;
-  --primary-foreground: #0C1210;
-  --accent: #A3B478;
-  --accent-foreground: #0C1210;
-  --muted: #1C2620;
-  --muted-foreground: #9AA491;
-  --border: #25302A;
-}
-
-:root[data-palette="terracotta-bone"] {
-  --background: #F6F1EA;
-  --surface: #FFFFFF;
-  --foreground: #1B1613;
-  --primary: #A64B2A;
-  --primary-foreground: #F6F1EA;
-  --accent: #1F6F6B;
-  --accent-foreground: #F6F1EA;
-  --muted: #ECE2D5;
-  --muted-foreground: #63584F;
-  --border: #DFD0BE;
-}
-
-.dark[data-palette="terracotta-bone"] {
-  --background: #140F0C;
-  --surface: #1D1613;
-  --foreground: #F4ECE3;
-  --primary: #C97A54;
-  --primary-foreground: #140F0C;
-  --accent: #4FA39E;
-  --accent-foreground: #140F0C;
-  --muted: #271E19;
-  --muted-foreground: #AB9C8F;
-  --border: #33261F;
-}
-
-:root[data-palette="teal-mist"] {
-  --background: #F2F7F6;
-  --surface: #FFFFFF;
-  --foreground: #10201D;
-  --primary: #0B6E6E;
-  --primary-foreground: #F2F7F6;
-  --accent: #D98A3D;
-  --accent-foreground: #10201D;
-  --muted: #E3EEEC;
-  --muted-foreground: #52645F;
-  --border: #D3E1DE;
-}
-
-.dark[data-palette="teal-mist"] {
-  --background: #0A1514;
-  --surface: #0F1E1C;
-  --foreground: #EAF3F1;
-  --primary: #3FA8A0;
-  --primary-foreground: #0A1514;
-  --accent: #E3A25F;
-  --accent-foreground: #0A1514;
-  --muted: #16302C;
-  --muted-foreground: #8FA6A0;
-  --border: #1E3B36;
-}
-
-:root[data-palette="plum-blush"] {
-  --background: #F8F1F3;
-  --surface: #FFFFFF;
-  --foreground: #241419;
-  --primary: #5E2A4D;
-  --primary-foreground: #F8F1F3;
-  --accent: #C98A5B;
-  --accent-foreground: #241419;
-  --muted: #EFE1E6;
-  --muted-foreground: #6B5560;
-  --border: #E3D0D8;
-}
-
-.dark[data-palette="plum-blush"] {
-  --background: #140B10;
-  --surface: #1E1218;
-  --foreground: #F5EAEF;
-  --primary: #9C5C82;
-  --primary-foreground: #140B10;
-  --accent: #D4A374;
-  --accent-foreground: #140B10;
-  --muted: #271A21;
-  --muted-foreground: #AB93A0;
-  --border: #33232B;
-}
-
-:root[data-palette="amber-ink"] {
-  --background: #FBF6E9;
-  --surface: #FFFFFF;
-  --foreground: #1E1708;
-  --primary: #8A5A00;
-  --primary-foreground: #FBF6E9;
-  --accent: #2F6F5E;
-  --accent-foreground: #FBF6E9;
-  --muted: #F0E6CC;
-  --muted-foreground: #6B5F42;
-  --border: #E3D6AE;
-}
-
-.dark[data-palette="amber-ink"] {
-  --background: #120E04;
-  --surface: #1C1608;
-  --foreground: #F5EFDD;
-  --primary: #D9A02E;
-  --primary-foreground: #120E04;
-  --accent: #5FA893;
-  --accent-foreground: #120E04;
-  --muted: #241C0C;
-  --muted-foreground: #A99B77;
-  --border: #2E2510;
-}
-
-:root[data-palette="rose-linen"] {
-  --background: #F9F1EC;
-  --surface: #FFFFFF;
-  --foreground: #241512;
-  --primary: #8C3B3B;
-  --primary-foreground: #F9F1EC;
-  --accent: #4C7A6E;
-  --accent-foreground: #F9F1EC;
-  --muted: #EFE0D6;
-  --muted-foreground: #6B5750;
-  --border: #E3D0C3;
-}
-
-.dark[data-palette="rose-linen"] {
-  --background: #160D0B;
-  --surface: #201513;
-  --foreground: #F5E9E3;
-  --primary: #C97070;
-  --primary-foreground: #160D0B;
-  --accent: #6FA294;
-  --accent-foreground: #160D0B;
-  --muted: #291B17;
-  --muted-foreground: #AD968E;
-  --border: #34211C;
-}
-
-:root[data-palette="mono-graphite"] {
-  --background: #F5F5F3;
+:root[data-palette="signal"] {
+  --background: #F4F4F3;
   --surface: #FFFFFF;
   --foreground: #141414;
-  --primary: #1F1F1F;
-  --primary-foreground: #F5F5F3;
-  --accent: #B5472F;
-  --accent-foreground: #F5F5F3;
-  --muted: #E7E7E4;
-  --muted-foreground: #5C5C58;
-  --border: #D9D9D5;
+  --primary: #E24E1B;
+  --primary-foreground: #141414;
+  --accent: #1A1A1A;
+  --accent-foreground: #FFFFFF;
+  --muted: #E4E4E2;
+  --muted-foreground: #5A5A58;
+  --rule: #141414;
+  --hairline: #CCCCC9;
 }
 
-.dark[data-palette="mono-graphite"] {
-  --background: #0C0C0B;
-  --surface: #131313;
-  --foreground: #F2F2EF;
-  --primary: #D8D8D4;
-  --primary-foreground: #0C0C0B;
-  --accent: #E06A4D;
-  --accent-foreground: #0C0C0B;
-  --muted: #1C1C1A;
-  --muted-foreground: #9C9C97;
-  --border: #262624;
+.dark[data-palette="signal"] {
+  --background: #101010;
+  --surface: #191919;
+  --foreground: #F2F2F0;
+  --primary: #FF7038;
+  --primary-foreground: #101010;
+  --accent: #F2F2F0;
+  --accent-foreground: #101010;
+  --muted: #242423;
+  --muted-foreground: #9C9C99;
+  --rule: #F2F2F0;
+  --hairline: #343433;
 }
 
-/* ---------- Typography, density & other tokens shared by every palette ---------- */
+:root[data-palette="verdigris"] {
+  --background: #ECF0EC;
+  --surface: #F9FBF8;
+  --foreground: #101610;
+  --primary: #1F5D3F;
+  --primary-foreground: #F9FBF8;
+  --accent: #B2612C;
+  --accent-foreground: #F9FBF8;
+  --muted: #DCE3DC;
+  --muted-foreground: #4F5A4F;
+  --rule: #101610;
+  --hairline: #C3CDC3;
+}
+
+.dark[data-palette="verdigris"] {
+  --background: #0C120E;
+  --surface: #141C16;
+  --foreground: #E7EDE6;
+  --primary: #4FA277;
+  --primary-foreground: #0C120E;
+  --accent: #DB9160;
+  --accent-foreground: #0C120E;
+  --muted: #1D2820;
+  --muted-foreground: #95A296;
+  --rule: #E7EDE6;
+  --hairline: #2A3A2E;
+}
+
+:root[data-palette="oxblood"] {
+  --background: #F2EDE7;
+  --surface: #FCF9F5;
+  --foreground: #17100F;
+  --primary: #7A1F24;
+  --primary-foreground: #FCF9F5;
+  --accent: #8A6A25;
+  --accent-foreground: #FCF9F5;
+  --muted: #E4DBD1;
+  --muted-foreground: #5E534E;
+  --rule: #17100F;
+  --hairline: #CDC2B6;
+}
+
+.dark[data-palette="oxblood"] {
+  --background: #130E0D;
+  --surface: #1C1615;
+  --foreground: #EFE8E2;
+  --primary: #C4636A;
+  --primary-foreground: #130E0D;
+  --accent: #CFA85C;
+  --accent-foreground: #130E0D;
+  --muted: #282020;
+  --muted-foreground: #A3968E;
+  --rule: #EFE8E2;
+  --hairline: #3A302E;
+}
+
+:root[data-palette="monolith"] {
+  --background: #FFFFFF;
+  --surface: #FFFFFF;
+  --foreground: #000000;
+  --primary: #000000;
+  --primary-foreground: #FFFFFF;
+  --accent: #565656;
+  --accent-foreground: #FFFFFF;
+  --muted: #EDEDED;
+  --muted-foreground: #565656;
+  --rule: #000000;
+  --hairline: #C4C4C4;
+}
+
+.dark[data-palette="monolith"] {
+  --background: #000000;
+  --surface: #0B0B0B;
+  --foreground: #FFFFFF;
+  --primary: #FFFFFF;
+  --primary-foreground: #000000;
+  --accent: #A8A8A8;
+  --accent-foreground: #000000;
+  --muted: #1C1C1C;
+  --muted-foreground: #A8A8A8;
+  --rule: #FFFFFF;
+  --hairline: #333333;
+}
+
+/* ---------- Structural tokens shared by every palette ---------- */
 
 :root {
-  --radius: 0.625rem;
+  /* Radius is zero, everywhere, on purpose. `--radius-pill` exists for the few
+     things that are genuinely circular — a streak ring, an avatar, a status
+     dot — so those can't be accidentally squared by a token change. */
+  --radius: 0px;
+  --radius-pill: 9999px;
+
+  /* Two border weights, and this pair is the backbone of the whole language:
+     `rule-w` frames a panel and reads as structure; `hairline-w` separates
+     rows *inside* an already-framed panel and reads as rhythm. Using the heavy
+     one for both is what makes brutalist UIs feel like visual noise. */
+  --rule-w: 2px;
+  --hairline-w: 1px;
+
   --font-scale: 1;
   --density-scale: 1;
 
-  /* Elevation scale — every surface that should visually "lift" (Card,
-     Dialog, dropdowns) uses one of these instead of ad-hoc shadows, so
-     elevation reads consistently everywhere instead of some surfaces using a
-     ring and others a plain border. Plain black-based: works fine across all
-     6 palettes without needing a per-palette shadow color. */
-  --shadow-sm: 0 1px 2px 0 rgb(20 20 15 / 0.06), 0 1px 1px 0 rgb(20 20 15 / 0.04);
-  --shadow-md: 0 4px 10px -2px rgb(20 20 15 / 0.08), 0 2px 4px -2px rgb(20 20 15 / 0.05);
-  --shadow-lg: 0 14px 28px -6px rgb(20 20 15 / 0.14), 0 4px 8px -4px rgb(20 20 15 / 0.06);
+  /* Hard offset shadows — no blur, ever. These are for things genuinely above
+     the page. A card in a list does NOT get one; it gets a rule. */
+  --shadow-hard-sm: 3px 3px 0 0 var(--rule);
+  --shadow-hard-md: 5px 5px 0 0 var(--rule);
+  --shadow-hard-lg: 8px 8px 0 0 var(--rule);
 
-  /* shadcn-style aliases mapped onto our own token names above */
+  /* The old soft-shadow token names are kept and pointed at the hard scale so
+     any straggler `shadow-md` in a screen file picks up the new language
+     instead of quietly rendering a soft blur from the old design. */
+  --shadow-sm: var(--shadow-hard-sm);
+  --shadow-md: var(--shadow-hard-md);
+  --shadow-lg: var(--shadow-hard-lg);
+
+  /* Semantic colours, deliberately separate from the theme accent so "overdue"
+     never changes meaning when the palette changes. Tuned to stay legible on
+     both a paper and an ink ground. */
+  --ok: #1F7A47;
+  --ok-foreground: #FFFFFF;
+  --warn: #A2660D;
+  --warn-foreground: #FFFFFF;
+  --destructive: #B3231B;
+  --destructive-foreground: #FFFFFF;
+
+  /* shadcn-style aliases mapped onto our own token names */
   --card: var(--surface);
   --card-foreground: var(--foreground);
   --popover: var(--surface);
   --popover-foreground: var(--foreground);
   --secondary: var(--muted);
   --secondary-foreground: var(--foreground);
-  --input: var(--border);
+  --input: var(--rule);
   --ring: var(--primary);
-  --destructive: #B3261E;
-  --destructive-foreground: #FAF7F2;
+
+  /* `border` maps to the STRUCTURAL rule, not the hairline. Every pre-existing
+     `border-border` in the app therefore becomes a real structural edge for
+     free — which is exactly the reskin we want — and the softer separator is
+     opted into explicitly via `border-hairline`. */
+  --border: var(--rule);
 }
 
 .dark {
-  --destructive: #E2564B;
-  --destructive-foreground: #0B120E;
+  --ok: #4FB37B;
+  --ok-foreground: #0A0A0A;
+  --warn: #D9A03C;
+  --warn-foreground: #0A0A0A;
+  --destructive: #F0645A;
+  --destructive-foreground: #0A0A0A;
+}
 
-  /* Dark surfaces are already near-black, so a black-based shadow needs more
-     opacity (and less spread) to still read as "lifted" rather than vanish
-     into the background. */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 1px 0 rgb(0 0 0 / 0.2);
-  --shadow-md: 0 4px 10px -2px rgb(0 0 0 / 0.35), 0 2px 4px -2px rgb(0 0 0 / 0.2);
-  --shadow-lg: 0 14px 28px -6px rgb(0 0 0 / 0.5), 0 4px 8px -4px rgb(0 0 0 / 0.25);
+/* Desktop gets a heavier frame — a 2px rule that reads as substantial on a
+   375px phone reads as timid on a 1440px monitor. */
+@media (min-width: 768px) {
+  :root { --rule-w: 3px; }
 }
 
 :root[data-font-size="sm"] { --font-scale: 0.9375; }
@@ -337,11 +331,13 @@
 :root[data-density="compact"] { --density-scale: 0.8; }
 :root[data-density="comfortable"] { --density-scale: 1; }
 
-:root[data-heading-font="space-grotesk"] { --font-heading: var(--font-space-grotesk); }
+:root { --font-heading: var(--font-archivo); }
 :root[data-heading-font="archivo"] { --font-heading: var(--font-archivo); }
-:root[data-heading-font="fraunces"] { --font-heading: var(--font-fraunces); }
+:root[data-heading-font="outfit"] { --font-heading: var(--font-outfit); }
+:root[data-heading-font="space-grotesk"] { --font-heading: var(--font-space-grotesk); }
 :root[data-heading-font="sora"] { --font-heading: var(--font-sora); }
 :root[data-heading-font="libre-franklin"] { --font-heading: var(--font-libre-franklin); }
+:root[data-heading-font="fraunces"] { --font-heading: var(--font-fraunces); }
 :root[data-heading-font="dm-serif-display"] { --font-heading: var(--font-dm-serif-display); }
 
 :root { --font-body: var(--font-inter); }
@@ -377,43 +373,44 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-ok: var(--ok);
+  --color-ok-foreground: var(--ok-foreground);
+  --color-warn: var(--warn);
+  --color-warn-foreground: var(--warn-foreground);
   --color-border: var(--border);
+  --color-rule: var(--rule);
+  --color-hairline: var(--hairline);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* All zero — this is what squares the ~125 pre-existing `rounded-lg/md/xl`
+     utilities across the app without visiting each file. */
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+  --radius-3xl: 0px;
 
-  --shadow-sm: var(--shadow-sm);
-  --shadow-md: var(--shadow-md);
-  --shadow-lg: var(--shadow-lg);
+  --shadow-sm: var(--shadow-hard-sm);
+  --shadow-md: var(--shadow-hard-md);
+  --shadow-lg: var(--shadow-hard-lg);
 
   --font-sans: var(--font-body);
-  --font-heading: var(--font-space-grotesk);
+  --font-heading: var(--font-heading);
   --font-mono: var(--font-geist-mono);
 }
 
 html {
   font-size: calc(16px * var(--font-scale));
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-}
-
-/* Perf/feel: without this, some mobile browsers wait ~300ms after a tap to
-   confirm it isn't the start of a double-tap-to-zoom gesture, which reads as
-   "the app is slow to respond" even though nothing server-side is slow.
-   touch-action: manipulation removes that wait. tap-highlight removes the
-   grey flash Android/iOS draw on tap, which otherwise fights with our own
-   :active styles and reads as visual lag/flicker. */
-html {
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 
 button,
@@ -425,23 +422,149 @@ textarea {
   touch-action: manipulation;
 }
 
-/* Every custom (non-shadcn) tappable element in the app should use this so a
-   tap gives instant visual feedback instead of waiting on a network
-   round-trip to *feel* like something happened. */
-.tap-press {
-  transition: transform 100ms ease, opacity 100ms ease;
-}
-.tap-press:active {
-  transform: scale(0.96);
-  opacity: 0.85;
+/* ===========================================================================
+   TYPE REGISTERS
+   =========================================================================== */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), var(--font-sans), ui-sans-serif, sans-serif;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
-/* Route-change loading bar (see src/app/(app)/loading.tsx): App Router shows
-   this instantly the moment a navigation starts (tapping a nav link, "New
-   workout", saving and returning to the feed, etc.) and swaps it out the
-   instant the new page's data is ready — so a tap always gets *some* visible
-   response right away instead of a silent wait that feels like nothing
-   happened. */
+/* The screen's one big statement. Uppercase, heavy, tight — this is the single
+   biggest reason the redesigned app reads as designed rather than assembled. */
+.display {
+  font-family: var(--font-heading), var(--font-sans), sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  font-size: clamp(1.75rem, 7vw, 2.75rem);
+}
+.display-sm {
+  font-family: var(--font-heading), var(--font-sans), sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.03em;
+  line-height: 0.95;
+  font-size: clamp(1.25rem, 5vw, 1.6rem);
+}
+
+/* Metadata register. Small, mono, uppercase, widely tracked. Used for every
+   label, unit, count, timestamp and section marker in the app — it's what
+   makes the UI read as an instrument rather than a document. */
+.micro {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+.micro-sm {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+/* Big numbers: the value in a stat block. Always tabular so a column of them
+   lines up and a changing figure doesn't make the layout twitch. */
+.stat {
+  font-family: var(--font-heading), var(--font-sans), sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ===========================================================================
+   STRUCTURAL PRIMITIVES
+   =========================================================================== */
+
+/* The standard framed container. Everything that is "a thing" on a screen is
+   a .panel — no shadow, no radius, just a decisive edge. */
+.panel {
+  background: var(--surface);
+  border: var(--rule-w) solid var(--rule);
+}
+
+/* A panel that is genuinely above the page (dialog, menu, pressed control). */
+.panel-raised {
+  background: var(--surface);
+  border: var(--rule-w) solid var(--rule);
+  box-shadow: var(--shadow-hard-md);
+}
+
+/* The inverted emphasis block: ink ground, paper text. Reserved for the one
+   most important figure on a screen. Used more than once per screen it stops
+   meaning anything. */
+.panel-invert {
+  background: var(--foreground);
+  color: var(--background);
+  border: var(--rule-w) solid var(--rule);
+}
+.panel-invert .micro,
+.panel-invert .micro-sm { color: color-mix(in oklab, var(--background), transparent 42%); }
+
+/* Row separators inside an already-framed panel. */
+.hair-t { border-top: var(--hairline-w) solid var(--hairline); }
+.hair-b { border-bottom: var(--hairline-w) solid var(--hairline); }
+
+/* Structural divisions between major regions. */
+.rule-t { border-top: var(--rule-w) solid var(--rule); }
+.rule-b { border-bottom: var(--rule-w) solid var(--rule); }
+.rule-l { border-left: var(--rule-w) solid var(--rule); }
+.rule-r { border-right: var(--rule-w) solid var(--rule); }
+
+/* ===========================================================================
+   INTERACTION
+   ---------------------------------------------------------------------------
+   Mechanical, not organic. Things move on a grid: a pressed control travels
+   along the diagonal into its own shadow; nothing eases softly or bounces.
+   =========================================================================== */
+
+.press {
+  transition: transform 110ms ease-out, box-shadow 110ms ease-out,
+    background-color 110ms ease-out, color 110ms ease-out;
+}
+.press:active {
+  transform: translate(2px, 2px);
+}
+/* A pressed control that has a hard shadow loses it, so it reads as physically
+   pushed down flush with the page. */
+.press-hard {
+  box-shadow: var(--shadow-hard-sm);
+  transition: transform 110ms ease-out, box-shadow 110ms ease-out;
+}
+.press-hard:active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+/* Kept from the previous design system: every custom tappable element uses
+   this so a tap gives instant feedback rather than waiting on the network.
+   Re-tuned from a soft scale-down to the language's diagonal travel. */
+.tap-press {
+  transition: transform 100ms ease-out, opacity 100ms ease-out;
+}
+.tap-press:active {
+  transform: translate(1px, 1px);
+  opacity: 0.9;
+}
+
+/* Focus is a hard offset block, not a soft glow. */
+:focus-visible {
+  outline: var(--rule-w) solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Route-change loading bar (see src/app/(app)/loading.tsx). */
 @keyframes route-progress {
   0% { transform: translateX(-100%); }
   50% { transform: translateX(60%); }
@@ -451,11 +574,24 @@ textarea {
   animation: route-progress 900ms ease-in-out infinite;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading), var(--font-sans), ui-sans-serif, sans-serif;
-  letter-spacing: -0.01em;
+/* ===========================================================================
+   TEXTURE
+   ---------------------------------------------------------------------------
+   One restrained pattern, used for empty states and inert areas so a blank
+   region reads as deliberately empty rather than unfinished.
+   =========================================================================== */
+
+.grid-field {
+  background-image:
+    linear-gradient(to right, var(--hairline) var(--hairline-w), transparent var(--hairline-w)),
+    linear-gradient(to bottom, var(--hairline) var(--hairline-w), transparent var(--hairline-w));
+  background-size: 14px 14px;
 }
 
-.tabular {
-  font-variant-numeric: tabular-nums;
+.hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--hairline) 0 1px,
+    transparent 1px 7px
+  );
 }

@@ -9,7 +9,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { DEFAULT_THEME_SETTINGS, type ThemeSettings } from "@/lib/palettes";
+import {
+  DEFAULT_THEME_SETTINGS,
+  normalizeThemeSettings,
+  type ThemeSettings,
+} from "@/lib/palettes";
 import { THEME_STORAGE_KEY } from "./theme-script";
 
 interface ThemeContextValue {
@@ -24,7 +28,7 @@ function readInitialTheme(): ThemeSettings {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
     if (!stored) return DEFAULT_THEME_SETTINGS;
-    return { ...DEFAULT_THEME_SETTINGS, ...JSON.parse(stored) };
+    return normalizeThemeSettings(JSON.parse(stored));
   } catch {
     return DEFAULT_THEME_SETTINGS;
   }
@@ -52,10 +56,9 @@ export function ThemeProvider({
   children: ReactNode;
   initialTheme?: Partial<ThemeSettings>;
 }) {
-  const [theme, setThemeState] = useState<ThemeSettings>(() => ({
-    ...readInitialTheme(),
-    ...initialTheme,
-  }));
+  const [theme, setThemeState] = useState<ThemeSettings>(() =>
+    normalizeThemeSettings({ ...readInitialTheme(), ...initialTheme })
+  );
 
   useEffect(() => {
     applyThemeToDom(theme);

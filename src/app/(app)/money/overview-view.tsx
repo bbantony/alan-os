@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Receipt as ReceiptIcon, Send, Trash2, Wallet } from "lucide-react";
+import { Plus, Send, Trash2, Wallet } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone } from "@/lib/time";
 import { formatCents } from "@/lib/finance/money";
@@ -47,27 +48,33 @@ export function OverviewView({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-border bg-surface p-3">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-sm font-medium">
-            <ReceiptIcon className="size-3.5 text-primary" />
-            Receipts
-          </p>
-          <ReceiptScanButton onUploaded={(receipt) => onReceiptsChanged((prev) => [receipt, ...prev])} />
-        </div>
+    <div className="flex flex-col gap-4">
+      {/* ---------------- Receipts awaiting review ---------------- */}
+      <Panel>
+        <PanelHead
+          title="Receipts"
+          count={receipts.length > 0 ? receipts.length : undefined}
+          action={
+            <ReceiptScanButton
+              onUploaded={(receipt) => onReceiptsChanged((prev) => [receipt, ...prev])}
+            />
+          }
+        />
         {receipts.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Scan a receipt to log it in seconds.</p>
+          <PanelEmpty>Scan a receipt to log it in seconds.</PanelEmpty>
         ) : (
-          <ul className="space-y-1.5">
-            {receipts.map((r) => (
-              <li key={r.id}>
+          <ul>
+            {receipts.map((r, i) => (
+              <li key={r.id} className={cn(i > 0 && "border-t border-hairline")}>
                 <button
+                  type="button"
                   onClick={() => setReviewingReceipt(r)}
-                  className="tap-press flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted"
+                  className="tap-press flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted"
                 >
-                  <span>{r.merchant_guess || "Receipt awaiting review"}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {r.merchant_guess || "Receipt awaiting review"}
+                  </span>
+                  <span className="micro-sm shrink-0 tabular text-muted-foreground">
                     {r.total_cents_guess ? formatCents(r.total_cents_guess) : "Tap to enter"}
                   </span>
                 </button>
@@ -75,124 +82,194 @@ export function OverviewView({
             ))}
           </ul>
         )}
-      </div>
+      </Panel>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Accounts</h2>
-          <button onClick={() => setShowAccountForm(true)} className="tap-press text-xs font-medium text-primary">
-            + Add account
-          </button>
-        </div>
-
-        {accounts.length === 0 ? (
-          <EmptyState
-            title="No accounts yet"
-            description="Add your chequing, credit card, or cash accounts to start logging."
-            icon={<Wallet className="size-8" />}
+      {/* ---------------- Accounts ---------------- */}
+      {accounts.length === 0 ? (
+        <EmptyState
+          title="No accounts yet"
+          description="Add your chequing, credit card, or cash accounts to start logging."
+          icon={<Wallet className="size-8" />}
+        />
+      ) : (
+        <Panel>
+          <PanelHead
+            title="Accounts"
+            count={accounts.length}
+            action={
+              <button
+                type="button"
+                onClick={() => setShowAccountForm(true)}
+                aria-label="Add account"
+                className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+              >
+                <Plus className="size-4" strokeWidth={3} />
+              </button>
+            }
           />
-        ) : (
-          <div className="space-y-2">
-            {accounts.map((a) => {
+          <ul>
+            {accounts.map((a, i) => {
               const utilization =
                 a.type === "credit_card" && a.credit_limit_cents
-                  ? Math.min(100, Math.round((a.current_balance_cents / a.credit_limit_cents) * 100))
+                  ? Math.min(
+                      100,
+                      Math.round((a.current_balance_cents / a.credit_limit_cents) * 100)
+                    )
                   : null;
               return (
-                <div key={a.id} className="rounded-xl border border-border bg-surface p-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{a.name}</p>
-                      <p className="text-xs text-muted-foreground">
+                <li
+                  key={a.id}
+                  className={cn("px-3 py-2.5", i > 0 && "border-t border-hairline")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{a.name}</p>
+                      <p className="micro-sm mt-0.5 truncate text-muted-foreground">
                         {a.institution} · {ACCOUNT_TYPE_LABELS[a.type]}
                       </p>
                     </div>
-                    <div className="tabular text-right text-sm font-semibold">
-                      {formatCents(a.current_balance_cents, a.currency)}
+                    <div className="shrink-0 text-right">
+                      <p className="stat text-lg">
+                        {formatCents(a.current_balance_cents, a.currency)}
+                      </p>
                       {a.type === "credit_card" && a.credit_limit_cents && (
-                        <p className="text-xs font-normal text-muted-foreground">
-                          of {formatCents(a.credit_limit_cents, a.currency)} limit
+                        <p className="micro-sm mt-0.5 text-muted-foreground">
+                          of {formatCents(a.credit_limit_cents, a.currency)}
                         </p>
                       )}
                     </div>
                   </div>
+
+                  {/* Credit utilisation. Squared and framed, and colour-coded
+                      from the semantic tokens rather than the theme accent —
+                      "you are close to your limit" has to mean the same thing
+                      in every palette. */}
                   {utilization !== null && (
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="h-2 flex-1 border border-rule">
+                        <div
+                          className={cn(
+                            "h-full",
+                            utilization > 80
+                              ? "bg-destructive"
+                              : utilization > 50
+                                ? "bg-warn"
+                                : "bg-primary"
+                          )}
+                          style={{ width: `${utilization}%` }}
+                        />
+                      </div>
+                      <span
                         className={cn(
-                          "h-full rounded-full",
-                          utilization > 80 ? "bg-destructive" : utilization > 50 ? "bg-accent" : "bg-primary"
+                          "micro-sm w-9 shrink-0 text-right tabular",
+                          utilization > 80 ? "text-destructive" : "text-muted-foreground"
                         )}
-                        style={{ width: `${utilization}%` }}
-                      />
+                      >
+                        {utilization}%
+                      </span>
                     </div>
                   )}
-                </div>
+                </li>
               );
             })}
+          </ul>
+        </Panel>
+      )}
+
+      {/* ---------------- Remittances ---------------- */}
+      <Panel>
+        <PanelHead
+          title="Remittances this year"
+          action={
+            <button
+              type="button"
+              onClick={() => setShowRemittanceForm(true)}
+              className="micro-sm tap-press flex items-center gap-1 border-2 border-rule bg-surface px-2 py-1 transition-colors hover:bg-foreground hover:text-background"
+            >
+              <Send className="size-3" strokeWidth={2.5} />
+              Send
+            </button>
+          }
+        />
+        <div className="grid grid-cols-2 gap-px bg-hairline">
+          <div className="bg-surface p-3">
+            <p className="micro-sm text-muted-foreground">Sent</p>
+            <p className="stat mt-1 text-xl">
+              {formatCents(remittance.cadTotalCents, "CAD")}
+            </p>
           </div>
-        )}
-      </div>
-
-      <div className="rounded-xl border border-border bg-surface p-3">
-        <div className="mb-1 flex items-center justify-between">
-          <p className="flex items-center gap-1.5 text-sm font-medium">
-            <Send className="size-3.5 text-primary" />
-            Remittances this year
-          </p>
-          <button onClick={() => setShowRemittanceForm(true)} className="tap-press text-xs font-medium text-primary">
-            + Send
-          </button>
+          <div className="bg-surface p-3">
+            <p className="micro-sm text-muted-foreground">Received</p>
+            <p className="stat mt-1 text-xl">
+              {formatCents(remittance.inrTotalCents, "INR")}
+            </p>
+          </div>
         </div>
-        <p className="tabular text-sm text-muted-foreground">
-          {formatCents(remittance.cadTotalCents, "CAD")} sent · {formatCents(remittance.inrTotalCents, "INR")} received
-        </p>
-      </div>
+      </Panel>
 
-      <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Recent transactions
-        </h2>
+      {/* ---------------- Recent transactions ---------------- */}
+      <Panel>
+        <PanelHead
+          title="Recent"
+          count={transactions.length > 0 ? transactions.length : undefined}
+        />
         {transactions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing logged yet.</p>
+          <PanelEmpty>Nothing logged yet.</PanelEmpty>
         ) : (
-          <ul className="space-y-1">
-            {transactions.map((t) => {
+          <ul>
+            {transactions.map((t, i) => {
               const category = categoryById.get(t.category_id);
               const Icon = getFinanceIcon(category?.icon ?? "");
               const isIncome = category?.kind === "income";
               return (
-                <li key={t.id} className="flex items-center gap-2.5 rounded-lg border border-border bg-surface px-3 py-2">
-                  <div
-                    className="flex size-8 shrink-0 items-center justify-center rounded-full"
-                    style={{ backgroundColor: `${category?.color ?? "#5B5C51"}22` }}
+                <li
+                  key={t.id}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5",
+                    i > 0 && "border-t border-hairline"
+                  )}
+                >
+                  {/* The category colour is user-chosen data, so it stays a
+                      literal — but it's now a framed square swatch rather than
+                      a soft tinted circle, so it sits inside the language. */}
+                  <span
+                    className="flex size-8 shrink-0 items-center justify-center border-2 border-rule"
+                    style={{ backgroundColor: category?.color ?? undefined }}
                   >
-                    <Icon className="size-4" style={{ color: category?.color }} />
-                  </div>
+                    <Icon className="size-4 text-white mix-blend-difference" />
+                  </span>
+
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{t.merchant || category?.name || "Transaction"}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="truncate text-sm">
+                      {t.merchant || category?.name || "Transaction"}
+                    </p>
+                    <p className="micro-sm mt-0.5 truncate text-muted-foreground">
                       {formatInAppTimezone(t.txn_date, { month: "short", day: "numeric" })}
                       {category && ` · ${category.name}`}
                     </p>
                   </div>
-                  <span className={cn("tabular shrink-0 text-sm font-medium", isIncome && "text-primary")}>
-                    {isIncome ? "+" : "-"}
+
+                  <span
+                    className={cn("shrink-0 text-sm font-bold tabular", isIncome && "text-ok")}
+                  >
+                    {isIncome ? "+" : "−"}
                     {formatCents(t.amount_cents, t.currency)}
                   </span>
+
                   <button
+                    type="button"
                     onClick={() => handleDeleteTransaction(t.id)}
-                    className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
+                    className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
                     aria-label="Delete transaction"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4" />
                   </button>
                 </li>
               );
             })}
           </ul>
         )}
-      </div>
+      </Panel>
 
       {showAccountForm && (
         <AccountForm
@@ -209,7 +286,9 @@ export function OverviewView({
           accounts={accounts}
           onClose={() => setShowRemittanceForm(false)}
           onLogged={(updatedAccount) => {
-            onAccountsChanged((prev) => prev.map((a) => (a.id === updatedAccount.id ? updatedAccount : a)));
+            onAccountsChanged((prev) =>
+              prev.map((a) => (a.id === updatedAccount.id ? updatedAccount : a))
+            );
             setShowRemittanceForm(false);
           }}
         />
@@ -228,7 +307,9 @@ export function OverviewView({
           onApproved={(receiptId, transactions, accountId, updatedBalanceCents) => {
             onReceiptsChanged((prev) => prev.filter((r) => r.id !== receiptId));
             onAccountsChanged((prev) =>
-              prev.map((a) => (a.id === accountId ? { ...a, current_balance_cents: updatedBalanceCents } : a))
+              prev.map((a) =>
+                a.id === accountId ? { ...a, current_balance_cents: updatedBalanceCents } : a
+              )
             );
             onTransactionsAdded(transactions);
             setReviewingReceipt(null);

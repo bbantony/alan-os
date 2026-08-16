@@ -1,4 +1,6 @@
 import { getGcalStatus, getPushSubscriptions } from "@/app/(app)/calendar/actions";
+import { Panel, PanelHead } from "@/components/ui/panel";
+import { SettingsPageShell } from "../settings-page-shell";
 import { CalendarConnect } from "./calendar-connect";
 import { PushDevices } from "./push-devices";
 
@@ -7,39 +9,44 @@ export default async function CalendarSettingsPage({
 }: {
   searchParams: Promise<{ error?: string; connected?: string; syncWarning?: string }>;
 }) {
-  const [status, devices, params] = await Promise.all([getGcalStatus(), getPushSubscriptions(), searchParams]);
+  const [status, devices, params] = await Promise.all([
+    getGcalStatus(),
+    getPushSubscriptions(),
+    searchParams,
+  ]);
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8">
-      <h1 className="mb-6 font-heading text-2xl font-semibold">Calendar &amp; Reminders</h1>
-
+    <SettingsPageShell title="Calendar &amp; reminders">
+      {/* Outcome banners. These are the messages Alan actually reads after
+          connecting Google, so they're solid blocks rather than tinted text —
+          a failed sync used to look almost identical to a successful one. */}
       {params.error && (
-        <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <p className="border-2 border-destructive bg-destructive px-3 py-2.5 text-sm font-semibold text-destructive-foreground">
           {params.error}
         </p>
       )}
       {params.connected && !params.syncWarning && (
-        <p className="mb-4 rounded-lg border border-primary/30 bg-primary/10 p-3 text-sm text-primary">
+        <p className="border-2 border-ok bg-ok px-3 py-2.5 text-sm font-semibold text-ok-foreground">
           Google Calendar connected.
         </p>
       )}
       {params.syncWarning && (
-        <p className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <p className="border-2 border-destructive bg-destructive px-3 py-2.5 text-sm font-semibold text-destructive-foreground">
           {params.syncWarning}
         </p>
       )}
 
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Google Calendar
-      </h2>
-      <div className="mb-8">
-        <CalendarConnect status={status} />
-      </div>
+      <Panel>
+        <PanelHead title="Google Calendar" />
+        <div className="p-3">
+          <CalendarConnect status={status} />
+        </div>
+      </Panel>
 
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Push notifications
-      </h2>
-      <PushDevices initialDevices={devices} />
-    </div>
+      <Panel>
+        <PanelHead title="Push notifications" count={devices.length} />
+        <PushDevices initialDevices={devices} />
+      </Panel>
+    </SettingsPageShell>
   );
 }

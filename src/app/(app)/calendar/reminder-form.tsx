@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
+import { RecurrencePicker } from "@/components/recurrence-picker";
 import { todayInAppTimezone } from "@/lib/time";
-import { RECURRENCE_PRESET_LABELS, type Reminder } from "@/lib/reminders/types";
-import type { RecurrencePreset } from "@/lib/reminders/types";
+import type { Reminder, RecurrencePreset } from "@/lib/reminders/types";
 import { createReminder, updateReminder } from "./actions";
 
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const PRESETS: RecurrencePreset[] = ["none", "daily", "weekdays", "weekly", "every_n_days", "monthly", "custom"];
+const PRESETS: RecurrencePreset[] = [
+  "none", "daily", "weekdays", "weekly", "every_n_days", "monthly", "custom",
+];
 
 function isoToDateAndTime(iso: string | undefined) {
   const d = iso ? new Date(iso) : new Date();
@@ -98,87 +98,42 @@ export function ReminderForm({
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Notes (optional)"
             rows={2}
-            className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
+            className="w-full border-2 border-rule bg-transparent px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="flex-1" />
             <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-28" />
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Repeat</label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {PRESETS.map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPreset(p)}
-                  className={cn(
-                    "tap-press rounded-lg border px-2 py-1.5 text-xs font-medium",
-                    preset === p ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-                  )}
-                >
-                  {RECURRENCE_PRESET_LABELS[p]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {preset === "weekly" && (
-            <div className="flex flex-wrap gap-1.5">
-              {WEEKDAY_LABELS.map((label, i) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setWeekday(i)}
-                  className={cn(
-                    "tap-press rounded-full border px-2.5 py-1 text-xs",
-                    weekday === i ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {preset === "every_n_days" && (
-            <div className="flex items-center gap-2 text-sm">
-              Every
-              <Input
-                type="number"
-                inputMode="numeric"
-                value={intervalDays}
-                onChange={(e) => setIntervalDays(e.target.value)}
-                className="w-16 text-center"
-              />
-              days
-            </div>
-          )}
-
-          {preset === "monthly" && (
-            <div className="flex items-center gap-2 text-sm">
-              On day
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={31}
-                value={monthDay}
-                onChange={(e) => setMonthDay(e.target.value)}
-                className="w-16 text-center"
-              />
-              of the month
-            </div>
-          )}
+          {/* This was the fourth hand-rolled copy of the repeat picker — the
+              other three were consolidated into RecurrencePicker in an earlier
+              pass but this one was missed, which is why its weekday buttons
+              were still round pills after everything else went square. */}
+          <RecurrencePicker
+            presets={PRESETS}
+            preset={preset}
+            onPresetChange={setPreset}
+            weekday={weekday}
+            onWeekdayChange={setWeekday}
+            intervalDays={intervalDays}
+            onIntervalDaysChange={setIntervalDays}
+            monthDay={monthDay}
+            onMonthDayChange={setMonthDay}
+          />
 
           {gcalConnected && (
-            <p className="text-xs text-muted-foreground">This will also sync to your Google Calendar automatically.</p>
+            <p className="micro-sm text-muted-foreground">
+              Also syncs to your Google Calendar automatically.
+            </p>
           )}
 
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && (
+            <p className="border-2 border-destructive px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
-          <Button type="button" className="w-full" onClick={handleSubmit} disabled={saving || !title.trim()}>
+          <Button type="button" block onClick={handleSubmit} disabled={saving || !title.trim()}>
             {saving ? "Saving…" : "Save reminder"}
           </Button>
         </div>

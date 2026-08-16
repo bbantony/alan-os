@@ -33,9 +33,9 @@ export function RecurrencePicker({
   onMonthDayChange: (value: string) => void;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="flex flex-col gap-2">
       <div>
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">Repeat</label>
+        <label className="micro-sm mb-1.5 block text-muted-foreground">Repeat</label>
         <Select value={preset} onChange={(e) => onPresetChange(e.target.value as RecurrencePreset)}>
           {presets.map((p) => (
             <option key={p} value={p}>
@@ -46,38 +46,45 @@ export function RecurrencePicker({
       </div>
 
       {preset === "weekly" && (
-        <div className="flex flex-wrap gap-1.5">
+        // One ruled strip of seven equal cells rather than seven loose pills.
+        // A weekday picker is a single control with seven states, and drawing
+        // it as one object makes that read at a glance.
+        <div className="grid grid-cols-7 border-2 border-rule">
           {RECURRENCE_WEEKDAY_LABELS.map((label, i) => (
             <button
               key={label}
               type="button"
+              aria-pressed={weekday === i}
               onClick={() => onWeekdayChange(i)}
               className={cn(
-                "tap-press rounded-full border px-2.5 py-1 text-xs",
-                weekday === i ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
+                "micro-sm tap-press py-2 transition-colors",
+                i > 0 && "border-l border-hairline",
+                weekday === i
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {label}
+              {label.slice(0, 1)}
             </button>
           ))}
         </div>
       )}
       {preset === "every_n_days" && (
         <div className="flex items-center gap-2 text-sm">
-          Every
+          <span className="micro-sm text-muted-foreground">Every</span>
           <Input
             type="number"
             inputMode="numeric"
             value={intervalDays}
             onChange={(e) => onIntervalDaysChange(e.target.value)}
-            className="w-16"
+            className="w-20"
           />
-          days
+          <span className="micro-sm text-muted-foreground">days</span>
         </div>
       )}
       {preset === "monthly" && (
         <div className="flex items-center gap-2 text-sm">
-          On day
+          <span className="micro-sm text-muted-foreground">On day</span>
           <Input
             type="number"
             inputMode="numeric"
@@ -85,9 +92,9 @@ export function RecurrencePicker({
             max={31}
             value={monthDay}
             onChange={(e) => onMonthDayChange(e.target.value)}
-            className="w-16"
+            className="w-20"
           />
-          of the month
+          <span className="micro-sm text-muted-foreground">of the month</span>
         </div>
       )}
     </div>

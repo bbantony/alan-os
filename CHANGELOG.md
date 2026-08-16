@@ -1139,3 +1139,269 @@ credentials step (MANUAL.md "One-time setup #2" — Google Cloud Console → OAu
 paste `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` into Vercel), same as it's been since
 Phase 3. Everything else in this entry (inline task creation, the Tasks page redesign)
 works right now regardless of that.
+
+## 22. Google Calendar backfill failed silently — surface the real error, add a retry
+
+Not a new request from Alan, but a same-day follow-up to entry 21 that never got logged
+here (commits `b1ee290` and `607e1fb`, 2026-08-12). Recording it now so the history is
+complete.
+
+Alan finished the long-standing Google OAuth owner action — `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET` were added in Vercel's dashboard. Vercel only reads newly-added
+environment variables on a fresh deployment, not the already-running one, so an empty
+commit (`b1ee290`) was pushed purely to force that rebuild.
+
+He then connected his Google account and the first-connect backfill quietly did nothing
+to his existing tasks and routines, with no visible reason why. Cause: `syncToGcal()` and
+`backfillGcalSync()` were swallowing exceptions, so a real Google API rejection looked
+identical to "nothing to sync."
+
+- `src/lib/gcal/sync.ts` — both functions now return a real result (synced/failed counts
+  plus the actual Google API error text) instead of returning void and eating the throw.
+- `src/app/api/auth/google/callback/route.ts` — the OAuth callback passes a failure
+  through to the Settings page instead of unconditionally reporting "Connected".
+- `src/app/(app)/settings/calendar/page.tsx` + `calendar-connect.tsx` — show that failure
+  when it happens, and add a **"Sync now"** button so a failed backfill can be retried
+  without disconnecting and reconnecting the whole account.
+- `src/app/(app)/calendar/actions.ts` — wired to the new return shape.
+
+**Still unverified:** the fix deployed, but nobody has since tapped "Sync now" to confirm
+the sync actually succeeds now, or to read what the error was. That's the one open thread
+from that session — Alan needs to open Settings → Calendar and tap it.
+
+## 23. "I really don't like the design of this thing" — full redesign viability review
+
+Alan said he dislikes the app's current design and pasted a Bauhaus design-system prompt
+he'd found online, asking for a deep analysis of how difficult and viable a full redesign
+would be *before* any code. He added two constraints: less playful / more professional
+than the prompt describes, and multiple theme options rather than the prompt's single
+fixed palette. No code was changed in this session — analysis only, as asked.
+
+**What was audited** (all 94 `.tsx` files, ~10,000 lines of UI, 21 screens):
+
+- **Zero hardcoded Tailwind colour utilities** (`bg-blue-500` and friends) app-wide, and
+  only 2 raw hex values in all of `src/**/*.tsx` — both legitimate (a category-colour
+  fallback in `money/overview-view.tsx`, and the PWA `themeColor` meta in `layout.tsx`).
+  Everything else resolves through the 10 CSS custom properties in `globals.css`.
+- 11 palettes × light/dark = 22 colour sets, all generated from `src/lib/palettes.ts` via
+  `scripts/gen-palette-css.mjs`. Adding themes is already a solved problem in this repo.
+- **169 `rounded-*` usages across 51 files — but ~125 of them resolve through Tailwind's
+  `--radius-sm/md/lg/xl`, which `@theme inline` maps back to the single `--radius` token.**
+  Setting `--radius: 0` squares most of the app in one edit; only the 35 `rounded-full`,
+  4 arbitrary values, and 5 `-t-`/`-b-` variants need hand visits.
+- 9 shared primitives in `src/components/ui/`, consumed by 44 files — restyling those
+  nine propagates without touching the 44.
+- Shadows are already tokenized (`--shadow-sm/md/lg`) with only 5 direct usages, so
+  swapping soft shadows for hard offset shadows is a ~6-line change in `globals.css`.
+- `theme-provider.tsx` already stamps six `data-*` attributes on `<html>` (palette,
+  heading font, body font, font size, density, motion). A seventh — design language —
+  follows an established pattern six times over.
+- **Not tokenized, so genuinely new work:** border weight (no token exists; everything is
+  1px `border` or `ring-1`), typographic case/weight treatment, and per-screen layout
+  composition.
+
+**Four honest caveats raised, in priority order:**
+
+1. **The prompt is a landing-page design system, not an app one.** It literally specifies
+   a hero panel, stats band, blog grid, pricing, testimonials and a final CTA — none of
+   which exist in Alan OS. `text-8xl` headlines, 4px borders and 8px shadows around every
+   card would make a 30-row task list unusable on a phone. It needs translating to
+   Swiss/International Typographic (the Bauhaus's application-scale descendant), not
+   copying.
+2. It's explicitly light-mode-only; the app has full dark mode across 11 palettes, so a
+   dark variant has to be designed rather than derived.
+3. The pure primaries have real contrast problems at body-text size (`#F0C020` with white
+   text fails outright; `#D02020` is borderline for small text).
+4. Uniform 4px borders + 8px shadows in dense lists is visual noise and lost screen space;
+   needs two border weights (heavy for page structure, hairline inside lists).
+
+**Estimate given:** viability high, difficulty medium, risk low. 5–6 sessions —
+1 for the design-language switch + first theme + the 9 primitives, 3–4 for the
+module-by-module layout pass, 1 for the remaining themes. Risk is low because the split
+between the 65 logic `.ts` files and the 94 presentational `.tsx` files is clean: no
+schema, RLS, server action or money maths is touched by any of it.
+
+**Four themes proposed** (each light + dark, all sharing the same structural language):
+Ink (paper/black/signal red, Swiss editorial — the recommended default), Blueprint (deep
+navy, white rules, drafting blue), Primary (the true Bauhaus red/blue/yellow, as accents
+and edges rather than section fills), and Concrete (warm greys + ochre). The existing 11
+palettes stay available under the current "soft" design language.
+
+**Deliverable:** a published visual report (side-by-side phone mockups of the Today
+screen as-is vs. as-proposed, theme swatches, the cost/risk table), itself built in the
+proposed style so Alan could judge the direction by looking at it rather than reading a
+description of it.
+
+**Open decision put to Alan:** build stage 1 as a *switch* (new look becomes a seventh
+Appearance option, old look preserved, ~half a session extra, two designs to maintain) or
+as a *replacement* (cleaner, faster, revertible only via git). Recommended the switch for
+stage 1 so he can compare both on his phone, then drop the old look during stage 2 if he
+likes the new one.
+
+## 24. "I really don't like the design" — full app-wide redesign into the "Swiss Instrument" language
+
+Follow-up to entry 23's viability review. Alan read it, said he was aware the Bauhaus
+prompt was written for a sales website, and gave blanket autonomy: *"just get the idea
+from the prompt but give me multiple theme colors and make it make sense for this app
+with page connectivity and process flow important more than anything else… I want a way
+better dashboard structure and everything. just get to work and make it awesome."*
+
+Because he explicitly disliked the existing look, this shipped as a **replacement**, not
+the switchable seventh Appearance option entry 23 recommended — carrying a design he'd
+already rejected would have doubled the work for no benefit. Git history is the undo.
+
+### The design language
+
+Documented at the top of `globals.css`. Three rules drive everything:
+
+1. **Structure, not elevation.** A panel is a thick high-contrast rule, not a shadow.
+   Radius is 0 everywhere; circles are reserved for genuinely round things (avatars, the
+   wordmark dot). Hard offset shadows (3/5/8px, no blur) appear only on things truly
+   above the page — dialogs, pressed buttons, the quick-add.
+2. **Type carries hierarchy.** Three registers do the work: `.display` (heavy, uppercase,
+   -0.04em track), body text, and `.micro` / `.micro-sm` (mono, uppercase, wide-tracked)
+   for every label, unit, count and timestamp.
+3. **Colour is signal.** `--ok` / `--warn` / `--destructive` are semantic and separate
+   from the theme accent, so "overdue" means the same thing in every palette.
+
+**The two-weight border rule is the backbone**: `--rule-w` (2px, 3px at `md+`) frames a
+panel; `--hairline-w` (1px) separates rows *inside* one. Entry 23 flagged uniform heavy
+borders as the thing that turns brutalist UI into noise, and this is the fix.
+
+### Tokens (`globals.css`, `palettes.ts`, `gen-palette-css.mjs`)
+
+- **All 11 old palettes replaced with 8 new ones**, each light + dark: **Ink** (default,
+  Swiss editorial), **Blueprint**, **Primary** (the true Bauhaus red/blue/yellow, as
+  accents not section fills), **Concrete**, **Signal**, **Verdigris**, **Oxblood**,
+  **Monolith**. The old set was tuned for soft UI — low-contrast borders and muted
+  grounds — which actively fights a structural language.
+- `PaletteColors` gained `rule` and `hairline`, replacing the single `border` that was
+  doing both jobs at hairline strength. The generator script was updated to match, and
+  now derives its default-palette selector from `DEFAULT_PALETTE_ID` instead of a
+  hardcoded id.
+- **`normalizeThemeSettings()` + `LEGACY_PALETTE_MAP`** — every existing account has a
+  saved palette id that no longer exists. Rather than snapping everyone to the default,
+  each old id maps to its nearest new theme (burgundy→Oxblood, navy→Blueprint,
+  mono-graphite→Monolith, …). Wired into all three read paths: `profile.ts`,
+  `theme-provider.tsx`, and the pre-hydration `theme-script.tsx` (which needs its own
+  inline copy of the map, since it runs as a raw string before any module loads —
+  without it every existing account would flash the default theme on every page load).
+- `--radius: 0` plus `--radius-sm/md/lg/xl: 0` in `@theme inline` squared ~125 of the
+  169 pre-existing `rounded-*` utilities with no file edits, exactly as entry 23
+  predicted. The now-dead classes were then stripped from source so the code says what
+  it means; the only `rounded-full` left are five real circles.
+- Added **Outfit** (the geometric face the Bauhaus reference names) as a heading option
+  and made **Archivo** the default, loaded with its full weight range — the display
+  register uses 800 and needs it. PWA `themeColor` now has light/dark variants matching
+  Ink instead of one hardcoded green.
+- `motion.ts` retuned from organic to mechanical: ease-out with no overshoot, exits
+  slide along the grid instead of scaling down, dialogs drop in rather than zooming.
+
+### Primitives
+
+All nine restyled (`button`, `card`, `input`, `label`, `select`, `switch`, `segmented`,
+`dialog`, `toast`) — 44 files consume these and none needed editing. Beyond styling:
+button default height went 32px → 40px (the old default was under the comfortable-touch
+threshold on a phone-first app); the switch is now a square block sliding in a framed
+track; `Segmented`'s active state is a solid block filling its cell edge-to-edge.
+
+**Five new primitives** carry the language:
+
+- `page-header.tsx` — `PageHeader` / `HeaderFact`. Every screen now opens the same way
+  (eyebrow / display title / live metadata), with a real back affordance for sub-pages,
+  which a home-screen PWA has no browser chrome to provide.
+- `panel.tsx` — `Panel` / `PanelHead` / `PanelRow` / `PanelEmpty`. The app's most common
+  shape, with the correct heavy-frame + hairline-rows pairing baked in as the default.
+- `stat.tsx` — `Stat` / `StatStrip`. A labelled reading with optional meter. **`href` is
+  the important prop**: Alan ranked connectivity above everything, and this is where most
+  of it lives — every number is a door into the module that produced it. `StatStrip` uses
+  gap-as-divider rather than child borders, which is correct at any item count and any
+  breakpoint (borders leave a doubled line against the frame wherever items wrap).
+- `tag.tsx` — `Tag` / `Micro`. The one chip, with semantic rather than decorative tones.
+- `wordmark.tsx` — circle/square/triangle in theme colours. The one place literal Bauhaus
+  iconography belongs: as a mark, used once, not scattered over every card as decoration.
+
+### The dashboard, rebuilt as a console (Alan's "way better dashboard structure")
+
+The old Today was a bag of widgets — an AI-briefing placeholder, a merged timeline card,
+four live tiles and four "coming soon" tiles in a grid with no reading order. Replaced
+with one top-to-bottom reading order where each band answers exactly one question:
+
+- **masthead** — what day, how loaded.
+- **NOW** — the single next thing, as the one inverted block on the screen, with a real
+  action on it (tick a routine off in place, or open the thing). Picks overdue first,
+  then the earliest item whose time hasn't passed.
+- **VITALS** — four live numbers (due today / safe to spend / streak / shopping), each a
+  link into its module.
+- **THE DAY** — routines, tasks and the next calendar event merged into one time-ordered
+  list with a fixed tabular time gutter, a completion meter under the header, and amber
+  time stamps on anything already past and still outstanding.
+- **FOCUS** — the day-planner ritual, split out of the old monolithic card.
+- **JUMP TO** — everywhere else, as one ruled list. **The four "coming soon" placeholder
+  cards are gone**, replaced by a single muted line — six dashboard-sized tiles
+  advertising unbuilt features was most of why the old screen felt cluttered.
+
+`TodayConsole` deliberately holds NOW and THE DAY in one component so they share
+routine-completion state; split, ticking something off the timeline would leave it still
+showing as "next up" above. Ticking a task off the dashboard now calls `setTaskCompleted`
+for real (optimistic, with rollback on failure) rather than only looking checked.
+Deleted: `today-timeline.tsx`, `components/dashboard/widget.tsx`.
+
+### Process flow (the other half of Alan's brief)
+
+New `QuickAdd` — a floating control on every screen opening a sheet of create flows
+(task / expense / shopping item / reminder / workout), filtered by `ModuleAccess`. The
+previous floating "+" was removed in entry 17 because it only said "coming soon"; this
+one is honest — no free-text parsing, no AI, just routing. Each destination now handles a
+`?new=1` parameter and **lands you in the form with the cursor already in it**: Tasks and
+Shopping focus their add field, Money opens the amount keypad, Calendar opens the
+reminder form on the Reminders tab. Implemented by passing `searchParams` from each
+server page rather than `useSearchParams`, and seeded as initial state rather than set
+from an effect.
+
+Also: the desktop rail now lists the "More" modules directly instead of bouncing to a
+phone-shaped menu page, and Agenda rows still deep-link into Tasks/Reminders.
+
+### Every screen
+
+Tasks & Routines, Money (overview / budgets / goals / debts / reports / quick-log /
+receipts), Shopping, Workout (feed / leaderboard / new session / set logging), Calendar
+(agenda / reminders), Settings (index / all seven sub-pages / the theme picker), plus
+Login, Signup, More and the empty/loading states. Highlights:
+
+- **Quick-log keypad** keys went 56px → 64px in one gapless ruled grid, with the amount
+  as a full-bleed inverted block that shrinks but stays on screen through step two.
+- **Savings goals** lost their SVG progress ring (round stroke-linecap — the softest
+  element left in the app) for a ten-cell segmented block you can read by counting.
+- **Charts** keep their already-validated categorical palette; what changed is geometry —
+  square bars, square legend swatches, hard-edged tooltips.
+- **A PR** is now a solid banner across the top of a feed card, and **your own row** on
+  the leaderboard is an inverted block rather than a faint tint.
+- **The theme picker** shows each palette as a miniature of the real app — framed panel,
+  heavy rule, inverted block, filled meter — because in this language how the rule reads
+  against the ground matters more than the accent does. Heading fonts are previewed in
+  their own face at display weight.
+- New `SettingsPageShell` replaced seven hand-written page wrappers.
+
+### De-duplication found along the way
+
+`reminder-form.tsx` still had its own hand-rolled repeat-preset and weekday picker — a
+fourth copy that the earlier `RecurrencePicker` extraction (entry 21) missed, which is
+why its weekday buttons were still round pills after everything else went square. Now on
+the shared component. Two other hand-rolled two-state toggles (receipt split-by-category,
+debt avalanche/snowball) moved onto `Segmented`.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit` and `eslint` all clean. Dev server smoke-tested: the
+public `/login` renders 200 with the new markup, all eight protected routes correctly
+307 to `/login` (auth guard intact, no 500s), and the compiled CSS was inspected directly
+to confirm `--radius: 0px`, `--rule-w: 2px`, both `.dark` and all eight `[data-palette]`
+blocks, and every new utility (`border-rule`, `border-hairline`, `bg-hairline`, `text-ok`,
+`bg-warn`, `.micro`, `.display`, `.stat`, `.panel`, `.hatch`, `.press-hard`) all present.
+
+**Not verified:** nobody has logged in and walked the redesigned screens on a real phone
+— this session has no browser and no test credentials. Nothing server-side changed (no
+schema, no RLS, no server action, no money maths — the 65 logic `.ts` files are untouched
+apart from `profile.ts`'s theme normalisation), so the risk is cosmetic, but Alan should
+walk each screen and report anything that reads wrong.

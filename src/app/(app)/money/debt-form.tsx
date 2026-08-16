@@ -72,7 +72,7 @@ export function DebtForm({ onClose, onSaved }: { onClose: () => void; onSaved: (
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Target payoff date (optional)</label>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">Target payoff date (optional)</label>
             <Input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}

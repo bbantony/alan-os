@@ -47,8 +47,9 @@ export function Reactions({
   if (!picking && present.length === 0) {
     return (
       <button
+        type="button"
         onClick={() => setPicking(true)}
-        className="flex items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground"
+        className="micro-sm tap-press flex items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground"
         aria-label="React"
       >
         <SmilePlus className="size-3.5" />
@@ -62,14 +63,16 @@ export function Reactions({
       {present.map(({ emoji, count, mine }) => (
         <button
           key={emoji}
+          type="button"
           onClick={() => handleTap(emoji)}
+          aria-pressed={mine}
           className={cn(
-            "flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
-            mine ? "border-accent/50 bg-accent/10" : "border-border hover:bg-muted"
+            "tap-press flex items-center gap-1.5 border-2 px-1.5 py-0.5 text-xs transition-colors",
+            mine ? "border-accent bg-accent/20" : "border-hairline hover:bg-muted"
           )}
         >
           <span>{emoji}</span>
-          <span className="tabular text-muted-foreground">{count}</span>
+          <span className="micro-sm tabular text-muted-foreground">{count}</span>
         </button>
       ))}
 
@@ -78,27 +81,30 @@ export function Reactions({
           {REACTION_EMOJIS.filter((e) => !present.some((p) => p.emoji === e)).map((emoji) => (
             <button
               key={emoji}
+              type="button"
               onClick={() => handleTap(emoji)}
-              className="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-muted"
+              className="tap-press border-2 border-hairline px-1.5 py-0.5 text-xs transition-colors hover:bg-muted"
             >
               {emoji}
             </button>
           ))}
           <button
+            type="button"
             onClick={() => setPicking(false)}
-            className="text-muted-foreground/50 hover:text-muted-foreground"
+            className="tap-press text-muted-foreground/60 transition-colors hover:text-foreground"
             aria-label="Close"
           >
-            <X className="size-3.5" />
+            <X className="size-4" />
           </button>
         </>
       ) : (
         <button
+          type="button"
           onClick={() => setPicking(true)}
-          className="text-muted-foreground/50 hover:text-muted-foreground"
+          className="tap-press text-muted-foreground/60 transition-colors hover:text-foreground"
           aria-label="Add reaction"
         >
-          <SmilePlus className="size-3.5" />
+          <SmilePlus className="size-4" />
         </button>
       )}
     </div>

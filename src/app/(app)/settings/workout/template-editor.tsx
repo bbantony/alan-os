@@ -73,7 +73,7 @@ export function TemplateEditor({
           {exerciseIds.map((id) => (
             <li
               key={id}
-              className="flex items-center justify-between rounded-lg border border-border px-2 py-1.5 text-sm"
+              className="flex items-center justify-between border-2 border-rule px-2 py-1.5 text-sm"
             >
               {exerciseById.get(id)?.name ?? "Unknown exercise"}
               <button

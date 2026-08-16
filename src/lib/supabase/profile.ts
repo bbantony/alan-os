@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { ThemeSettings } from "@/lib/palettes";
-import { DEFAULT_THEME_SETTINGS } from "@/lib/palettes";
+import { normalizeThemeSettings } from "@/lib/palettes";
 import { resolveModuleAccess, type ModuleAccess } from "@/lib/permissions";
 
 export interface CurrentProfile {
@@ -32,10 +32,12 @@ export async function getCurrentProfile(): Promise<CurrentProfile | null> {
     email: user.email ?? null,
     displayName: profile?.display_name ?? null,
     role,
-    themeSettings: {
-      ...DEFAULT_THEME_SETTINGS,
-      ...((profile?.theme_settings as Partial<ThemeSettings>) ?? {}),
-    },
+    // Normalised rather than merged: every account's saved palette id predates
+    // the redesign, so this maps it onto the nearest new theme instead of
+    // handing the client an id that matches no [data-palette] block.
+    themeSettings: normalizeThemeSettings(
+      profile?.theme_settings as Partial<ThemeSettings> | null
+    ),
     moduleAccess: resolveModuleAccess({ role, moduleAccess: profile?.module_access }),
   };
 }

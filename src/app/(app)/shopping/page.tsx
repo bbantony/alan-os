@@ -8,15 +8,21 @@ import {
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { ShoppingList } from "./shopping-list";
 
-export default async function ShoppingPage() {
+export default async function ShoppingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ new?: string }>;
+}) {
   const profile = await getCurrentProfile();
-  const [items, suggestions, categories, knownItems, groceryBudget] = await Promise.all([
-    getShoppingItems(),
-    getStapleSuggestions(),
-    getShoppingCategories(),
-    getKnownItems(),
-    profile?.moduleAccess.money ? getGroceryBudgetSummary() : Promise.resolve(null),
-  ]);
+  const [{ new: isNew }, items, suggestions, categories, knownItems, groceryBudget] =
+    await Promise.all([
+      searchParams,
+      getShoppingItems(),
+      getStapleSuggestions(),
+      getShoppingCategories(),
+      getKnownItems(),
+      profile?.moduleAccess.money ? getGroceryBudgetSummary() : Promise.resolve(null),
+    ]);
 
   return (
     <ShoppingList
@@ -25,6 +31,7 @@ export default async function ShoppingPage() {
       categories={categories}
       initialKnownItems={knownItems}
       groceryBudget={groceryBudget}
+      autoFocusNew={isNew === "1"}
     />
   );
 }

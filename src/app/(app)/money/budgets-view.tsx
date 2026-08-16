@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { Panel, PanelHead } from "@/components/ui/panel";
+import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/finance/money";
 import type { Category } from "@/lib/finance/types";
@@ -22,11 +24,9 @@ export function BudgetsView({
 }) {
   const [showForm, setShowForm] = useState(false);
 
-  const safeToSpend = useMemo(
-    () => budgets.reduce((sum, b) => sum + Math.max(0, b.amount_cents - b.spent_cents), 0),
-    [budgets]
-  );
-  const overCount = budgets.filter((b) => b.spent_cents > b.amount_cents).length;
+  // The safe-to-spend headline moved up into the page-level vitals strip
+  // (money-shell.tsx) so it stays visible on every tab. Repeating it here as
+  // well would be the same number twice on one screen.
   const budgetedCategoryIds = new Set(budgets.map((b) => b.category_id));
 
   async function handleDelete(id: string) {
@@ -35,58 +35,108 @@ export function BudgetsView({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-        <p className="text-xs font-medium text-muted-foreground">Safe to spend</p>
-        <p className="tabular font-heading text-2xl font-semibold text-primary">{formatCents(safeToSpend)}</p>
-        {overCount > 0 && (
-          <p className="mt-1 text-xs text-destructive">
-            {overCount} budget{overCount > 1 ? "s" : ""} over limit
-          </p>
-        )}
-      </div>
-
-      <Button type="button" className="w-full gap-1.5" onClick={() => setShowForm(true)}>
-        <Plus className="size-4" />
-        New budget
-      </Button>
-
+    <div className="flex flex-col gap-4">
       {budgets.length === 0 ? (
-        <EmptyState title="No budgets yet" description="Set one per category to see your safe-to-spend number." />
+        <EmptyState
+          title="No budgets yet"
+          description="Set one per category to see your safe-to-spend number."
+          action={
+            <Button onClick={() => setShowForm(true)}>
+              <Plus className="size-4" strokeWidth={3} />
+              New budget
+            </Button>
+          }
+        />
       ) : (
-        <ul className="space-y-2">
-          {budgets.map((b) => {
-            const pct = b.amount_cents > 0 ? Math.round((b.spent_cents / b.amount_cents) * 100) : 0;
-            const barColor = pct > 100 ? "bg-destructive" : pct > 80 ? "bg-accent" : "bg-primary";
-            return (
-              <li key={b.id} className="rounded-xl border border-border bg-surface p-3">
-                <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-sm font-medium">{b.category_name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="tabular text-xs text-muted-foreground">
-                      {formatCents(b.spent_cents)} / {formatCents(b.amount_cents)}
+        <Panel>
+          <PanelHead
+            title="Budgets"
+            count={budgets.length}
+            action={
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                aria-label="New budget"
+                className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+              >
+                <Plus className="size-4" strokeWidth={3} />
+              </button>
+            }
+          />
+          <ul>
+            {budgets.map((b, i) => {
+              const pct =
+                b.amount_cents > 0 ? Math.round((b.spent_cents / b.amount_cents) * 100) : 0;
+              const over = pct > 100;
+              const close = pct > 80 && !over;
+              const remaining = b.amount_cents - b.spent_cents;
+              return (
+                <li
+                  key={b.id}
+                  className={cn("px-3 py-3", i > 0 && "border-t border-hairline")}
+                >
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate text-sm font-semibold">
+                      {b.category_name}
                     </span>
-                    <button
-                      onClick={() => handleDelete(b.id)}
-                      className="tap-press text-muted-foreground/40 hover:text-destructive"
-                      aria-label="Delete budget"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {over && <Tag tone="alert" filled>Over</Tag>}
+                      {close && <Tag tone="warn">Close</Tag>}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(b.id)}
+                        className="tap-press text-muted-foreground/50 transition-colors hover:text-destructive"
+                        aria-label={`Delete ${b.category_name} budget`}
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div className={cn("h-full rounded-full", barColor)} style={{ width: `${Math.min(100, pct)}%` }} />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+
+                  {/* Spent / limit as a real pair of figures rather than a
+                      cramped "$x / $y" caption, with what's actually left —
+                      the number you make a decision on — given its own place. */}
+                  <div className="mb-2 flex items-baseline justify-between gap-2">
+                    <span className="stat text-xl">{formatCents(b.spent_cents)}</span>
+                    <span className="micro-sm tabular text-muted-foreground">
+                      of {formatCents(b.amount_cents)}
+                    </span>
+                  </div>
+
+                  <div className="h-2 border border-rule">
+                    <div
+                      className={cn(
+                        "h-full",
+                        over ? "bg-destructive" : close ? "bg-warn" : "bg-primary"
+                      )}
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+
+                  <p
+                    className={cn(
+                      "micro-sm mt-1.5 tabular",
+                      remaining < 0 ? "text-destructive" : "text-muted-foreground"
+                    )}
+                  >
+                    {remaining < 0
+                      ? `${formatCents(Math.abs(remaining))} over`
+                      : `${formatCents(remaining)} left`}
+                    {" · "}
+                    {pct}%
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
       )}
 
       {showForm && (
         <BudgetForm
-          categories={categories.filter((c) => c.kind === "expense" && !budgetedCategoryIds.has(c.id))}
+          categories={categories.filter(
+            (c) => c.kind === "expense" && !budgetedCategoryIds.has(c.id)
+          )}
           onClose={() => setShowForm(false)}
           onSaved={async () => {
             setShowForm(false);

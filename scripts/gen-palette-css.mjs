@@ -1,7 +1,8 @@
 // One-off generator: reads palette definitions and prints the CSS variable
 // blocks for globals.css. Run with `node scripts/gen-palette-css.mjs` after
-// editing src/lib/palettes.ts, then paste the output into globals.css.
-import { PALETTES } from "../src/lib/palettes.ts";
+// editing src/lib/palettes.ts, then paste the output into the marked block at
+// the top of globals.css.
+import { PALETTES, DEFAULT_PALETTE_ID } from "../src/lib/palettes.ts";
 
 function block(selector, c) {
   return `${selector} {
@@ -14,20 +15,20 @@ function block(selector, c) {
   --accent-foreground: ${c.accentForeground};
   --muted: ${c.muted};
   --muted-foreground: ${c.mutedForeground};
-  --border: ${c.border};
+  --rule: ${c.rule};
+  --hairline: ${c.hairline};
 }`;
 }
 
 let out = "";
 for (const p of PALETTES) {
-  const lightSel =
-    p.id === "british-racing-green"
-      ? `:root, :root[data-palette="${p.id}"]`
-      : `:root[data-palette="${p.id}"]`;
-  const darkSel =
-    p.id === "british-racing-green"
-      ? `.dark, .dark[data-palette="${p.id}"]`
-      : `.dark[data-palette="${p.id}"]`;
+  const isDefault = p.id === DEFAULT_PALETTE_ID;
+  const lightSel = isDefault
+    ? `:root, :root[data-palette="${p.id}"]`
+    : `:root[data-palette="${p.id}"]`;
+  const darkSel = isDefault
+    ? `.dark, .dark[data-palette="${p.id}"]`
+    : `.dark[data-palette="${p.id}"]`;
   out += block(lightSel, p.light) + "\n\n";
   out += block(darkSel, p.dark) + "\n\n";
 }

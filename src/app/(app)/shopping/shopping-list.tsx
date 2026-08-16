@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, Star, Trash2, WifiOff, Check, PartyPopper } from "lucide-react";
+import { Plus, Star, Trash2, WifiOff, Check, PartyPopper, Settings2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Panel, PanelHead } from "@/components/ui/panel";
+import { PageHeader, HeaderFact } from "@/components/ui/page-header";
+import { Micro } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
+import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
 import { EmptyState } from "@/components/empty-state";
 import { ShoppingIllustration } from "@/components/illustrations";
 import { getShoppingIcon } from "@/lib/shopping/icon-registry";
@@ -65,13 +69,22 @@ export function ShoppingList({
   categories,
   initialKnownItems,
   groceryBudget,
+  autoFocusNew = false,
 }: {
   initialItems: ShoppingItem[];
   initialSuggestions: ShoppingItem[];
   categories: ShoppingCategoryRow[];
   initialKnownItems: ShoppingCategoryItem[];
   groceryBudget: { remainingCents: number; amountCents: number; spentCents: number } | null;
+  /** Set by the `?new=1` link the app-wide quick-add sends here. */
+  autoFocusNew?: boolean;
 }) {
+  // Arriving from the app-wide quick-add should land with the cursor in the
+  // box — the whole point of the shortcut is skipping the extra taps.
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (autoFocusNew) nameRef.current?.focus();
+  }, [autoFocusNew]);
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
   const [suggestions, setSuggestions] = useState<ShoppingItem[]>(initialSuggestions);
   const [knownItems, setKnownItems] = useState<ShoppingCategoryItem[]>(initialKnownItems);
@@ -309,153 +322,224 @@ export function ShoppingList({
 
   const checkedItems = items.filter((i) => i.checked);
 
+  const uncheckedCount = items.filter((i) => !i.checked).length;
+  const budgetProgress =
+    groceryBudget && groceryBudget.amountCents > 0
+      ? groceryBudget.spentCents / groceryBudget.amountCents
+      : null;
+
   return (
-    <div className="mx-auto max-w-lg px-4 py-8 pb-4">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="font-heading text-2xl font-semibold">Shopping</h1>
-        <div className="flex items-center gap-2">
-          {!online && (
-            <span className="flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
-              <WifiOff className="size-3.5" />
-              Offline — changes will sync
-            </span>
-          )}
+    <div>
+      <PageHeader
+        eyebrow="The list and your staples"
+        title="Shopping"
+        meta={
+          <>
+            <HeaderFact>{uncheckedCount} to get</HeaderFact>
+            {checkedItems.length > 0 && (
+              <HeaderFact>{checkedItems.length} in the cart</HeaderFact>
+            )}
+            {!online && (
+              <HeaderFact tone="alert">
+                <span className="inline-flex items-center gap-1">
+                  <WifiOff className="size-3" />
+                  Offline — will sync
+                </span>
+              </HeaderFact>
+            )}
+          </>
+        }
+        actions={
           <Link
             href="/settings/shopping"
-            className="text-xs font-medium text-muted-foreground underline underline-offset-2"
+            aria-label="Manage categories"
+            className="tap-press flex size-9 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-muted"
           >
-            Manage categories
+            <Settings2 className="size-4" strokeWidth={2.5} />
           </Link>
-        </div>
-      </div>
+        }
+      />
 
-      {groceryBudget && (
-        <Link
-          href="/money"
-          className="tap-press mb-4 flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-sm"
-        >
-          <span className="text-muted-foreground">Groceries budget</span>
-          <span className="tabular font-medium text-primary">{formatCents(groceryBudget.remainingCents)} left</span>
-        </Link>
-      )}
-
-      <AnimatePresence>
-        {tripToast && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            className="mb-4 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
-          >
-            <PartyPopper className="size-4 shrink-0" />
-            {tripToast}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {suggestions.length > 0 && (
-        <div className="mb-4 rounded-xl border border-dashed border-accent/50 bg-accent/10 p-3">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Running low?</p>
-          <div className="flex flex-wrap gap-2">
-            {suggestions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => handleAddSuggestion(s)}
-                className="tap-press flex items-center gap-1 rounded-full border border-accent/40 bg-surface px-3 py-1 text-sm font-medium hover:bg-accent/10"
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4 md:px-6 md:py-6">
+        {/* The Shopping↔Money hook, as a real gauge rather than a caption.
+            This is the number that changes what goes in the basket, so it
+            gets the meter treatment and links straight into Money. */}
+        {groceryBudget && (
+          <Link href="/money" className="tap-press block">
+            <div className="border-2 border-rule bg-surface p-3 transition-colors hover:bg-muted">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="micro-sm text-muted-foreground">Groceries budget</span>
+                <span className="micro-sm tabular text-muted-foreground">
+                  {formatCents(groceryBudget.spentCents)} of{" "}
+                  {formatCents(groceryBudget.amountCents)}
+                </span>
+              </div>
+              <p
+                className={cn(
+                  "stat mt-1 text-2xl",
+                  groceryBudget.remainingCents < 0 && "text-destructive"
+                )}
               >
-                <Plus className="size-3.5" />
-                {s.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+                {formatCents(groceryBudget.remainingCents)}
+                <span className="micro-sm ml-1.5 text-muted-foreground">left</span>
+              </p>
+              {budgetProgress !== null && (
+                <div className="mt-2 h-2 border border-rule">
+                  <div
+                    className={cn(
+                      "h-full",
+                      budgetProgress > 1
+                        ? "bg-destructive"
+                        : budgetProgress > 0.8
+                          ? "bg-warn"
+                          : "bg-primary"
+                    )}
+                    style={{ width: `${Math.min(100, budgetProgress * 100)}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </Link>
+        )}
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleAdd();
-        }}
-        className="mb-6 space-y-2"
-      >
-        <div className="flex gap-2">
-          <Input
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            placeholder="Add an item…"
-            className="flex-1"
-          />
-          <Button
-            type="button"
-            variant={isStapleDraft ? "default" : "outline"}
-            size="icon"
-            onClick={() => setIsStapleDraft((v) => !v)}
-            aria-label="Mark as staple"
-            title="Staple item (resurfaces when you're running low)"
-          >
-            <Star className="size-4" fill={isStapleDraft ? "currentColor" : "none"} />
-          </Button>
-          <Button type="submit" size="icon" aria-label="Add item">
-            <Plus className="size-4" />
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <Select
-            value={category}
-            onChange={(e) => {
-              setCategory(e.target.value);
-              setCategoryTouched(true);
+        <AnimatePresence>
+          {tripToast && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="flex items-center gap-2 border-2 border-rule bg-foreground px-3 py-2.5 text-sm font-semibold text-background"
+            >
+              <PartyPopper className="size-4 shrink-0" />
+              {tripToast}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ---------------- Add item ---------------- */}
+        <Panel>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleAdd();
             }}
-            className="h-8 flex-1"
-            aria-label="Category"
           >
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
-          </Select>
-          <Input
-            type="number"
-            inputMode="decimal"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            placeholder="Qty"
-            className="w-20"
+            <div className="flex items-stretch border-b-2 border-rule">
+              <Input
+                ref={nameRef}
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="Add an item…"
+                aria-label="New item"
+                className="h-11 flex-1 border-0 border-r-2 border-rule focus-visible:border-rule"
+              />
+              <button
+                type="button"
+                onClick={() => setIsStapleDraft((v) => !v)}
+                aria-label="Mark as a staple"
+                aria-pressed={isStapleDraft}
+                title="Staple item (resurfaces when you're running low)"
+                className={cn(
+                  "tap-press flex w-12 shrink-0 items-center justify-center border-r-2 border-rule transition-colors",
+                  isStapleDraft
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-muted"
+                )}
+              >
+                <Star className="size-4" fill={isStapleDraft ? "currentColor" : "none"} />
+              </button>
+              <button
+                type="submit"
+                aria-label="Add item"
+                className="tap-press flex w-12 shrink-0 items-center justify-center bg-primary text-primary-foreground transition-colors hover:brightness-95"
+              >
+                <Plus className="size-5" strokeWidth={3} />
+              </button>
+            </div>
+
+            <div className="flex items-stretch">
+              <Select
+                value={category}
+                onChange={(e) => {
+                  setCategory(e.target.value);
+                  setCategoryTouched(true);
+                }}
+                className="h-10 flex-1 border-0 border-r-2 border-rule text-xs focus-visible:border-rule"
+                aria-label="Category"
+              >
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </option>
+                ))}
+              </Select>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder="Qty"
+                aria-label="Quantity"
+                className="h-10 w-16 shrink-0 border-0 border-r-2 border-rule text-center text-xs focus-visible:border-rule"
+              />
+              <Select
+                value={quantityUnit}
+                onChange={(e) => setQuantityUnit(e.target.value as ShoppingUnit)}
+                className="h-10 w-24 shrink-0 border-0 text-xs focus-visible:border-rule"
+                aria-label="Unit"
+              >
+                {SHOPPING_UNITS.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {SHOPPING_UNIT_LABELS[unit]}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </form>
+        </Panel>
+
+        {/* ---------------- Running-low staples ---------------- */}
+        {suggestions.length > 0 && (
+          <Panel className="border-accent">
+            <PanelHead title="Running low?" count={suggestions.length} />
+            <div className="flex flex-wrap gap-2 p-3">
+              {suggestions.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => handleAddSuggestion(s)}
+                  className="tap-press flex items-center gap-1.5 border-2 border-rule bg-surface px-2.5 py-1.5 text-sm font-medium transition-colors hover:bg-foreground hover:text-background"
+                >
+                  <Plus className="size-3.5" strokeWidth={3} />
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        {/* ---------------- The list, by aisle ---------------- */}
+        {items.length === 0 ? (
+          <EmptyState
+            title="Nothing on your list"
+            description="Add your first item above — star it if it's something you buy regularly."
+            icon={<ShoppingIllustration className="size-8" />}
           />
-          <Select
-            value={quantityUnit}
-            onChange={(e) => setQuantityUnit(e.target.value as ShoppingUnit)}
-            className="h-8 w-20"
-            aria-label="Unit"
-          >
-            {SHOPPING_UNITS.map((unit) => (
-              <option key={unit} value={unit}>
-                {SHOPPING_UNIT_LABELS[unit]}
-              </option>
-            ))}
-          </Select>
-        </div>
-      </form>
-
-      {items.length === 0 && (
-        <EmptyState
-          title="Nothing on your list"
-          description="Add your first item above — mark it with a star if it's something you buy regularly."
-          icon={<ShoppingIllustration className="size-8" />}
-        />
-      )}
-
-      <div className="space-y-6">
-        {uncheckedByCategory.map((group) => {
-          const Icon = getShoppingIcon(group.category.icon);
-          return (
-            <div key={group.category.id}>
-              <h2 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <Icon className="size-3.5" />
-                {group.category.name}
-              </h2>
-              <ul className="space-y-1">
+        ) : (
+          uncheckedByCategory.map((group) => (
+            <Panel key={group.category.id}>
+              <PanelHead
+                title={
+                  <span className="flex items-center gap-2">
+                    {createElement(getShoppingIcon(group.category.icon), {
+                      className: "size-3.5",
+                    })}
+                    {group.category.name}
+                  </span>
+                }
+                count={group.items.length}
+              />
+              <ul>
                 <AnimatePresence initial={false}>
                   {group.items.map((item) => (
                     <ShoppingRow
@@ -470,38 +554,38 @@ export function ShoppingList({
                   ))}
                 </AnimatePresence>
               </ul>
+            </Panel>
+          ))
+        )}
+
+        {/* ---------------- In the cart ---------------- */}
+        {checkedItems.length > 0 && (
+          <Panel>
+            <PanelHead title="In the cart" count={checkedItems.length} />
+            <ul>
+              <AnimatePresence initial={false}>
+                {checkedItems.map((item) => (
+                  <ShoppingRow
+                    key={item.id}
+                    item={item}
+                    categories={categories}
+                    categoryLabel={categoriesById.get(item.category_id)?.name}
+                    onToggle={() => handleToggle(item)}
+                    onToggleStaple={() => handleToggleStaple(item)}
+                    onDelete={() => handleDelete(item)}
+                    onRecategorize={(categoryId) => handleRecategorize(item, categoryId)}
+                  />
+                ))}
+              </AnimatePresence>
+            </ul>
+            <div className="border-t-2 border-rule p-3">
+              <Button block size="lg" variant="invert" onClick={handleFinishTrip}>
+                Finish trip
+              </Button>
             </div>
-          );
-        })}
+          </Panel>
+        )}
       </div>
-
-      {checkedItems.length > 0 && (
-        <div className="mt-8">
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Checked
-          </h2>
-          <ul className="space-y-1">
-            <AnimatePresence initial={false}>
-              {checkedItems.map((item) => (
-                <ShoppingRow
-                  key={item.id}
-                  item={item}
-                  categories={categories}
-                  categoryLabel={categoriesById.get(item.category_id)?.name}
-                  onToggle={() => handleToggle(item)}
-                  onToggleStaple={() => handleToggleStaple(item)}
-                  onDelete={() => handleDelete(item)}
-                  onRecategorize={(categoryId) => handleRecategorize(item, categoryId)}
-                />
-              ))}
-            </AnimatePresence>
-          </ul>
-
-          <Button className="mt-4 w-full" onClick={handleFinishTrip}>
-            Finish trip
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -526,39 +610,53 @@ function ShoppingRow({
   return (
     <motion.li
       layout
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.18 }}
-      className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2"
+      variants={listItemVariants}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      transition={LIST_ITEM_TRANSITION}
+      className={cn(
+        "flex items-center gap-2 border-b border-hairline px-3 py-2.5 last:border-b-0",
+        item.checked && "bg-muted/40"
+      )}
     >
       <button
+        type="button"
         onClick={onToggle}
         className={cn(
-          "tap-press flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors",
-          item.checked ? "border-primary bg-primary text-primary-foreground" : "border-border"
+          "tap-press flex size-5 shrink-0 items-center justify-center border-2 border-rule transition-colors",
+          item.checked && "bg-foreground text-background"
         )}
-        aria-label={item.checked ? "Uncheck item" : "Check item"}
+        aria-label={item.checked ? `Uncheck ${item.name}` : `Check ${item.name}`}
       >
-        {item.checked && <Check className="size-3.5" />}
+        {item.checked && <Check className="size-3" strokeWidth={3} />}
       </button>
-      <span className={cn("flex-1 text-sm", item.checked && "text-muted-foreground line-through")}>
+
+      <span
+        className={cn(
+          "min-w-0 flex-1 text-sm",
+          item.checked && "text-muted-foreground line-through"
+        )}
+      >
         {item.name}
         {item.quantity !== null && item.quantity_unit !== null && (
-          <span className="ml-1.5 text-xs text-muted-foreground">
+          <span className="micro-sm ml-2 text-muted-foreground">
             {item.quantity} {SHOPPING_UNIT_LABELS[item.quantity_unit]}
           </span>
         )}
       </span>
-      {item.checked && categoryLabel && (
-        <span className="text-xs text-muted-foreground">{categoryLabel}</span>
-      )}
+
+      {item.checked && categoryLabel && <Micro className="shrink-0">{categoryLabel}</Micro>}
+
+      {/* Deliberately the raw element rather than the Select primitive: this
+          is an ultra-compact inline per-row picker, and the primitive's ruled
+          chevron cell would dominate a row this size. */}
       {!item.checked && (
         <select
           value={item.category_id}
           onChange={(e) => onRecategorize(e.target.value)}
-          className="h-6 max-w-24 rounded-md border border-input bg-transparent px-1 text-xs"
-          aria-label="Category"
+          className="micro-sm h-7 max-w-24 shrink-0 border border-hairline bg-transparent px-1 text-muted-foreground"
+          aria-label={`Category for ${item.name}`}
         >
           {categories.map((cat) => (
             <option key={cat.id} value={cat.id}>
@@ -567,18 +665,25 @@ function ShoppingRow({
           ))}
         </select>
       )}
+
       <button
+        type="button"
         onClick={onToggleStaple}
-        className={cn("tap-press shrink-0", item.is_staple ? "text-accent" : "text-muted-foreground/40")}
-        aria-label="Toggle staple"
+        className={cn(
+          "tap-press shrink-0 transition-colors",
+          item.is_staple ? "text-accent" : "text-muted-foreground/50 hover:text-foreground"
+        )}
+        aria-label={item.is_staple ? `${item.name} is a staple` : `Make ${item.name} a staple`}
         title="Staple item"
       >
         <Star className="size-4" fill={item.is_staple ? "currentColor" : "none"} />
       </button>
+
       <button
+        type="button"
         onClick={onDelete}
-        className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
-        aria-label="Delete item"
+        className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+        aria-label={`Delete ${item.name}`}
       >
         <Trash2 className="size-4" />
       </button>

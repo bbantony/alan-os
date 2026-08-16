@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
+import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import type { Account, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
 import { approveReceipt, discardReceipt } from "./receipt-actions";
@@ -92,7 +92,7 @@ export function ReceiptReviewDialog({
 
         <div className="space-y-3">
           {!aiFilledSomething && (
-            <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            <p className="hatch border-2 border-rule px-3 py-2 text-xs text-muted-foreground">
               This one needs to be typed in by hand — add each item below.
             </p>
           )}
@@ -112,7 +112,7 @@ export function ReceiptReviewDialog({
 
           <ul className="space-y-2">
             {items.map((item, i) => (
-              <li key={i} className="rounded-xl border border-border bg-surface p-2.5">
+              <li key={i} className="border-2 border-rule bg-surface p-2.5">
                 <div className="mb-2 flex items-center gap-2">
                   <Input
                     value={item.clean_name}
@@ -157,33 +157,29 @@ export function ReceiptReviewDialog({
             Add item
           </button>
 
-          <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
-            <span className="text-sm font-medium">Total</span>
-            <span className="tabular text-lg font-semibold">{formatCents(total)}</span>
+          {/* The running total is the one figure that decides whether this
+              receipt is right, so it gets the emphasised block. */}
+          <div className="flex items-center justify-between border-2 border-rule bg-foreground px-3 py-2.5 text-background">
+            <span className="micro-sm text-background/60">Total</span>
+            <span className="stat text-2xl">{formatCents(total)}</span>
           </div>
 
-          <div className="flex gap-2 rounded-lg border border-border p-0.5">
-            <button
-              onClick={() => setSplitByCategory(false)}
-              className={cn(
-                "tap-press flex-1 rounded-md px-2 py-1.5 text-xs font-medium",
-                !splitByCategory ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              Save as one transaction
-            </button>
-            <button
-              onClick={() => setSplitByCategory(true)}
-              className={cn(
-                "tap-press flex-1 rounded-md px-2 py-1.5 text-xs font-medium",
-                splitByCategory ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
-              )}
-            >
-              Split by category
-            </button>
-          </div>
+          {/* Was a hand-rolled two-button toggle predating the Segmented
+              control; same choice, now expressed the app's one way. */}
+          <Segmented
+            options={[
+              { value: "one", label: "One transaction" },
+              { value: "split", label: "Split by category" },
+            ]}
+            value={splitByCategory ? "split" : "one"}
+            onChange={(v) => setSplitByCategory(v === "split")}
+          />
 
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && (
+            <p className="border-2 border-destructive px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" disabled={saving} onClick={handleDiscard}>
