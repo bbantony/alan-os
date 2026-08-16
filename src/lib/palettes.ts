@@ -94,7 +94,7 @@ export const PALETTES: Palette[] = [
   {
     id: "blueprint",
     name: "Blueprint",
-    blurb: "Technical drawing — navy ground, drafting blue.",
+    blurb: "Cool paper, navy ink, drafting blue. Technical.",
     light: {
       background: "#EDF1F6",
       surface: "#FAFCFE",
@@ -126,7 +126,7 @@ export const PALETTES: Palette[] = [
   {
     id: "primary",
     name: "Primary",
-    blurb: "True Bauhaus red, blue and yellow. The bold one.",
+    blurb: "True Bauhaus red and blue on grey. The bold one.",
     light: {
       background: "#F0F0F0",
       surface: "#FFFFFF",
