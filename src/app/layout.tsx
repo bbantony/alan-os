@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import {
   Space_Grotesk,
   Archivo,
+  Outfit,
   Fraunces,
   Inter,
   Geist_Mono,
@@ -20,9 +21,19 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
 });
+// Archivo is the default heading face for the "Swiss Instrument" language.
+// The weight range matters: the display register uses 800, and Archivo holds a
+// -0.04em track at that weight without the counters closing up.
 const archivo = Archivo({
   variable: "--font-archivo",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+});
+// The geometric face the Bauhaus reference calls for, offered as an option.
+const outfit = Outfit({
+  variable: "--font-outfit",
+  subsets: ["latin"],
+  weight: ["400", "500", "700", "800", "900"],
 });
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -64,8 +75,13 @@ export const metadata: Metadata = {
   },
 };
 
+// Matches the Ink theme's paper/ink grounds — this is the colour Android paints
+// the status bar with when the PWA is open from the home screen.
 export const viewport: Viewport = {
-  themeColor: "#004225",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F1F0EC" },
+    { media: "(prefers-color-scheme: dark)", color: "#121211" },
+  ],
 };
 
 export default function RootLayout({
@@ -76,7 +92,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${spaceGrotesk.variable} ${archivo.variable} ${fraunces.variable} ${inter.variable} ${geistMono.variable} ${sora.variable} ${libreFranklin.variable} ${dmSerifDisplay.variable} ${manrope.variable} h-full antialiased`}
+      className={`${spaceGrotesk.variable} ${archivo.variable} ${outfit.variable} ${fraunces.variable} ${inter.variable} ${geistMono.variable} ${sora.variable} ${libreFranklin.variable} ${dmSerifDisplay.variable} ${manrope.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

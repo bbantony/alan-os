@@ -58,8 +58,8 @@ export function AdminCrews({ initialCrews }: { initialCrews: AdminCrewRow[] }) {
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Crews</h2>
-      <ul className="mb-3 divide-y divide-border rounded-xl border border-border bg-surface">
+      <h2 className="mb-2 micro text-muted-foreground">Crews</h2>
+      <ul className="mb-3 divide-y divide-hairline border-2 border-rule bg-surface">
         {crews.map((crew) => (
           <li key={crew.id} className="flex items-center gap-3 px-4 py-3">
             {renamingId === crew.id ? (

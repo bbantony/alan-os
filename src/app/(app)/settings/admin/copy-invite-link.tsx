@@ -16,7 +16,7 @@ export function CopyInviteLink({ inviteCode, signupPath }: { inviteCode: string;
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div className="border-2 border-rule bg-surface p-4">
       <p className="mb-1 text-xs font-medium text-muted-foreground">Invite code</p>
       <p className="mb-3 font-heading text-lg font-semibold tracking-wide">{inviteCode || "Not set"}</p>
       <Button type="button" className="w-full gap-1.5" onClick={handleCopy}>

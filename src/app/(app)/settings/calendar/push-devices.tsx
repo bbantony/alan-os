@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Bell, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { urlBase64ToUint8Array } from "@/lib/push/vapid";
 import {
   getPushSubscriptions,
@@ -108,29 +109,30 @@ export function PushDevices({ initialDevices }: { initialDevices: DeviceRow[] })
 
   if (!supported) {
     return (
-      <p className="text-sm text-muted-foreground">Push notifications aren&apos;t supported in this browser.</p>
+      <p className="hatch px-3 py-4 text-center text-sm text-muted-foreground">
+        Push notifications aren&apos;t supported in this browser.
+      </p>
     );
   }
 
   return (
-    <div className="space-y-3">
-      {!thisDeviceSubscribed && (
-        <Button type="button" className="w-full gap-1.5" onClick={handleSubscribe} disabled={subscribing}>
-          <Bell className="size-4" />
-          {subscribing ? "Enabling…" : "Enable push on this device"}
-        </Button>
-      )}
-      {error && <p className="text-xs text-destructive">{error}</p>}
-
+    <div>
       {devices.length > 0 && (
-        <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
-          {devices.map((d) => (
-            <li key={d.id} className="flex items-center justify-between px-4 py-3 text-sm">
-              <span>{d.device_label ?? "Unknown device"}</span>
+        <ul>
+          {devices.map((d, i) => (
+            <li
+              key={d.id}
+              className={cn(
+                "flex items-center justify-between gap-3 px-3 py-2.5 text-sm",
+                i > 0 && "border-t border-hairline"
+              )}
+            >
+              <span className="min-w-0 truncate">{d.device_label ?? "Unknown device"}</span>
               <button
+                type="button"
                 onClick={() => handleRemove(d.id)}
-                className="tap-press text-muted-foreground/40 hover:text-destructive"
-                aria-label="Remove device"
+                className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+                aria-label={`Remove ${d.device_label ?? "this device"}`}
               >
                 <Trash2 className="size-4" />
               </button>
@@ -139,12 +141,23 @@ export function PushDevices({ initialDevices }: { initialDevices: DeviceRow[] })
         </ul>
       )}
 
-      {devices.length > 0 && (
-        <Button type="button" variant="outline" className="w-full gap-1.5" onClick={handleTest} disabled={testing}>
-          <Send className="size-4" />
-          {testing ? "Sending…" : "Send test notification"}
-        </Button>
-      )}
+      <div className="flex flex-col gap-2 border-t-2 border-rule p-3">
+        {error && (
+          <p className="border-2 border-destructive px-3 py-2 text-sm text-destructive">{error}</p>
+        )}
+        {!thisDeviceSubscribed && (
+          <Button type="button" block onClick={handleSubscribe} disabled={subscribing}>
+            <Bell className="size-4" />
+            {subscribing ? "Enabling…" : "Enable push on this device"}
+          </Button>
+        )}
+        {devices.length > 0 && (
+          <Button type="button" variant="outline" block onClick={handleTest} disabled={testing}>
+            <Send className="size-4" />
+            {testing ? "Sending…" : "Send test notification"}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

@@ -148,8 +148,8 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
   }
 
   return (
-    <div className="space-y-3 border-t border-border pt-4">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Import from CSV</h2>
+    <div className="space-y-3 border-t-2 border-rule pt-4">
+      <h2 className="micro text-muted-foreground">Import from CSV</h2>
 
       {step === "upload" && (
         <div>
@@ -175,7 +175,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
               <Select
                 value={mapping.dateCol}
                 onChange={(e) => setMapping((m) => ({ ...m, dateCol: Number(e.target.value) }))}
-                className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                className="mt-1 h-8 w-full border-2 border-rule bg-transparent px-2 text-sm"
               >
                 {headers.map((h, i) => (
                   <option key={i} value={i}>
@@ -189,7 +189,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
               <Select
                 value={mapping.descriptionCol}
                 onChange={(e) => setMapping((m) => ({ ...m, descriptionCol: Number(e.target.value) }))}
-                className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                className="mt-1 h-8 w-full border-2 border-rule bg-transparent px-2 text-sm"
               >
                 {headers.map((h, i) => (
                   <option key={i} value={i}>
@@ -212,7 +212,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                 <Select
                   value={mapping.debitCol ?? ""}
                   onChange={(e) => setMapping((m) => ({ ...m, debitCol: e.target.value === "" ? null : Number(e.target.value) }))}
-                  className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  className="mt-1 h-8 w-full border-2 border-rule bg-transparent px-2 text-sm"
                 >
                   <option value="">—</option>
                   {headers.map((h, i) => (
@@ -227,7 +227,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                 <Select
                   value={mapping.creditCol ?? ""}
                   onChange={(e) => setMapping((m) => ({ ...m, creditCol: e.target.value === "" ? null : Number(e.target.value) }))}
-                  className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                  className="mt-1 h-8 w-full border-2 border-rule bg-transparent px-2 text-sm"
                 >
                   <option value="">—</option>
                   {headers.map((h, i) => (
@@ -244,7 +244,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
               <Select
                 value={mapping.amountCol ?? ""}
                 onChange={(e) => setMapping((m) => ({ ...m, amountCol: e.target.value === "" ? null : Number(e.target.value) }))}
-                className="mt-1 h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm"
+                className="mt-1 h-8 w-full border-2 border-rule bg-transparent px-2 text-sm"
               >
                 <option value="">—</option>
                 {headers.map((h, i) => (
@@ -288,7 +288,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
           </p>
           <div className="max-h-80 space-y-1.5 overflow-y-auto">
             {candidates.map((c) => (
-              <div key={c.tempId} className="rounded-lg border border-border bg-surface p-2">
+              <div key={c.tempId} className="border-2 border-rule bg-surface p-2">
                 <div className="mb-1.5 flex items-start gap-2">
                   <input
                     type="checkbox"
@@ -308,7 +308,7 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
                 <Select
                   value={rowCategory[c.tempId] ?? ""}
                   onChange={(e) => setRowCategory((prev) => ({ ...prev, [c.tempId]: e.target.value }))}
-                  className="h-8 w-full rounded-lg border border-input bg-transparent px-2 text-xs"
+                  className="h-8 w-full border-2 border-rule bg-transparent px-2 text-xs"
                 >
                   <option value="">Pick a category…</option>
                   {categoriesFor(c.isIncome).map((cat) => (

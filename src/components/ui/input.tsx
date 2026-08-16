@@ -3,13 +3,26 @@ import { Input as InputPrimitive } from "@base-ui/react/input"
 
 import { cn } from "@/lib/utils"
 
+// Square, framed, 40px tall. The focus treatment is an inset ink rule plus the
+// signal-coloured outline from globals.css rather than a soft ring — a blurred
+// glow is the one thing that would look out of place in this language.
+//
+// `text-base` on mobile is not a style choice: iOS Safari zooms the viewport
+// when a focused input's text is under 16px, which on a phone reads as the
+// page lurching. It drops to 14px from the `md` breakpoint up.
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
     <InputPrimitive
       type={type}
       data-slot="input"
       className={cn(
-        "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        "h-10 w-full min-w-0 border-2 border-rule bg-surface px-3 py-1 text-base transition-colors outline-none",
+        "file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-xs file:font-bold file:uppercase file:tracking-[0.08em] file:text-foreground",
+        "placeholder:text-muted-foreground placeholder:normal-case",
+        "focus-visible:border-primary",
+        "disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-50",
+        "aria-invalid:border-destructive",
+        "md:text-sm",
         className
       )}
       {...props}

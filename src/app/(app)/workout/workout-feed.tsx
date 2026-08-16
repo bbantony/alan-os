@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Flame, Plus, UserPlus } from "lucide-react";
+import { Plus, UserPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Segmented } from "@/components/ui/segmented";
 import { EmptyState } from "@/components/empty-state";
+import { PageHeader, HeaderFact } from "@/components/ui/page-header";
+import { Stat, StatStrip } from "@/components/ui/stat";
 import { WorkoutIllustration } from "@/components/illustrations";
 import { createClient } from "@/lib/supabase/client";
 import { celebratePr } from "@/lib/workout/celebrate";
@@ -92,70 +94,102 @@ export function WorkoutFeed({
   }, [feed]);
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8 pb-4">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Flame className="size-5 text-accent" />
-          <span className="tabular font-heading text-xl font-semibold">{myStreak}</span>
-          <span className="text-sm text-muted-foreground">day streak</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {isOwner && (
-            <Link href="/settings/admin">
-              <Button variant="outline" size="icon" aria-label="Manage users and crews">
-                <UserPlus className="size-4" />
+    <div>
+      <PageHeader
+        eyebrow="Sessions, crew, streaks"
+        title="Workout"
+        meta={
+          <>
+            <HeaderFact>{feed.length} in the feed</HeaderFact>
+            {weekStats.sessions > 0 && (
+              <HeaderFact>
+                {weekStats.sessions} session{weekStats.sessions === 1 ? "" : "s"} this week
+              </HeaderFact>
+            )}
+          </>
+        }
+        actions={
+          <>
+            {isOwner && (
+              <Link href="/settings/admin" aria-label="Manage users and crews">
+                <Button variant="outline" size="icon" aria-label="Manage users and crews">
+                  <UserPlus className="size-4" />
+                </Button>
+              </Link>
+            )}
+            <Link href="/workout/new">
+              <Button>
+                <Plus className="size-4" strokeWidth={3} />
+                Log
               </Button>
             </Link>
-          )}
-          <Link href="/workout/new">
-            <Button size="sm" className="gap-1.5">
-              <Plus className="size-4" />
-              New workout
-            </Button>
-          </Link>
-        </div>
-      </div>
-
-      {weekStats.sessions > 0 && (
-        <p className="mb-4 text-xs text-muted-foreground">
-          Your crew logged <span className="font-medium text-foreground">{weekStats.sessions}</span> session
-          {weekStats.sessions === 1 ? "" : "s"} this week
-          {weekStats.members > 1 && ` across ${weekStats.members} people`}.
-        </p>
-      )}
-
-      <Segmented
-        className="mb-4"
-        options={(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => ({ value: v, label: VIEW_LABELS[v] }))}
-        value={view}
-        onChange={setView}
+          </>
+        }
       />
 
-      {view === "leaderboard" ? (
-        <Leaderboard entries={leaderboard} currentUserId={currentUserId} />
-      ) : visibleFeed.length === 0 ? (
-        <EmptyState
-          title={view === "mine" ? "No workouts logged yet" : "No workouts here yet"}
-          description={
-            view === "mine"
-              ? "Log your first session and it'll show up here."
-              : "Once someone logs a workout, it'll show up here."
-          }
-          icon={<WorkoutIllustration className="size-8" />}
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4 md:px-6 md:py-6">
+        {/* Your streak and the crew's week, as readings rather than a caption.
+            The streak is the single number this module exists to move, so it
+            gets the biggest type on the screen. */}
+        <StatStrip columns={3}>
+          <Stat
+            label="Your streak"
+            value={myStreak}
+            unit="wk"
+            tone={myStreak > 0 ? "ok" : "default"}
+            sub={myStreak > 0 ? "keep it alive" : "log one to start"}
+          />
+          <Stat
+            label="Crew this week"
+            value={weekStats.sessions}
+            sub={
+              weekStats.members > 1
+                ? `across ${weekStats.members} people`
+                : weekStats.sessions === 1
+                  ? "session"
+                  : "sessions"
+            }
+          />
+          <Stat label="Crew size" value={leaderboard.length} sub="on the board" />
+        </StatStrip>
+
+        <Segmented
+          options={(Object.keys(VIEW_LABELS) as ViewMode[]).map((v) => ({
+            value: v,
+            label: VIEW_LABELS[v],
+          }))}
+          value={view}
+          onChange={setView}
         />
-      ) : (
-        <div className="space-y-3">
-          {visibleFeed.map((item) => (
-            <FeedCard
-              key={item.workout.id}
-              feedItem={item}
-              currentUserId={currentUserId}
-              weightUnit={weightUnit}
-              onDeleted={() => setFeed((prev) => prev.filter((f) => f.workout.id !== item.workout.id))}
-            />
-          ))}
-        </div>
-      )}
+
+        {view === "leaderboard" ? (
+          <Leaderboard entries={leaderboard} currentUserId={currentUserId} />
+        ) : visibleFeed.length === 0 ? (
+          <EmptyState
+            title={view === "mine" ? "No workouts logged yet" : "No workouts here yet"}
+            description={
+              view === "mine"
+                ? "Log your first session and it'll show up here."
+                : "Once someone logs a workout, it'll show up here."
+            }
+            icon={<WorkoutIllustration className="size-8" />}
+          />
+        ) : (
+          <div className="flex flex-col gap-4">
+            {visibleFeed.map((item) => (
+              <FeedCard
+                key={item.workout.id}
+                feedItem={item}
+                currentUserId={currentUserId}
+                weightUnit={weightUnit}
+                onDeleted={() =>
+                  setFeed((prev) => prev.filter((f) => f.workout.id !== item.workout.id))
+                }
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -4,19 +4,25 @@ import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
 
 import { cn } from "@/lib/utils"
 
+// A square switch with a square thumb that slides across a framed track. The
+// iOS-style pill was the single most out-of-place control left once everything
+// else went hard-edged, and a sliding block reads as a physical toggle in a
+// way the pill never did here.
 function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        "peer inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-muted-foreground/30 transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 data-checked:bg-primary data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        "peer inline-flex h-6 w-11 shrink-0 items-center border-2 border-rule bg-muted p-0.5 transition-colors outline-none",
+        "data-checked:bg-primary",
+        "data-disabled:cursor-not-allowed data-disabled:opacity-40",
         className
       )}
       {...props}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="pointer-events-none block size-4 translate-x-0.5 rounded-full bg-white shadow-sm transition-transform data-checked:translate-x-[18px]"
+        className="pointer-events-none block size-4 translate-x-0 bg-rule transition-transform duration-100 ease-out data-checked:translate-x-[18px] data-checked:bg-primary-foreground"
       />
     </SwitchPrimitive.Root>
   )

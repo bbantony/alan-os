@@ -86,7 +86,7 @@ export function ExerciseManager({
         />
       </div>
 
-      <ul className="max-h-96 divide-y divide-border overflow-y-auto rounded-xl border border-border bg-surface">
+      <ul className="max-h-96 divide-y divide-hairline overflow-y-auto border-2 border-rule bg-surface">
         {sorted.map((exercise) => (
           <li key={exercise.id} className="px-4 py-3 text-sm">
             {editingId === exercise.id ? (
@@ -132,7 +132,7 @@ export function ExerciseManager({
                     <p className="truncate font-medium">
                       {exercise.name}
                       {EQUIPMENT_TAGS[exercise.equipment] && (
-                        <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                        <span className="ml-1.5 micro-sm border border-hairline px-1.5 py-0.5 text-muted-foreground">
                           {EQUIPMENT_TAGS[exercise.equipment]}
                         </span>
                       )}

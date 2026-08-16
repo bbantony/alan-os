@@ -1,17 +1,27 @@
 import type { Transition, Variants } from "framer-motion";
 
-// The one shared set of Framer Motion specs for this app (SPEC.md Part C:
-// "smooth, fast (150-250ms), never bouncy or gimmicky. List items animate in
-// with subtle stagger.") — extracted from the pattern already proven good in
-// tasks/task-list.tsx and shopping/shopping-list.tsx so every other module
-// uses the exact same feel instead of reinventing durations/easings.
+// The one shared set of Framer Motion specs for this app.
+//
+// Retuned for the "Swiss Instrument" language: movement is mechanical, not
+// organic. Things travel on the grid — a short vertical or diagonal slide with
+// an ease-out curve and no overshoot — rather than easing softly into place or
+// scaling like a bubble. Durations stay inside SPEC.md Part C's 150-250ms band;
+// what changed is the *character*, not the speed.
+//
+// The two concrete changes from the previous set: exits no longer scale down
+// (a square that shrinks reads as a soft card, so items now slide out sideways
+// along the grid), and the dialog pop no longer scales from 0.97 (it drops in
+// from above onto its hard shadow instead).
 
-export const LIST_ITEM_TRANSITION: Transition = { duration: 0.18 };
+/** ease-out, no overshoot — the curve everything in the app moves on. */
+export const MECHANICAL: Transition = { duration: 0.18, ease: [0.2, 0, 0, 1] };
+
+export const LIST_ITEM_TRANSITION: Transition = MECHANICAL;
 
 export const listItemVariants: Variants = {
   hidden: { opacity: 0, y: -6 },
   visible: { opacity: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.96 },
+  exit: { opacity: 0, x: -12 },
 };
 
 // Wrap a list's container in this (initial="hidden" animate="visible") and
@@ -20,20 +30,20 @@ export const listItemVariants: Variants = {
 export const staggerContainerVariants: Variants = {
   hidden: {},
   visible: {
-    transition: { staggerChildren: 0.035 },
+    transition: { staggerChildren: 0.03 },
   },
 };
 
 export const fadeInUpVariants: Variants = {
   hidden: { opacity: 0, y: 8 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.22 } },
+  visible: { opacity: 1, y: 0, transition: MECHANICAL },
 };
 
-// A gentle scale+fade for dialogs/sheets appearing — same 150-250ms band.
+// Dialogs drop in from slightly above and land on their hard shadow.
 export const popInVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.97 },
-  visible: { opacity: 1, scale: 1, transition: { duration: 0.16 } },
-  exit: { opacity: 0, scale: 0.98, transition: { duration: 0.12 } },
+  hidden: { opacity: 0, y: -8 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.16, ease: [0.2, 0, 0, 1] } },
+  exit: { opacity: 0, y: -6, transition: { duration: 0.12 } },
 };
 
-export const PAGE_TRANSITION: Transition = { duration: 0.2, ease: [0.4, 0, 0.2, 1] };
+export const PAGE_TRANSITION: Transition = { duration: 0.18, ease: [0.2, 0, 0, 1] };

@@ -53,7 +53,7 @@ export function MoneySettings({ initialCategories }: { initialCategories: Catego
           return (
             <li
               key={cat.id}
-              className="flex items-center gap-2.5 rounded-xl border border-border bg-surface px-3 py-2.5"
+              className="flex items-center gap-2.5 border-2 border-rule bg-surface px-3 py-2.5"
             >
               <Icon className="size-4 shrink-0" style={{ color: cat.color }} />
               <span className="flex-1 text-sm font-medium">{cat.name}</span>
@@ -80,16 +80,16 @@ export function MoneySettings({ initialCategories }: { initialCategories: Catego
       </p>
 
       <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Expense</h2>
+        <h2 className="mb-2 micro text-muted-foreground">Expense</h2>
         {renderList(expenseCategories)}
       </div>
 
       <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Income</h2>
+        <h2 className="mb-2 micro text-muted-foreground">Income</h2>
         {renderList(incomeCategories)}
       </div>
 
-      <form onSubmit={handleAdd} className="space-y-2 border-t border-border pt-4">
+      <form onSubmit={handleAdd} className="space-y-2 border-t-2 border-rule pt-4">
         <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="New category name…" />
         <div className="flex gap-2">
           <Select value={icon} onChange={(e) => setIcon(e.target.value)} className="flex-1" aria-label="Icon">

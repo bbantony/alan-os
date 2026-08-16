@@ -367,19 +367,73 @@ diagnosis.
       build/typecheck/lint clean; the new `gcal_event_id` columns and a
       real insert/update round trip confirmed against the live database.
 
+### Part 8 — Google Calendar credentials done; sync errors surfaced
+- [x] **Owner action complete, 2026-08-12**: `GOOGLE_CLIENT_ID` and
+      `GOOGLE_CLIENT_SECRET` added in Vercel. This was the last remaining
+      *blocking* owner action anywhere in the app.
+- [x] Backfill-on-connect was silently failing with no visible reason.
+      `syncToGcal()`/`backfillGcalSync()` now return a real result (counts +
+      the actual Google API error) instead of swallowing exceptions; the
+      Settings page shows a failure instead of a bare "Connected", and a new
+      **"Sync now"** button retries without disconnecting. See CHANGELOG.md
+      entry 22.
+- [ ] **Owner action, small**: open Settings → Calendar and tap **Sync now**.
+      The fix deployed but nobody has confirmed the sync actually succeeds —
+      it either works, or it finally shows the real error.
+
 ---
 
-Next session: the Admin/Design overhaul and the Routines + One Timeline
-unification (Parts 1-7 above) are all complete and deployed — including the
-post-launch routine bug fix (Part 6's last bullet, CHANGELOG.md entry 19)
-and the full Google Calendar sync + inline task creation + Tasks page
-redesign (Part 7, CHANGELOG.md entry 21). Nothing is currently in progress.
-The two owner actions left anywhere in the app: creating the Google OAuth
-credentials (Phase 3, MANUAL.md "One-time setup #2" — the cron-job.org
-pinger from the same old list is now done) and the optional Gemini API key
-(Phase 5, still upgrades receipt scanning/CSV categorization from manual to
-automatic whenever it happens, not blocking). The natural next step is
-"Read SPEC.md. Phase 5 is complete and deployed. Execute Phase 6 only"
-(Journal & Vinyl) — Phase 6 doesn't depend on either remaining owner action
-— unless the owner has a new, more pressing request instead, which should
-take priority the same way every prior session's detour did.
+## App-wide redesign — the "Swiss Instrument" design language (not a numbered
+SPEC.md phase — requested directly by the owner: "I really don't like the
+design of this thing… just get to work and make it awesome")
+
+- [x] **Viability analysed first** (CHANGELOG.md entry 23), then built with
+      blanket autonomy. The Bauhaus reference the owner supplied was written
+      for a marketing landing page (hero, pricing, blog, testimonials, final
+      CTA), so it was translated to Swiss/International Typographic — the
+      application-scale descendant — rather than copied.
+- [x] **New token foundation** in `globals.css`: radius 0 everywhere, a
+      two-weight border system (`--rule-w` frames a panel, `--hairline-w`
+      separates rows inside one), hard offset shadows reserved for things
+      genuinely above the page, a three-register type scale
+      (`.display` / body / `.micro`), and semantic `--ok`/`--warn`/
+      `--destructive` kept separate from the theme accent.
+- [x] **8 new themes**, light + dark each, replacing the 11 soft-UI palettes:
+      Ink (default), Blueprint, Primary, Concrete, Signal, Verdigris,
+      Oxblood, Monolith. `normalizeThemeSettings()` maps every existing
+      account's saved (now-deleted) palette id onto its nearest new theme, in
+      all three read paths including the pre-hydration script.
+- [x] **All 9 UI primitives restyled** plus 5 new ones carrying the language:
+      `PageHeader`, `Panel`, `Stat`/`StatStrip`, `Tag`, `Wordmark`.
+- [x] **Today rebuilt as a console** — one top-to-bottom reading order
+      (masthead → NOW → vitals → the day → focus → jump to) replacing the old
+      widget grid. The four "coming soon" placeholder tiles are gone.
+- [x] **Process flow / connectivity** (the owner's stated top priority): every
+      dashboard number links into its module, and a new app-wide `QuickAdd`
+      routes into each module's real create form via `?new=1`, landing with
+      the cursor already in the field.
+- [x] **Every screen redesigned**: Tasks, Routines, Money (all six views),
+      Shopping, Workout (feed, leaderboard, logging), Calendar, Settings and
+      all seven sub-pages, the theme picker, Login, Signup, More.
+- [x] Verified: build + typecheck + lint clean; dev-server smoke test
+      confirmed `/login` renders and all protected routes still guard
+      correctly; compiled CSS inspected for every new token and utility.
+      **Not verified**: nobody has walked the screens logged in on a phone.
+
+---
+
+Next session: the app-wide redesign above is complete but **not yet committed
+or deployed** — it lives as uncommitted working-tree changes (95 files). The
+first thing to do is either deploy it or act on the owner's feedback after he
+has walked the screens.
+
+Owner actions outstanding: tap **Sync now** on Settings → Calendar to confirm
+Google Calendar sync works (Part 8 above), and the optional Gemini API key
+(Phase 5, upgrades receipt scanning/CSV categorization from manual to
+automatic, not blocking).
+
+After that, the natural next step is "Read SPEC.md. Phase 5 is complete and
+deployed. Execute Phase 6 only" (Journal & Vinyl) — Phase 6 doesn't depend on
+either outstanding owner action — unless the owner has a new, more pressing
+request instead, which should take priority the same way every prior
+session's detour did.

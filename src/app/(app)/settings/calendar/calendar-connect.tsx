@@ -53,7 +53,7 @@ export function CalendarConnect({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between rounded-xl border border-border bg-surface p-3">
+      <div className="flex items-center justify-between border-2 border-rule bg-surface p-3">
         <div>
           <p className="text-sm font-medium">Connected</p>
           <p className="text-xs text-muted-foreground">

@@ -6,6 +6,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, Plus, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
+import { Panel, PanelHead } from "@/components/ui/panel";
+import { PageHeader, HeaderFact } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { celebratePr } from "@/lib/workout/celebrate";
 import { formatPace } from "@/lib/workout/format";
@@ -179,35 +182,46 @@ export function NewWorkoutForm({
   const activeExercise = draftExercises.find((ex) => ex.exerciseId === activeExerciseId) ?? null;
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8 pb-24">
-      <h1 className="mb-4 font-heading text-2xl font-semibold">New workout</h1>
+    <div>
+      <PageHeader
+        eyebrow="Workout"
+        title="New session"
+        backHref="/workout"
+        meta={<HeaderFact>{WORKOUT_TYPE_LABELS[type]}</HeaderFact>}
+      />
 
-      <div className="mb-4 grid grid-cols-2 gap-2">
-        {(Object.keys(WORKOUT_TYPE_LABELS) as WorkoutType[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setType(t)}
-            className={cn(
-              "tap-press rounded-lg border px-3 py-2.5 text-sm font-medium",
-              type === t ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
-            )}
-          >
-            {WORKOUT_TYPE_LABELS[t]}
-          </button>
-        ))}
-      </div>
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4 md:px-6 md:py-6">
+      <Segmented
+        options={(Object.keys(WORKOUT_TYPE_LABELS) as WorkoutType[]).map((t) => ({
+          value: t,
+          label: WORKOUT_TYPE_LABELS[t],
+        }))}
+        value={type}
+        onChange={setType}
+      />
 
-      <div className="mb-5 flex items-center gap-3">
-        <Input type="date" value={workoutDate} onChange={(e) => setWorkoutDate(e.target.value)} className="w-40" />
+      <div className="flex items-stretch gap-2">
+        <Input
+          type="date"
+          value={workoutDate}
+          onChange={(e) => setWorkoutDate(e.target.value)}
+          aria-label="Workout date"
+          className="flex-1"
+        />
         {!isRunning && (
-          <div className="flex gap-0.5 rounded-lg border border-border p-0.5">
-            {(["lbs", "kg"] as WeightUnit[]).map((u) => (
+          <div className="flex shrink-0 items-stretch border-2 border-rule bg-surface">
+            {(["lbs", "kg"] as WeightUnit[]).map((u, i) => (
               <button
                 key={u}
+                type="button"
                 onClick={() => handleUnitChange(u)}
+                aria-pressed={unit === u}
                 className={cn(
-                  "tap-press rounded-md px-2.5 py-1 text-xs font-semibold",
-                  unit === u ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
+                  "micro-sm tap-press w-11 transition-colors",
+                  i > 0 && "border-l border-hairline",
+                  unit === u
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-muted"
                 )}
               >
                 {u}
@@ -220,7 +234,7 @@ export function NewWorkoutForm({
       {isRunning ? (
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Distance (km)</label>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">Distance (km)</label>
             <Input
               type="number"
               inputMode="decimal"
@@ -230,7 +244,7 @@ export function NewWorkoutForm({
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Duration</label>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">Duration</label>
             <div className="flex items-center gap-1.5">
               <Input
                 type="number"
@@ -239,7 +253,7 @@ export function NewWorkoutForm({
                 onChange={(e) => setDurationH(e.target.value)}
                 className="w-14 text-center"
               />
-              <span className="text-xs text-muted-foreground">h</span>
+              <span className="micro-sm text-muted-foreground">h</span>
               <Input
                 type="number"
                 inputMode="numeric"
@@ -247,7 +261,7 @@ export function NewWorkoutForm({
                 onChange={(e) => setDurationM(e.target.value)}
                 className="w-14 text-center"
               />
-              <span className="text-xs text-muted-foreground">m</span>
+              <span className="micro-sm text-muted-foreground">m</span>
               <Input
                 type="number"
                 inputMode="numeric"
@@ -255,16 +269,20 @@ export function NewWorkoutForm({
                 onChange={(e) => setDurationS(e.target.value)}
                 className="w-14 text-center"
               />
-              <span className="text-xs text-muted-foreground">s</span>
+              <span className="micro-sm text-muted-foreground">s</span>
             </div>
           </div>
+          {/* Pace updates as you type distance and time. It's the number a
+              runner actually cares about, so it gets the emphasised block
+              rather than a caption underneath the inputs. */}
           {livePace && (
-            <p className="text-xs text-muted-foreground">
-              Pace: <span className="tabular font-semibold text-foreground">{livePace}</span>
-            </p>
+            <div className="border-2 border-rule bg-foreground px-3 py-2.5 text-background">
+              <p className="micro-sm text-background/60">Pace</p>
+              <p className="stat mt-1 text-2xl">{livePace}</p>
+            </div>
           )}
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Avg heart rate (optional)</label>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">Avg heart rate (optional)</label>
             <Input
               type="number"
               inputMode="numeric"
@@ -276,55 +294,60 @@ export function NewWorkoutForm({
           </div>
         </div>
       ) : !resistanceStarted ? (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-4">
           {templates.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Your templates
-              </p>
-              <div className="space-y-2">
-                {templates.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => startFromTemplate(t)}
-                    className="tap-press flex w-full items-center justify-between rounded-xl border border-border bg-surface p-3.5 text-left hover:border-primary/40"
-                  >
-                    <div>
-                      <p className="font-heading text-sm font-semibold">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.exercise_ids.length} exercises</p>
-                    </div>
-                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-                  </button>
+            <Panel>
+              <PanelHead title="Your templates" count={templates.length} />
+              <ul>
+                {templates.map((t, i) => (
+                  <li key={t.id} className={cn(i > 0 && "border-t border-hairline")}>
+                    <button
+                      type="button"
+                      onClick={() => startFromTemplate(t)}
+                      className="tap-press flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-muted"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold">{t.name}</span>
+                        <span className="micro-sm mt-0.5 block text-muted-foreground">
+                          {t.exercise_ids.length} exercises
+                        </span>
+                      </span>
+                      <ChevronRight
+                        className="size-4 shrink-0 text-muted-foreground"
+                        strokeWidth={2.5}
+                      />
+                    </button>
+                  </li>
                 ))}
-              </div>
-            </div>
+              </ul>
+            </Panel>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full gap-1.5"
-            onClick={() => setResistanceStarted(true)}
-          >
-            <Plus className="size-4" />
+          <Button type="button" variant="outline" block onClick={() => setResistanceStarted(true)}>
+            <Plus className="size-4" strokeWidth={3} />
             Start blank
           </Button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="flex flex-col gap-4">
+          {/* The exercise switcher. A logged count on each chip is more useful
+              mid-session than a tick — it tells you how far through you are
+              without opening the panel. */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
             {draftExercises.map((ex) => (
               <button
                 key={ex.exerciseId}
+                type="button"
                 onClick={() => setActiveExerciseId(ex.exerciseId)}
+                aria-pressed={ex.exerciseId === activeExerciseId}
                 className={cn(
-                  "tap-press shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium",
+                  "micro-sm tap-press shrink-0 border-2 border-rule px-2.5 py-1.5 whitespace-nowrap transition-colors",
                   ex.exerciseId === activeExerciseId
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-surface hover:bg-muted"
+                    ? "bg-foreground text-background"
+                    : "bg-surface hover:bg-muted"
                 )}
               >
                 {ex.exerciseName}
-                {ex.sets.length > 0 && " ✓"}
+                {ex.sets.length > 0 && ` · ${ex.sets.length}`}
               </button>
             ))}
             <ExercisePicker
@@ -369,19 +392,13 @@ export function NewWorkoutForm({
                   className="flex-1"
                   autoFocus
                 />
-                <Button type="button" size="sm" onClick={handleSaveTemplate}>
+                <Button type="button" onClick={handleSaveTemplate}>
                   Save
                 </Button>
               </div>
             ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setShowSaveTemplate(true)}
-              >
-                <Save className="size-3.5" />
+              <Button type="button" variant="secondary" onClick={() => setShowSaveTemplate(true)}>
+                <Save className="size-4" />
                 Save as template
               </Button>
             )}
@@ -389,26 +406,29 @@ export function NewWorkoutForm({
         </div>
       )}
 
-      <div className="mt-4">
-        <label className="mb-1 block text-xs font-medium text-muted-foreground">Notes (optional)</label>
+      <div>
+        <label className="micro-sm mb-1.5 block text-muted-foreground">Notes (optional)</label>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={2}
-          className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
+          className="w-full border-2 border-rule bg-surface px-3 py-2 text-sm outline-none focus-visible:border-primary"
           placeholder="How'd it go?"
         />
       </div>
 
       {(isRunning || resistanceStarted) && (
         <Button
-          className="mt-6 w-full"
+          block
+          size="lg"
+          variant="invert"
           disabled={submitting || (isRunning ? false : draftExercises.length === 0)}
           onClick={isRunning ? handleSubmitRun : handleSubmitLift}
         >
           {submitting ? "Saving…" : "Save workout"}
         </Button>
       )}
+      </div>
     </div>
   );
 }

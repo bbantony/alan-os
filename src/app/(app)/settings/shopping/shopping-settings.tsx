@@ -123,7 +123,7 @@ export function ShoppingSettings({
           const items = itemsFor(cat.id);
           const isExpanded = expanded === cat.id;
           return (
-            <li key={cat.id} className="rounded-xl border border-border bg-surface">
+            <li key={cat.id} className="border-2 border-rule bg-surface">
               <div className="flex items-center gap-2 px-3 py-2">
                 <button
                   onClick={() => setExpanded(isExpanded ? null : cat.id)}
@@ -175,12 +175,12 @@ export function ShoppingSettings({
               </div>
 
               {isExpanded && (
-                <div className="space-y-2 border-t border-border p-3">
+                <div className="space-y-2 border-t-2 border-rule p-3">
                   <div className="flex flex-wrap gap-2">
                     {items.map((item) => (
                       <span
                         key={item.id}
-                        className="flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium"
+                        className="micro-sm flex items-center gap-1.5 border border-hairline px-2 py-1"
                       >
                         {item.item_name}
                         <button
@@ -223,7 +223,7 @@ export function ShoppingSettings({
         })}
       </ul>
 
-      <form onSubmit={handleAddCategory} className="flex gap-2 border-t border-border pt-4">
+      <form onSubmit={handleAddCategory} className="flex gap-2 border-t-2 border-rule pt-4">
         <Input
           value={newCategoryName}
           onChange={(e) => setNewCategoryName(e.target.value)}

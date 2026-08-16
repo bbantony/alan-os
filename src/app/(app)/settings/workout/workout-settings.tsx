@@ -34,17 +34,22 @@ export function WorkoutSettings({
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="mb-2 micro text-muted-foreground">
           Weight unit
         </h2>
-        <div className="flex gap-2">
-          {(["lbs", "kg"] as WeightUnit[]).map((u) => (
+        <div className="flex items-stretch border-2 border-rule bg-surface">
+          {(["lbs", "kg"] as WeightUnit[]).map((u, i) => (
             <button
               key={u}
+              type="button"
               onClick={() => handleUnitChange(u)}
+              aria-pressed={unit === u}
               className={cn(
-                "flex-1 rounded-lg border px-3 py-2 text-sm font-medium",
-                unit === u ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
+                "micro tap-press flex-1 py-2.5 transition-colors",
+                i > 0 && "border-l border-hairline",
+                unit === u
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               {u}
@@ -54,7 +59,7 @@ export function WorkoutSettings({
       </div>
 
       <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="mb-2 micro text-muted-foreground">
           Saved templates
         </h2>
         {templates.length === 0 ? (
@@ -62,7 +67,7 @@ export function WorkoutSettings({
             Save a routine while logging a workout to see it here.
           </p>
         ) : (
-          <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+          <ul className="divide-y divide-hairline border-2 border-rule bg-surface">
             {templates.map((t) => (
               <TemplateEditor
                 key={t.id}
@@ -78,7 +83,7 @@ export function WorkoutSettings({
       </div>
 
       <div>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <h2 className="mb-2 micro text-muted-foreground">
           Exercises
         </h2>
         <p className="mb-2 text-xs text-muted-foreground">

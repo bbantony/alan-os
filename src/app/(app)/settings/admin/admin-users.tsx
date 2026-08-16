@@ -60,8 +60,8 @@ export function AdminUsers({ initialUsers, crews }: { initialUsers: AdminUserRow
 
   return (
     <div>
-      <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Users</h2>
-      <ul className="divide-y divide-border rounded-xl border border-border bg-surface">
+      <h2 className="mb-2 micro text-muted-foreground">Users</h2>
+      <ul className="divide-y divide-hairline border-2 border-rule bg-surface">
         {users.map((user) => {
           const isExpanded = expandedId === user.id;
           const summary = workoutSummaries[user.id];
@@ -81,17 +81,17 @@ export function AdminUsers({ initialUsers, crews }: { initialUsers: AdminUserRow
                     <p className="truncate text-sm font-medium">{user.display_name ?? "Unnamed"}</p>
                     <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+                  <span className="shrink-0 micro-sm border border-hairline px-1.5 py-0.5 text-muted-foreground">
                     {ROLE_LABELS[user.role] ?? user.role}
                   </span>
                 </button>
 
                 {isExpanded && (
-                  <div className="mt-3 space-y-3 border-t border-border pt-3">
+                  <div className="mt-3 space-y-3 border-t-2 border-rule pt-3">
                     {user.role !== "owner" && (
                       <>
                         <div>
-                          <label className="mb-1 block text-xs font-medium text-muted-foreground">Crew</label>
+                          <label className="micro-sm mb-1.5 block text-muted-foreground">Crew</label>
                           <Select
                             value={user.crew_id ?? ""}
                             onChange={(e) => handleCrewChange(user.id, e.target.value)}
@@ -130,7 +130,7 @@ export function AdminUsers({ initialUsers, crews }: { initialUsers: AdminUserRow
                       {loadingSummary === user.id ? (
                         <p className="text-xs text-muted-foreground">Loading…</p>
                       ) : summary ? (
-                        <div className="rounded-lg bg-muted/60 p-2.5 text-xs">
+                        <div className="bg-muted/60 p-2.5 text-xs">
                           <div className="mb-1 flex items-center gap-1.5">
                             <Flame className="size-3.5 text-accent" />
                             <span className="tabular font-medium">{summary.currentStreak} day streak</span>

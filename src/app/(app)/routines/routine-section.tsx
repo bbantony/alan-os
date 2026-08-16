@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sparkles } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sparkles, X } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
@@ -35,7 +36,15 @@ export function RoutineSection({
   async function handleComplete(routine: RoutineWithProgress) {
     if (routine.completedToday) {
       setRoutines((prev) =>
-        prev.map((r) => (r.id === routine.id ? { ...r, completedToday: null, streak: { ...r.streak, current: Math.max(0, r.streak.current - 1) } } : r))
+        prev.map((r) =>
+          r.id === routine.id
+            ? {
+                ...r,
+                completedToday: null,
+                streak: { ...r.streak, current: Math.max(0, r.streak.current - 1) },
+              }
+            : r
+        )
       );
       await uncompleteRoutineToday({ routineId: routine.id });
       return;
@@ -44,7 +53,14 @@ export function RoutineSection({
     setRoutines((prev) =>
       prev.map((r) =>
         r.id === routine.id
-          ? { ...r, completedToday: { id: "", routine_id: r.id, user_id: "", completed_date: "", steps_done: stepIds, completed_at: "" }, streak: { ...r.streak, current: r.streak.current + 1 } }
+          ? {
+              ...r,
+              completedToday: {
+                id: "", routine_id: r.id, user_id: "", completed_date: "",
+                steps_done: stepIds, completed_at: "",
+              },
+              streak: { ...r.streak, current: r.streak.current + 1 },
+            }
           : r
       )
     );
@@ -59,129 +75,209 @@ export function RoutineSection({
   }
 
   const visibleSuggestions = suggestions.filter((s) => !dismissedSuggestions.has(s.title));
+  const doneCount = routines.filter((r) => r.completedToday).length;
 
   return (
-    <div className="mb-8">
-      <div className="mb-2 flex items-center justify-between">
-        <button
-          onClick={() => setExpanded((v) => !v)}
-          disabled={routines.length === 0}
-          className="tap-press flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground disabled:cursor-default"
-        >
-          {routines.length > 0 && (expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />)}
-          Your Routines{routines.length > 0 && ` · ${routines.length}`}
-        </button>
-        <button
-          onClick={() => {
-            setPrefillTitle(undefined);
-            setCreating(true);
-          }}
-          className="tap-press flex items-center gap-1 text-xs font-medium text-primary"
-        >
-          <Plus className="size-3.5" />
-          Add routine
-        </button>
-      </div>
-
+    <div className="flex flex-col gap-4">
+      {/* The plain-SQL "you keep adding this — make it a routine?" nudge.
+          Given the accent colour and a hatch ground so it reads as a
+          suggestion the app is offering, not a state it's reporting. */}
       {visibleSuggestions.map((s) => (
-        <div key={s.title} className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-dashed border-accent/50 bg-accent/10 px-3 py-2 text-sm">
-          <span className="flex items-center gap-1.5">
-            <Sparkles className="size-3.5 shrink-0 text-accent" />
-            You&apos;ve added &ldquo;{s.title}&rdquo; {s.count} times this month — make it a routine?
-          </span>
-          <div className="flex shrink-0 gap-2">
-            <button onClick={() => handleSuggestionAccept(s.title)} className="tap-press font-medium text-primary">
-              Yes
-            </button>
-            <button
-              onClick={() => setDismissedSuggestions((prev) => new Set(prev).add(s.title))}
-              className="tap-press text-muted-foreground"
-            >
-              Dismiss
-            </button>
+        <Panel key={s.title} className="border-accent">
+          <div className="flex items-start gap-3 p-3">
+            <Sparkles className="mt-0.5 size-4 shrink-0 text-accent" strokeWidth={2.5} />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm">
+                You&apos;ve added &ldquo;{s.title}&rdquo; {s.count} times this month. Make it a
+                routine?
+              </p>
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" onClick={() => handleSuggestionAccept(s.title)}>
+                  Yes, set it up
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    setDismissedSuggestions((prev) => new Set(prev).add(s.title))
+                  }
+                >
+                  No thanks
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
+        </Panel>
       ))}
 
-      {routines.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No routines yet — add one for something you want to do on a schedule.</p>
-      ) : expanded ? (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <AnimatePresence initial={false}>
-            {routines.map((routine) => {
-              const Icon = getRoutineIcon(routine.icon);
-              const done = !!routine.completedToday;
-              const isChecklist = routine.steps.length > 1;
-              return (
-                <motion.div
-                  key={routine.id}
-                  layout
-                  variants={listItemVariants}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  transition={LIST_ITEM_TRANSITION}
-                  className={cn(
-                    "relative rounded-xl border p-3 text-left",
-                    done ? "border-primary/40 bg-primary/5" : "border-border bg-surface"
-                  )}
-                >
-                  <div className="mb-2 flex w-full items-center justify-between">
-                    <div className={cn("flex size-8 items-center justify-center rounded-lg", done ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                      {done ? <Check className="size-4" /> : <Icon className="size-4" />}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <StreakBadge current={routine.streak.current} />
+      <Panel>
+        <PanelHead
+          title={
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              disabled={routines.length === 0}
+              aria-expanded={expanded}
+              className="tap-press flex items-center gap-1.5 disabled:cursor-default"
+            >
+              {routines.length > 0 &&
+                (expanded ? (
+                  <ChevronDown className="size-3.5" />
+                ) : (
+                  <ChevronRight className="size-3.5" />
+                ))}
+              Routines
+            </button>
+          }
+          count={routines.length > 0 ? `${doneCount}/${routines.length}` : undefined}
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                setPrefillTitle(undefined);
+                setCreating(true);
+              }}
+              aria-label="Add routine"
+              className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+            >
+              <Plus className="size-4" strokeWidth={3} />
+            </button>
+          }
+        />
+
+        {routines.length === 0 ? (
+          <PanelEmpty>
+            No routines yet — add one for something you want to do on a schedule.
+          </PanelEmpty>
+        ) : expanded ? (
+          <div className="grid grid-cols-2 gap-px bg-hairline sm:grid-cols-3">
+            <AnimatePresence initial={false}>
+              {routines.map((routine) => {
+                const Icon = getRoutineIcon(routine.icon);
+                const done = !!routine.completedToday;
+                const isChecklist = routine.steps.length > 1;
+                return (
+                  <motion.div
+                    key={routine.id}
+                    layout
+                    variants={listItemVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    transition={LIST_ITEM_TRANSITION}
+                    className={cn(
+                      "relative flex flex-col gap-2 p-3",
+                      done ? "bg-foreground text-background" : "bg-surface"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span
+                        className={cn(
+                          "flex size-8 shrink-0 items-center justify-center border-2",
+                          done
+                            ? "border-background bg-background text-foreground"
+                            : "border-rule text-muted-foreground"
+                        )}
+                      >
+                        {done ? (
+                          <Check className="size-4" strokeWidth={3} />
+                        ) : (
+                          <Icon className="size-4" />
+                        )}
+                      </span>
                       <button
+                        type="button"
                         onClick={() => setEditingRoutine(routine)}
-                        className="tap-press text-muted-foreground/60 hover:text-foreground"
-                        aria-label="Edit routine"
+                        className={cn(
+                          "tap-press shrink-0",
+                          done
+                            ? "text-background/60 hover:text-background"
+                            : "text-muted-foreground/60 hover:text-foreground"
+                        )}
+                        aria-label={`Edit ${routine.title}`}
                       >
                         <Pencil className="size-3.5" />
                       </button>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => (isChecklist ? setChecklistFor(routine) : handleComplete(routine))}
-                    className="tap-press flex w-full flex-col items-start gap-1 text-left"
-                  >
-                    <p className={cn("truncate text-sm font-medium", done && "text-muted-foreground line-through")}>{routine.title}</p>
-                    {isChecklist && (
-                      <p className="text-xs text-muted-foreground">
-                        {(routine.completedToday?.steps_done.length ?? 0)}/{routine.steps.length} steps
-                      </p>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        isChecklist ? setChecklistFor(routine) : handleComplete(routine)
+                      }
+                      className="tap-press flex flex-1 flex-col items-start gap-1 text-left"
+                    >
+                      <span
+                        className={cn(
+                          "line-clamp-2 text-sm font-semibold",
+                          done && "line-through opacity-70"
+                        )}
+                      >
+                        {routine.title}
+                      </span>
+                      {isChecklist && (
+                        <span
+                          className={cn(
+                            "micro-sm",
+                            done ? "text-background/60" : "text-muted-foreground"
+                          )}
+                        >
+                          {routine.completedToday?.steps_done.length ?? 0}/
+                          {routine.steps.length} steps
+                        </span>
+                      )}
+                    </button>
+
+                    {!done && <StreakBadge current={routine.streak.current} className="self-start" />}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        ) : (
+          // Collapsed strip: horizontally scrollable icon chips. Squared and
+          // ruled so it reads as a row of switches on a panel.
+          <div className="flex overflow-x-auto">
+            {routines.map((routine, i) => {
+              const Icon = getRoutineIcon(routine.icon);
+              const done = !!routine.completedToday;
+              const isChecklist = routine.steps.length > 1;
+              return (
+                <button
+                  key={routine.id}
+                  type="button"
+                  onClick={() =>
+                    isChecklist ? setChecklistFor(routine) : handleComplete(routine)
+                  }
+                  className={cn(
+                    "tap-press flex w-[4.5rem] shrink-0 flex-col items-center gap-1.5 px-2 py-2.5 transition-colors",
+                    i > 0 && "border-l border-hairline",
+                    done ? "bg-foreground text-background" : "hover:bg-muted"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-8 items-center justify-center border-2",
+                      done
+                        ? "border-background bg-background text-foreground"
+                        : "border-rule text-muted-foreground"
                     )}
-                  </button>
-                </motion.div>
+                  >
+                    {done ? (
+                      <Check className="size-4" strokeWidth={3} />
+                    ) : (
+                      <Icon className="size-4" />
+                    )}
+                  </span>
+                  <span className="micro-sm w-full truncate text-center text-[0.5625rem]">
+                    {routine.title}
+                  </span>
+                </button>
               );
             })}
-          </AnimatePresence>
-        </div>
-      ) : (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-          {routines.map((routine) => {
-            const Icon = getRoutineIcon(routine.icon);
-            const done = !!routine.completedToday;
-            const isChecklist = routine.steps.length > 1;
-            return (
-              <button
-                key={routine.id}
-                onClick={() => (isChecklist ? setChecklistFor(routine) : handleComplete(routine))}
-                className={cn(
-                  "tap-press flex w-16 shrink-0 flex-col items-center gap-1 rounded-xl border px-2 py-2",
-                  done ? "border-primary/40 bg-primary/5" : "border-border bg-surface"
-                )}
-              >
-                <div className={cn("flex size-8 items-center justify-center rounded-lg", done ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                  {done ? <Check className="size-4" /> : <Icon className="size-4" />}
-                </div>
-                <span className="w-full truncate text-center text-[10px] font-medium">{routine.title}</span>
-                <StreakBadge current={routine.streak.current} className="scale-90" />
-              </button>
-            );
-          })}
-        </div>
-      )}
+          </div>
+        )}
+      </Panel>
 
       <RoutineFormDialog
         key={creating ? (prefillTitle ?? "blank") : "closed"}
@@ -234,7 +330,9 @@ function ChecklistDialog({
   onClose: () => void;
   onSaved: (routine: RoutineWithProgress) => void;
 }) {
-  const [checked, setChecked] = useState<Set<string>>(new Set(routine.completedToday?.steps_done ?? []));
+  const [checked, setChecked] = useState<Set<string>>(
+    new Set(routine.completedToday?.steps_done ?? [])
+  );
   const [saving, setSaving] = useState(false);
 
   function toggleStep(id: string) {
@@ -254,39 +352,81 @@ function ChecklistDialog({
     onSaved({
       ...routine,
       streak,
-      completedToday: stepsDone.length > 0 ? { id: "", routine_id: routine.id, user_id: "", completed_date: "", steps_done: stepsDone, completed_at: "" } : null,
+      completedToday:
+        stepsDone.length > 0
+          ? {
+              id: "", routine_id: routine.id, user_id: "", completed_date: "",
+              steps_done: stepsDone, completed_at: "",
+            }
+          : null,
     });
   }
 
+  const progress = routine.steps.length > 0 ? checked.size / routine.steps.length : 0;
+
   return (
     <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{routine.title}</DialogTitle>
+      <DialogContent showCloseButton={false} className="gap-0 p-0">
+        <DialogHeader className="mx-0 mt-0 flex-row items-start justify-between gap-3 px-4">
+          <div className="min-w-0">
+            <DialogTitle className="pr-0">{routine.title}</DialogTitle>
+            <p className="micro-sm mt-1 text-muted-foreground">
+              {checked.size} of {routine.steps.length} steps
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="tap-press shrink-0 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-5" strokeWidth={2.5} />
+          </button>
         </DialogHeader>
-        <ul className="space-y-1.5">
-          {routine.steps.map((step) => (
-            <li key={step.id}>
-              <button
-                onClick={() => toggleStep(step.id)}
-                className="tap-press flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-left text-sm"
-              >
-                <span
+
+        {/* The step meter — the same "watch it fill" payoff the dashboard uses. */}
+        <div className="h-1.5 w-full bg-muted">
+          <div
+            className="h-full bg-primary transition-[width] duration-200 ease-out"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+
+        <ul>
+          {routine.steps.map((step, i) => {
+            const isChecked = checked.has(step.id);
+            return (
+              <li key={step.id} className={cn(i > 0 && "border-t border-hairline")}>
+                <button
+                  type="button"
+                  onClick={() => toggleStep(step.id)}
                   className={cn(
-                    "flex size-5 shrink-0 items-center justify-center rounded-md border",
-                    checked.has(step.id) ? "border-primary bg-primary text-primary-foreground" : "border-border"
+                    "tap-press flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-muted",
+                    isChecked && "bg-muted/40"
                   )}
                 >
-                  {checked.has(step.id) && <Check className="size-3.5" />}
-                </span>
-                {step.title}
-              </button>
-            </li>
-          ))}
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center border-2 border-rule",
+                      isChecked && "bg-foreground text-background"
+                    )}
+                  >
+                    {isChecked && <Check className="size-3" strokeWidth={3} />}
+                  </span>
+                  <span className={cn(isChecked && "text-muted-foreground line-through")}>
+                    {step.title}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
-        <Button className="w-full" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
+
+        <div className="border-t-2 border-rule p-3">
+          <Button block onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -3,18 +3,21 @@
 import { useId } from "react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { MECHANICAL } from "@/lib/motion";
 
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
 }
 
-// Replaces the broken base-ui Tabs wrapper (src/components/ui/tabs.tsx,
-// deleted) and the 4 independent hand-copies of this exact markup that had
-// already started to drift (money-shell.tsx, calendar-shell.tsx,
-// workout-feed.tsx, reminder-form.tsx's preset picker). Controlled, not tied
-// to any specific page's tab state — works equally well as a page tab bar or
-// an inline segmented input (e.g. a recurrence-preset picker).
+// The app's one tab bar / segmented input, used as a page tab bar (Money,
+// Calendar, Workout) and as an inline picker (recurrence presets).
+//
+// Redesigned from a padded pill with a floating rounded thumb into a single
+// framed strip divided by hairlines, where the active segment is a solid ink
+// block that slides between cells. The block filling the cell edge-to-edge —
+// rather than floating inside padding — is what makes it read as a switch on a
+// panel instead of a web toggle.
 export function Segmented<T extends string>({
   options,
   value,
@@ -28,31 +31,36 @@ export function Segmented<T extends string>({
 }) {
   // A fresh layoutId per instance — reusing one id across multiple Segmented
   // controls rendered at once would make Framer Motion try to animate the
-  // active-pill between two unrelated components.
+  // active block between two unrelated components.
   const layoutId = useId();
 
   return (
     <div
-      className={cn("grid gap-1 rounded-lg border border-border bg-muted/40 p-1", className)}
+      role="tablist"
+      className={cn("grid border-2 border-rule bg-surface", className)}
       style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
     >
-      {options.map((option) => {
+      {options.map((option, i) => {
         const active = option.value === value;
         return (
           <button
             key={option.value}
             type="button"
+            role="tab"
+            aria-selected={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "tap-press relative rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-              active ? "text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              "relative min-h-9 px-2 py-2 text-center transition-colors duration-100",
+              "micro-sm",
+              i > 0 && "border-l border-hairline",
+              active ? "text-background" : "text-muted-foreground hover:text-foreground"
             )}
           >
             {active && (
               <motion.span
                 layoutId={layoutId}
-                className="absolute inset-0 rounded-md bg-primary"
-                transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                className="absolute inset-0 bg-foreground"
+                transition={MECHANICAL}
               />
             )}
             <span className="relative z-10">{option.label}</span>

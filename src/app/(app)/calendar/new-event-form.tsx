@@ -48,7 +48,7 @@ export function NewEventForm({ onClose, onCreated }: { onClose: () => void; onCr
             <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-28" />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">Duration (minutes)</label>
+            <label className="micro-sm mb-1.5 block text-muted-foreground">Duration (minutes)</label>
             <Input
               type="number"
               inputMode="numeric"

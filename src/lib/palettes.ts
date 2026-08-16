@@ -1,15 +1,39 @@
+// ---------------------------------------------------------------------------
+// Alan OS palettes — rebuilt for the "Swiss Instrument" design language.
+//
+// The old 11 palettes were designed for a soft UI: faint hairline borders,
+// rounded cards, low-contrast muted grounds. That set actively fights the new
+// language, where a card is defined by a *thick high-contrast rule* rather than
+// by a fill or a shadow. So the whole set was redesigned rather than retinted.
+//
+// What each token means in the new language (this differs from before):
+//   background  the page ground — paper, or ink in a dark theme
+//   surface     a raised panel ground; deliberately CLOSE to background, since
+//               separation comes from rules, not from fills
+//   foreground  the ink
+//   primary     the one signal colour: active nav, meters, the emphasised block
+//   accent      the secondary signal, used for a second data series / links
+//   rule        HIGH-contrast structural border (near-ink) — the 2px frame
+//   hairline    low-contrast separator used *inside* an already-framed panel
+//   muted       a quiet fill for chips and inert areas
+//
+// `rule` and `hairline` are the new pair. Previously there was one `border`
+// token doing both jobs at hairline strength, which is exactly why the old UI
+// read as weightless.
+//
+// After editing this file run `node scripts/gen-palette-css.mjs` and paste the
+// output into the marked block at the top of globals.css.
+// ---------------------------------------------------------------------------
+
 export type PaletteId =
-  | "british-racing-green"
-  | "navy-cream"
-  | "burgundy-sand"
-  | "charcoal-ice"
-  | "forest-moss"
-  | "terracotta-bone"
-  | "teal-mist"
-  | "plum-blush"
-  | "amber-ink"
-  | "rose-linen"
-  | "mono-graphite";
+  | "ink"
+  | "blueprint"
+  | "primary"
+  | "concrete"
+  | "signal"
+  | "verdigris"
+  | "oxblood"
+  | "monolith";
 
 export interface PaletteColors {
   background: string;
@@ -21,339 +45,295 @@ export interface PaletteColors {
   accentForeground: string;
   muted: string;
   mutedForeground: string;
-  border: string;
+  rule: string;
+  hairline: string;
 }
 
 export interface Palette {
   id: PaletteId;
   name: string;
+  /** One plain-English line shown under the name in Settings → Appearance. */
+  blurb: string;
   light: PaletteColors;
   dark: PaletteColors;
 }
 
 export const PALETTES: Palette[] = [
   {
-    id: "british-racing-green",
-    name: "British Racing Green",
+    id: "ink",
+    name: "Ink",
+    blurb: "Paper, black, one signal red. Swiss editorial.",
     light: {
-      background: "#FAF7F2",
-      surface: "#FFFFFF",
-      text: "#14140F",
-      primary: "#004225",
-      primaryForeground: "#FAF7F2",
-      accent: "#C1662F",
-      accentForeground: "#FAF7F2",
-      muted: "#EFE9DE",
-      mutedForeground: "#5B5C51",
-      border: "#E2DACB",
+      background: "#F1F0EC",
+      surface: "#FBFAF7",
+      text: "#121211",
+      primary: "#C4291F",
+      primaryForeground: "#FBFAF7",
+      accent: "#1F4E8C",
+      accentForeground: "#FBFAF7",
+      muted: "#E2E1DB",
+      mutedForeground: "#5C5C55",
+      rule: "#121211",
+      hairline: "#CBCAC3",
     },
     dark: {
-      background: "#0B120E",
-      surface: "#121A15",
-      text: "#F3F1E9",
-      primary: "#2E7D52",
-      primaryForeground: "#0B120E",
-      accent: "#D98A50",
-      accentForeground: "#0B120E",
-      muted: "#1B241D",
-      mutedForeground: "#9CA69B",
-      border: "#233028",
+      background: "#121211",
+      surface: "#1A1A18",
+      text: "#EDECE7",
+      primary: "#EC5A4C",
+      primaryForeground: "#121211",
+      accent: "#7FA6E0",
+      accentForeground: "#121211",
+      muted: "#26251F",
+      mutedForeground: "#A3A29A",
+      rule: "#EDECE7",
+      hairline: "#38372F",
     },
   },
+
   {
-    id: "navy-cream",
-    name: "Navy / Cream",
+    id: "blueprint",
+    name: "Blueprint",
+    blurb: "Cool paper, navy ink, drafting blue. Technical.",
     light: {
-      background: "#FAF6EC",
-      surface: "#FFFFFF",
-      text: "#161A24",
-      primary: "#1B2A4A",
-      primaryForeground: "#FAF6EC",
-      accent: "#D9A441",
-      accentForeground: "#161A24",
-      muted: "#EFE7D3",
-      mutedForeground: "#5B5F6B",
-      border: "#E1D7BC",
+      background: "#EDF1F6",
+      surface: "#FAFCFE",
+      text: "#0E1A2B",
+      primary: "#1B5FBF",
+      primaryForeground: "#FAFCFE",
+      accent: "#B0431A",
+      accentForeground: "#FAFCFE",
+      muted: "#DCE3EC",
+      mutedForeground: "#4F5D6E",
+      rule: "#0E1A2B",
+      hairline: "#C2CDDA",
     },
     dark: {
-      background: "#0B0E16",
-      surface: "#121728",
-      text: "#F2EFE3",
-      primary: "#4A6491",
-      primaryForeground: "#0B0E16",
-      accent: "#E0B15C",
-      accentForeground: "#0B0E16",
-      muted: "#1A2032",
-      mutedForeground: "#9AA0AE",
-      border: "#232B41",
+      background: "#0B1420",
+      surface: "#121E2E",
+      text: "#E5ECF5",
+      primary: "#5B9BEA",
+      primaryForeground: "#0B1420",
+      accent: "#E8845C",
+      accentForeground: "#0B1420",
+      muted: "#1B2937",
+      mutedForeground: "#93A3B5",
+      rule: "#E5ECF5",
+      hairline: "#27384A",
     },
   },
+
   {
-    id: "burgundy-sand",
-    name: "Burgundy / Sand",
+    id: "primary",
+    name: "Primary",
+    blurb: "True Bauhaus red and blue on grey. The bold one.",
     light: {
-      background: "#F7EFE3",
+      background: "#F0F0F0",
       surface: "#FFFFFF",
-      text: "#1E1416",
-      primary: "#6B1E2B",
-      primaryForeground: "#F7EFE3",
-      accent: "#C99A5B",
-      accentForeground: "#1E1416",
-      muted: "#EEE1CB",
-      mutedForeground: "#645449",
-      border: "#E2CFA9",
+      text: "#121212",
+      primary: "#CC1F1F",
+      primaryForeground: "#FFFFFF",
+      accent: "#1040C0",
+      accentForeground: "#FFFFFF",
+      muted: "#E1E1E1",
+      mutedForeground: "#585858",
+      rule: "#121212",
+      hairline: "#C8C8C8",
     },
     dark: {
-      background: "#150B0D",
-      surface: "#1E1215",
-      text: "#F5ECE0",
-      primary: "#9C4655",
-      primaryForeground: "#150B0D",
-      accent: "#D4AD70",
-      accentForeground: "#150B0D",
-      muted: "#271A1D",
-      mutedForeground: "#AE9A8E",
-      border: "#33242A",
+      background: "#0F0F0F",
+      surface: "#181818",
+      text: "#F0F0F0",
+      primary: "#F2564A",
+      primaryForeground: "#0F0F0F",
+      accent: "#6D91EC",
+      accentForeground: "#0F0F0F",
+      muted: "#242424",
+      mutedForeground: "#9E9E9E",
+      rule: "#F0F0F0",
+      hairline: "#353535",
     },
   },
+
   {
-    id: "charcoal-ice",
-    name: "Charcoal / Ice",
+    id: "concrete",
+    name: "Concrete",
+    blurb: "Warm greys and ochre. Same rigour, softer voice.",
     light: {
-      background: "#F3F6F8",
-      surface: "#FFFFFF",
-      text: "#171A1C",
-      primary: "#2B2E33",
-      primaryForeground: "#F3F6F8",
-      accent: "#5FA8D3",
-      accentForeground: "#0E1216",
-      muted: "#E6EBEF",
-      mutedForeground: "#565D64",
-      border: "#D8E0E6",
+      background: "#E7E4DD",
+      surface: "#F5F3EE",
+      text: "#22221E",
+      primary: "#96631A",
+      primaryForeground: "#F5F3EE",
+      accent: "#3F5A52",
+      accentForeground: "#F5F3EE",
+      muted: "#D8D4CA",
+      mutedForeground: "#5E5C53",
+      rule: "#22221E",
+      hairline: "#C3BFB3",
     },
     dark: {
-      background: "#0D0F11",
-      surface: "#16191C",
-      text: "#EDF1F4",
-      primary: "#9AA0A8",
-      primaryForeground: "#0D0F11",
-      accent: "#7EC1E8",
-      accentForeground: "#0D0F11",
-      muted: "#1D2124",
-      mutedForeground: "#9BA3AA",
-      border: "#262B2F",
+      background: "#171714",
+      surface: "#20201C",
+      text: "#EAE7DF",
+      primary: "#D9A44A",
+      primaryForeground: "#171714",
+      accent: "#82A99C",
+      accentForeground: "#171714",
+      muted: "#2B2B26",
+      mutedForeground: "#A29E93",
+      rule: "#EAE7DF",
+      hairline: "#3C3B34",
     },
   },
+
   {
-    id: "forest-moss",
-    name: "Forest / Moss",
+    id: "signal",
+    name: "Signal",
+    blurb: "High-visibility orange on stark white. Industrial.",
     light: {
-      background: "#F5F3EA",
-      surface: "#FFFFFF",
-      text: "#16190F",
-      primary: "#2F4F3E",
-      primaryForeground: "#F5F3EA",
-      accent: "#8A9A5B",
-      accentForeground: "#16190F",
-      muted: "#E9E6D6",
-      mutedForeground: "#5B5F4D",
-      border: "#DCD7BE",
-    },
-    dark: {
-      background: "#0C1210",
-      surface: "#141C17",
-      text: "#F0F1E6",
-      primary: "#5C8069",
-      primaryForeground: "#0C1210",
-      accent: "#A3B478",
-      accentForeground: "#0C1210",
-      muted: "#1C2620",
-      mutedForeground: "#9AA491",
-      border: "#25302A",
-    },
-  },
-  {
-    id: "terracotta-bone",
-    name: "Terracotta / Bone",
-    light: {
-      background: "#F6F1EA",
-      surface: "#FFFFFF",
-      text: "#1B1613",
-      primary: "#A64B2A",
-      primaryForeground: "#F6F1EA",
-      accent: "#1F6F6B",
-      accentForeground: "#F6F1EA",
-      muted: "#ECE2D5",
-      mutedForeground: "#63584F",
-      border: "#DFD0BE",
-    },
-    dark: {
-      background: "#140F0C",
-      surface: "#1D1613",
-      text: "#F4ECE3",
-      primary: "#C97A54",
-      primaryForeground: "#140F0C",
-      accent: "#4FA39E",
-      accentForeground: "#140F0C",
-      muted: "#271E19",
-      mutedForeground: "#AB9C8F",
-      border: "#33261F",
-    },
-  },
-  {
-    id: "teal-mist",
-    name: "Teal / Mist",
-    light: {
-      background: "#F2F7F6",
-      surface: "#FFFFFF",
-      text: "#10201D",
-      primary: "#0B6E6E",
-      primaryForeground: "#F2F7F6",
-      accent: "#D98A3D",
-      accentForeground: "#10201D",
-      muted: "#E3EEEC",
-      mutedForeground: "#52645F",
-      border: "#D3E1DE",
-    },
-    dark: {
-      background: "#0A1514",
-      surface: "#0F1E1C",
-      text: "#EAF3F1",
-      primary: "#3FA8A0",
-      primaryForeground: "#0A1514",
-      accent: "#E3A25F",
-      accentForeground: "#0A1514",
-      muted: "#16302C",
-      mutedForeground: "#8FA6A0",
-      border: "#1E3B36",
-    },
-  },
-  {
-    id: "plum-blush",
-    name: "Plum / Blush",
-    light: {
-      background: "#F8F1F3",
-      surface: "#FFFFFF",
-      text: "#241419",
-      primary: "#5E2A4D",
-      primaryForeground: "#F8F1F3",
-      accent: "#C98A5B",
-      accentForeground: "#241419",
-      muted: "#EFE1E6",
-      mutedForeground: "#6B5560",
-      border: "#E3D0D8",
-    },
-    dark: {
-      background: "#140B10",
-      surface: "#1E1218",
-      text: "#F5EAEF",
-      primary: "#9C5C82",
-      primaryForeground: "#140B10",
-      accent: "#D4A374",
-      accentForeground: "#140B10",
-      muted: "#271A21",
-      mutedForeground: "#AB93A0",
-      border: "#33232B",
-    },
-  },
-  {
-    id: "amber-ink",
-    name: "Amber / Ink",
-    light: {
-      background: "#FBF6E9",
-      surface: "#FFFFFF",
-      text: "#1E1708",
-      primary: "#8A5A00",
-      primaryForeground: "#FBF6E9",
-      accent: "#2F6F5E",
-      accentForeground: "#FBF6E9",
-      muted: "#F0E6CC",
-      mutedForeground: "#6B5F42",
-      border: "#E3D6AE",
-    },
-    dark: {
-      background: "#120E04",
-      surface: "#1C1608",
-      text: "#F5EFDD",
-      primary: "#D9A02E",
-      primaryForeground: "#120E04",
-      accent: "#5FA893",
-      accentForeground: "#120E04",
-      muted: "#241C0C",
-      mutedForeground: "#A99B77",
-      border: "#2E2510",
-    },
-  },
-  {
-    id: "rose-linen",
-    name: "Rose / Linen",
-    light: {
-      background: "#F9F1EC",
-      surface: "#FFFFFF",
-      text: "#241512",
-      primary: "#8C3B3B",
-      primaryForeground: "#F9F1EC",
-      accent: "#4C7A6E",
-      accentForeground: "#F9F1EC",
-      muted: "#EFE0D6",
-      mutedForeground: "#6B5750",
-      border: "#E3D0C3",
-    },
-    dark: {
-      background: "#160D0B",
-      surface: "#201513",
-      text: "#F5E9E3",
-      primary: "#C97070",
-      primaryForeground: "#160D0B",
-      accent: "#6FA294",
-      accentForeground: "#160D0B",
-      muted: "#291B17",
-      mutedForeground: "#AD968E",
-      border: "#34211C",
-    },
-  },
-  {
-    id: "mono-graphite",
-    name: "Mono / Graphite",
-    light: {
-      background: "#F5F5F3",
+      background: "#F4F4F3",
       surface: "#FFFFFF",
       text: "#141414",
-      primary: "#1F1F1F",
-      primaryForeground: "#F5F5F3",
-      accent: "#B5472F",
-      accentForeground: "#F5F5F3",
-      muted: "#E7E7E4",
-      mutedForeground: "#5C5C58",
-      border: "#D9D9D5",
+      primary: "#E24E1B",
+      primaryForeground: "#141414",
+      accent: "#1A1A1A",
+      accentForeground: "#FFFFFF",
+      muted: "#E4E4E2",
+      mutedForeground: "#5A5A58",
+      rule: "#141414",
+      hairline: "#CCCCC9",
     },
     dark: {
-      background: "#0C0C0B",
-      surface: "#131313",
-      text: "#F2F2EF",
-      primary: "#D8D8D4",
-      primaryForeground: "#0C0C0B",
-      accent: "#E06A4D",
-      accentForeground: "#0C0C0B",
-      muted: "#1C1C1A",
-      mutedForeground: "#9C9C97",
-      border: "#262624",
+      background: "#101010",
+      surface: "#191919",
+      text: "#F2F2F0",
+      primary: "#FF7038",
+      primaryForeground: "#101010",
+      accent: "#F2F2F0",
+      accentForeground: "#101010",
+      muted: "#242423",
+      mutedForeground: "#9C9C99",
+      rule: "#F2F2F0",
+      hairline: "#343433",
+    },
+  },
+
+  {
+    id: "verdigris",
+    name: "Verdigris",
+    blurb: "Deep green and copper on cool paper.",
+    light: {
+      background: "#ECF0EC",
+      surface: "#F9FBF8",
+      text: "#101610",
+      primary: "#1F5D3F",
+      primaryForeground: "#F9FBF8",
+      accent: "#B2612C",
+      accentForeground: "#F9FBF8",
+      muted: "#DCE3DC",
+      mutedForeground: "#4F5A4F",
+      rule: "#101610",
+      hairline: "#C3CDC3",
+    },
+    dark: {
+      background: "#0C120E",
+      surface: "#141C16",
+      text: "#E7EDE6",
+      primary: "#4FA277",
+      primaryForeground: "#0C120E",
+      accent: "#DB9160",
+      accentForeground: "#0C120E",
+      muted: "#1D2820",
+      mutedForeground: "#95A296",
+      rule: "#E7EDE6",
+      hairline: "#2A3A2E",
+    },
+  },
+
+  {
+    id: "oxblood",
+    name: "Oxblood",
+    blurb: "Bone paper, deep red, brass. Quietly formal.",
+    light: {
+      background: "#F2EDE7",
+      surface: "#FCF9F5",
+      text: "#17100F",
+      primary: "#7A1F24",
+      primaryForeground: "#FCF9F5",
+      accent: "#8A6A25",
+      accentForeground: "#FCF9F5",
+      muted: "#E4DBD1",
+      mutedForeground: "#5E534E",
+      rule: "#17100F",
+      hairline: "#CDC2B6",
+    },
+    dark: {
+      background: "#130E0D",
+      surface: "#1C1615",
+      text: "#EFE8E2",
+      primary: "#C4636A",
+      primaryForeground: "#130E0D",
+      accent: "#CFA85C",
+      accentForeground: "#130E0D",
+      muted: "#282020",
+      mutedForeground: "#A3968E",
+      rule: "#EFE8E2",
+      hairline: "#3A302E",
+    },
+  },
+
+  {
+    id: "monolith",
+    name: "Monolith",
+    blurb: "Pure black and white. Nothing to hide behind.",
+    light: {
+      background: "#FFFFFF",
+      surface: "#FFFFFF",
+      text: "#000000",
+      primary: "#000000",
+      primaryForeground: "#FFFFFF",
+      accent: "#565656",
+      accentForeground: "#FFFFFF",
+      muted: "#EDEDED",
+      mutedForeground: "#565656",
+      rule: "#000000",
+      hairline: "#C4C4C4",
+    },
+    dark: {
+      background: "#000000",
+      surface: "#0B0B0B",
+      text: "#FFFFFF",
+      primary: "#FFFFFF",
+      primaryForeground: "#000000",
+      accent: "#A8A8A8",
+      accentForeground: "#000000",
+      muted: "#1C1C1C",
+      mutedForeground: "#A8A8A8",
+      rule: "#FFFFFF",
+      hairline: "#333333",
     },
   },
 ];
 
-export const DEFAULT_PALETTE_ID: PaletteId = "british-racing-green";
+export const DEFAULT_PALETTE_ID: PaletteId = "ink";
 
 export function getPalette(id: string | null | undefined): Palette {
   return PALETTES.find((p) => p.id === id) ?? PALETTES[0];
 }
 
+// Heading faces. The new language wants a grotesque with real weight at the
+// top end — Archivo is the default because its Black weight holds a tight
+// negative track without falling apart, which is what the display type needs.
+// Outfit is here because it's the geometric face the Bauhaus reference calls
+// for; the serifs stay for anyone who wants the structure without the shout.
 export type HeadingFont =
-  | "space-grotesk"
   | "archivo"
-  | "fraunces"
+  | "outfit"
+  | "space-grotesk"
   | "sora"
   | "libre-franklin"
+  | "fraunces"
   | "dm-serif-display";
 export type BodyFont = "inter" | "manrope";
 export type FontSize = "sm" | "md" | "lg";
@@ -373,9 +353,60 @@ export interface ThemeSettings {
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   palette: DEFAULT_PALETTE_ID,
   mode: "system",
-  headingFont: "space-grotesk",
+  headingFont: "archivo",
   bodyFont: "inter",
   fontSize: "md",
   density: "comfortable",
   motion: "full",
 };
+
+// Old palette ids that no longer exist. Anyone whose saved preference points at
+// one of these (every existing account, since the whole set was replaced) gets
+// mapped onto the nearest new theme rather than silently snapping to the
+// default — a burgundy user lands on Oxblood, a navy user on Blueprint, etc.
+const LEGACY_PALETTE_MAP: Record<string, PaletteId> = {
+  "british-racing-green": "verdigris",
+  "navy-cream": "blueprint",
+  "burgundy-sand": "oxblood",
+  "charcoal-ice": "ink",
+  "forest-moss": "verdigris",
+  "terracotta-bone": "concrete",
+  "teal-mist": "verdigris",
+  "plum-blush": "oxblood",
+  "amber-ink": "concrete",
+  "rose-linen": "oxblood",
+  "mono-graphite": "monolith",
+};
+
+const LEGACY_HEADING_FONTS = new Set<string>([
+  "archivo",
+  "outfit",
+  "space-grotesk",
+  "sora",
+  "libre-franklin",
+  "fraunces",
+  "dm-serif-display",
+]);
+
+/**
+ * Normalises a stored ThemeSettings blob (from the database or localStorage)
+ * onto the current option set. Called on every read so a saved preference
+ * written before the redesign can never render a theme that no longer exists.
+ */
+export function normalizeThemeSettings(
+  stored: Partial<ThemeSettings> | null | undefined
+): ThemeSettings {
+  const merged = { ...DEFAULT_THEME_SETTINGS, ...(stored ?? {}) };
+
+  const paletteExists = PALETTES.some((p) => p.id === merged.palette);
+  if (!paletteExists) {
+    merged.palette =
+      LEGACY_PALETTE_MAP[merged.palette as string] ?? DEFAULT_PALETTE_ID;
+  }
+
+  if (!LEGACY_HEADING_FONTS.has(merged.headingFont as string)) {
+    merged.headingFont = DEFAULT_THEME_SETTINGS.headingFont;
+  }
+
+  return merged;
+}
