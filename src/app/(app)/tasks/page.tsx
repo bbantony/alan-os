@@ -1,6 +1,5 @@
 import {
   getTasks,
-  getTaskIdsWithReminders,
   getWeeklyDoneCount,
   getTodayCompletionCountsByHorizon,
 } from "./actions";
@@ -18,7 +17,6 @@ export default async function TasksPage({
     { new: isNew },
     tasks,
     weeklyDoneCount,
-    reminderTaskIds,
     routines,
     routineSuggestions,
     doneTodayByHorizon,
@@ -26,7 +24,6 @@ export default async function TasksPage({
     searchParams,
     getTasks(),
     getWeeklyDoneCount(),
-    getTaskIdsWithReminders(),
     getRoutines(),
     getRoutineSuggestions(),
     getTodayCompletionCountsByHorizon(),
@@ -54,7 +51,6 @@ export default async function TasksPage({
         <TaskList
           initialTasks={tasks}
           weeklyDoneCount={weeklyDoneCount}
-          initialReminderTaskIds={reminderTaskIds}
           initialDoneTodayByHorizon={doneTodayByHorizon}
           autoFocusNew={isNew === "1"}
         />

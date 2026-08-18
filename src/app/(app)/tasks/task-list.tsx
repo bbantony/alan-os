@@ -16,10 +16,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { Tag, Micro } from "@/components/ui/tag";
 import { DateTimeField } from "@/components/ui/date-field";
+import { NudgePicker } from "@/components/nudge-picker";
 import { RecurrencePicker } from "@/components/recurrence-picker";
 import {
   Dialog,
@@ -34,9 +34,9 @@ import { toast } from "@/components/ui/toast";
 import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone } from "@/lib/time";
+import { DEFAULT_NUDGE_MINUTES, shortNudge } from "@/lib/tasks/nudge";
 import { buildRRuleString, describeRRule } from "@/lib/reminders/rrule";
 import type { RecurrencePreset } from "@/lib/reminders/types";
-import { createReminderFromTask } from "@/app/(app)/calendar/actions";
 import {
   TASK_HORIZONS,
   TASK_HORIZON_LABELS,
@@ -50,6 +50,7 @@ import {
   deleteTask,
   getCompletedTasks,
   setTaskCompleted,
+  setTaskNudge,
 } from "./actions";
 import { TaskDetailDialog } from "./task-detail-dialog";
 
@@ -60,13 +61,11 @@ const QUICK_ADD_PRESETS: RecurrencePreset[] = [
 export function TaskList({
   initialTasks,
   weeklyDoneCount,
-  initialReminderTaskIds,
   initialDoneTodayByHorizon,
   autoFocusNew = false,
 }: {
   initialTasks: Task[];
   weeklyDoneCount: number;
-  initialReminderTaskIds: string[];
   initialDoneTodayByHorizon: Record<TaskHorizon, number>;
   /** Set by the `?new=1` link the app-wide quick-add sends here. */
   autoFocusNew?: boolean;
@@ -74,7 +73,6 @@ export function TaskList({
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   const [title, setTitle] = useState("");
   const [horizon, setHorizon] = useState<TaskHorizon>("today");
-  const [remindedIds, setRemindedIds] = useState<Set<string>>(new Set(initialReminderTaskIds));
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
   const [subtaskTitle, setSubtaskTitle] = useState("");
   const [confirmTask, setConfirmTask] = useState<Task | null>(null);
@@ -93,7 +91,7 @@ export function TaskList({
   const [quickWeekday, setQuickWeekday] = useState(0);
   const [quickIntervalDays, setQuickIntervalDays] = useState("2");
   const [quickMonthDay, setQuickMonthDay] = useState("1");
-  const [quickRemindMe, setQuickRemindMe] = useState(false);
+  const [quickNudge, setQuickNudge] = useState<number | null>(null);
 
   // Arriving from the app-wide quick-add should land with the cursor already
   // in the box — otherwise "add a task" costs a tap on the menu and another
@@ -124,7 +122,7 @@ export function TaskList({
     setQuickWeekday(0);
     setQuickIntervalDays("2");
     setQuickMonthDay("1");
-    setQuickRemindMe(false);
+    setQuickNudge(null);
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -157,9 +155,9 @@ export function TaskList({
       created_at: new Date().toISOString(),
       rrule,
       gcal_event_id: null,
+      notify_offset_minutes: dueAtIso ? quickNudge : null,
     };
     setTasks((prev) => [...prev, optimistic]);
-    if (dueAtIso && quickRemindMe) setRemindedIds((prev) => new Set(prev).add(id));
     setTitle("");
     const category = quickCategory;
     resetMoreOptions();
@@ -170,14 +168,28 @@ export function TaskList({
       category,
       dueAt: dueAtIso,
       rrule,
-      remindMe: quickRemindMe,
+      notifyOffsetMinutes: dueAtIso ? quickNudge : null,
     });
   }
 
-  async function handleRemindMe(task: Task) {
-    setRemindedIds((prev) => new Set(prev).add(task.id));
-    await createReminderFromTask({ taskId: task.id });
-    toast.success("Reminder set");
+  // The bell on a row is a shortcut between "no reminder" and a sensible
+  // default. Picking exactly how far ahead is the detail dialog's job.
+  async function handleToggleNudge(task: Task) {
+    const next = task.notify_offset_minutes === null ? DEFAULT_NUDGE_MINUTES : null;
+    setTasks((prev) =>
+      prev.map((t) => (t.id === task.id ? { ...t, notify_offset_minutes: next } : t))
+    );
+    const result = await setTaskNudge({ id: task.id, offsetMinutes: next });
+    if (result.error) {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id ? { ...t, notify_offset_minutes: task.notify_offset_minutes } : t
+        )
+      );
+      toast.error(result.error);
+      return;
+    }
+    toast.success(next === null ? "Reminder off" : "Reminder set for 30 min before");
   }
 
   async function handleAddSubtask(parent: Task) {
@@ -198,6 +210,7 @@ export function TaskList({
       created_at: new Date().toISOString(),
       rrule: null,
       gcal_event_id: null,
+      notify_offset_minutes: null,
     };
     setTasks((prev) => [...prev, optimistic]);
     setSubtaskTitle("");
@@ -364,21 +377,7 @@ export function TaskList({
                 onMonthDayChange={setQuickMonthDay}
               />
 
-              <label className="flex items-center justify-between gap-3 border-2 border-rule bg-surface px-3 py-2.5">
-                <span>
-                  <span className="micro block">Remind me</span>
-                  {!quickDueAt && (
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      Set a due date first
-                    </span>
-                  )}
-                </span>
-                <Switch
-                  checked={quickRemindMe}
-                  onCheckedChange={setQuickRemindMe}
-                  disabled={!quickDueAt}
-                />
-              </label>
+              <NudgePicker value={quickNudge} onChange={setQuickNudge} disabled={!quickDueAt} />
             </div>
           )}
         </form>
@@ -406,9 +405,8 @@ export function TaskList({
             onAddSubtask={handleAddSubtask}
             onToggleComplete={handleToggleComplete}
             onDelete={handleDelete}
-            onRemindMe={handleRemindMe}
+            onToggleNudge={handleToggleNudge}
             onOpenDetail={setEditingTask}
-            remindedIds={remindedIds}
           />
         ))
       )}
@@ -489,16 +487,9 @@ export function TaskList({
       {editingTask && (
         <TaskDetailDialog
           task={editingTask}
-          hasReminder={remindedIds.has(editingTask.id)}
           onClose={() => setEditingTask(null)}
           onSaved={(updated) => {
             setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-            setRemindedIds((prev) => {
-              const next = new Set(prev);
-              if (updated.due_at) next.add(updated.id);
-              else next.delete(updated.id);
-              return next;
-            });
             setEditingTask(null);
           }}
           onDeleted={(id) => {
@@ -523,9 +514,8 @@ function TaskSection({
   onAddSubtask,
   onToggleComplete,
   onDelete,
-  onRemindMe,
+  onToggleNudge,
   onOpenDetail,
-  remindedIds,
 }: {
   label: string;
   doneToday: number;
@@ -538,9 +528,8 @@ function TaskSection({
   onAddSubtask: (parent: Task) => void;
   onToggleComplete: (task: Task) => void;
   onDelete: (task: Task) => void;
-  onRemindMe: (task: Task) => void;
+  onToggleNudge: (task: Task) => void;
   onOpenDetail: (task: Task) => void;
-  remindedIds: Set<string>;
 }) {
   const cleared = tasks.length === 0 && doneToday > 0;
 
@@ -580,9 +569,8 @@ function TaskSection({
                     task={task}
                     onToggleComplete={() => onToggleComplete(task)}
                     onDelete={() => onDelete(task)}
-                    onRemindMe={() => onRemindMe(task)}
+                    onToggleNudge={() => onToggleNudge(task)}
                     onOpenDetail={() => onOpenDetail(task)}
-                    reminded={remindedIds.has(task.id)}
                   />
 
                   {/* Subtasks sit behind a left rule rather than on plain
@@ -649,17 +637,15 @@ function TaskRow({
   subtle,
   onToggleComplete,
   onDelete,
-  onRemindMe,
+  onToggleNudge,
   onOpenDetail,
-  reminded,
 }: {
   task: Task;
   subtle?: boolean;
   onToggleComplete: () => void;
   onDelete: () => void;
-  onRemindMe?: () => void;
+  onToggleNudge?: () => void;
   onOpenDetail?: () => void;
-  reminded?: boolean;
 }) {
   const meta: string[] = [];
   if (task.due_at) {
@@ -673,6 +659,10 @@ function TaskRow({
     );
   }
   if (task.category !== "personal") meta.push(TASK_CATEGORY_LABELS[task.category]);
+  // How far ahead the nudge is set, so a row reads "6pm - 1h before" rather
+  // than lighting a bell and leaving you to guess what it means.
+  const nudgeLabel = shortNudge(task.notify_offset_minutes);
+  if (nudgeLabel) meta.push(nudgeLabel);
 
   return (
     <div className={cn("flex items-center gap-2 px-3", subtle ? "py-1.5" : "py-2.5")}>
@@ -707,19 +697,27 @@ function TaskRow({
         )}
       </button>
 
-      {!subtle && task.due_at && onRemindMe && (
+      {!subtle && task.due_at && onToggleNudge && (
         <button
           type="button"
-          onClick={onRemindMe}
-          disabled={reminded}
+          onClick={onToggleNudge}
           className={cn(
             "tap-press shrink-0 transition-colors",
-            reminded ? "text-primary" : "text-muted-foreground/60 hover:text-foreground"
+            task.notify_offset_minutes !== null
+              ? "text-primary"
+              : "text-muted-foreground/60 hover:text-foreground"
           )}
-          aria-label={reminded ? "Reminder set" : `Remind me about ${task.title}`}
-          title={reminded ? "Reminder set" : "Remind me at the due time"}
+          aria-label={
+            task.notify_offset_minutes !== null
+              ? `Turn off the reminder for ${task.title}`
+              : `Remind me about ${task.title}`
+          }
         >
-          {reminded ? <BellRing className="size-4" /> : <Bell className="size-4" />}
+          {task.notify_offset_minutes !== null ? (
+            <BellRing className="size-4" />
+          ) : (
+            <Bell className="size-4" />
+          )}
         </button>
       )}
 

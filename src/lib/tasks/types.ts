@@ -37,4 +37,8 @@ export interface Task {
   // DST-aware next-occurrence math, just stored on a different table.
   rrule: string | null;
   gcal_event_id: string | null;
+  // Minutes before `due_at` to send a notification. null = never.
+  // Replaces the old "has a reminder / doesn't" boolean, which could only ever
+  // notify you at the exact moment something became late. See lib/tasks/nudge.ts.
+  notify_offset_minutes: number | null;
 }

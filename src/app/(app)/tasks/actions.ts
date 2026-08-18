@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { nextOccurrenceUtc } from "@/lib/reminders/rrule";
+import { nudgeInstant } from "@/lib/tasks/nudge";
 import { todayInAppTimezone, addDaysToDateString, zonedTimeToUtc } from "@/lib/time";
 import { syncToGcal, removeFromGcal } from "@/lib/gcal/sync";
 import type { Task, TaskCategory, TaskHorizon } from "@/lib/tasks/types";
@@ -82,33 +83,102 @@ export async function getTodayCompletionCountsByHorizon(): Promise<Record<TaskHo
   return counts;
 }
 
-// Does this task have a linked reminder? (Used to show a bell state without
-// a separate join everywhere the task list renders.)
-export async function getTaskIdsWithReminders(): Promise<string[]> {
-  const { supabase, user } = await requireUser();
-  const { data } = await supabase
-    .from("reminders")
-    .select("linked_task_id")
-    .eq("user_id", user.id)
-    .not("linked_task_id", "is", null);
-  return [...new Set((data ?? []).map((r) => r.linked_task_id as string))];
-}
-
-async function createLinkedReminder(
+/**
+ * Brings a task's notification row in line with its due date and nudge offset.
+ *
+ * This is the single place a task-linked reminder is created, moved or removed,
+ * which is the point: before, three different call sites each did their own
+ * version of it and they drifted. A reminder is no longer something the user
+ * edits — it's derived from `due_at` minus `notify_offset_minutes`, and this
+ * function is the derivation.
+ */
+async function syncTaskNudge(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   taskId: string,
   title: string,
-  dueAt: string,
+  dueAt: string | null,
+  offsetMinutes: number | null,
   rrule: string | null
 ) {
+  const fireAt = nudgeInstant(dueAt, offsetMinutes);
+
+  const { data: existing } = await supabase
+    .from("reminders")
+    .select("id")
+    .eq("linked_task_id", taskId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  // No nudge wanted (or nothing to hang it off) — remove any row that exists.
+  if (!fireAt) {
+    if (existing) {
+      await supabase.from("reminders").delete().eq("id", existing.id).eq("user_id", userId);
+    }
+    return;
+  }
+
+  if (existing) {
+    await supabase
+      .from("reminders")
+      .update({ title, remind_at: fireAt, rrule, status: "active" })
+      .eq("id", existing.id)
+      .eq("user_id", userId);
+    return;
+  }
+
   await supabase.from("reminders").insert({
     user_id: userId,
     title,
-    remind_at: dueAt,
+    remind_at: fireAt,
     rrule,
     linked_task_id: taskId,
   });
+}
+
+/**
+ * Sets (or clears) a task's nudge on its own, for the bell on a task row.
+ *
+ * The row-level control is a shortcut, not the full editor — it flips between
+ * "no reminder" and a sensible default. Choosing exactly how far ahead is what
+ * the detail dialog is for.
+ */
+export async function setTaskNudge(input: {
+  id: string;
+  offsetMinutes: number | null;
+}): Promise<{ error?: string }> {
+  const { supabase, user } = await requireUser();
+
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("id, title, due_at, rrule")
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!task) return { error: "That task no longer exists." };
+  if (input.offsetMinutes !== null && !task.due_at) {
+    return { error: "Give it a due date first, then I'll know when to remind you." };
+  }
+
+  await supabase
+    .from("tasks")
+    .update({ notify_offset_minutes: input.offsetMinutes })
+    .eq("id", input.id)
+    .eq("user_id", user.id);
+
+  await syncTaskNudge(
+    supabase,
+    user.id,
+    task.id as string,
+    task.title as string,
+    task.due_at as string | null,
+    input.offsetMinutes,
+    task.rrule as string | null
+  );
+
+  revalidatePath("/tasks");
+  return {};
 }
 
 export async function createTask(input: {
@@ -119,10 +189,13 @@ export async function createTask(input: {
   parentTaskId?: string | null;
   dueAt?: string | null;
   rrule?: string | null;
-  remindMe?: boolean;
+  /** Minutes before `dueAt` to notify. `null`/omitted = don't. */
+  notifyOffsetMinutes?: number | null;
   notes?: string | null;
 }) {
   const { supabase, user } = await requireUser();
+  const offset = input.notifyOffsetMinutes ?? null;
+
   await supabase.from("tasks").insert({
     id: input.id,
     user_id: user.id,
@@ -133,11 +206,18 @@ export async function createTask(input: {
     parent_task_id: input.parentTaskId ?? null,
     due_at: input.dueAt ?? null,
     rrule: input.rrule ?? null,
+    notify_offset_minutes: offset,
   });
 
-  if (input.remindMe && input.dueAt) {
-    await createLinkedReminder(supabase, user.id, input.id, input.title, input.dueAt, input.rrule ?? null);
-  }
+  await syncTaskNudge(
+    supabase,
+    user.id,
+    input.id,
+    input.title,
+    input.dueAt ?? null,
+    offset,
+    input.rrule ?? null
+  );
 
   // A subtask inherits the parent's own calendar slot conceptually — only
   // top-level tasks with their own due date get their own calendar entry,
@@ -168,7 +248,8 @@ export async function updateTask(input: {
   category: TaskCategory;
   dueAt: string | null;
   rrule: string | null;
-  remindMe: boolean;
+  /** Minutes before `dueAt` to notify. `null` = don't. */
+  notifyOffsetMinutes: number | null;
 }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const { data: existingTask } = await supabase
@@ -187,6 +268,7 @@ export async function updateTask(input: {
       category: input.category,
       due_at: input.dueAt,
       rrule: input.rrule,
+      notify_offset_minutes: input.notifyOffsetMinutes,
     })
     .eq("id", input.id)
     .eq("user_id", user.id);
@@ -204,25 +286,15 @@ export async function updateTask(input: {
     });
   }
 
-  const { data: existingReminder } = await supabase
-    .from("reminders")
-    .select("id")
-    .eq("linked_task_id", input.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (input.remindMe && input.dueAt) {
-    if (existingReminder) {
-      await supabase
-        .from("reminders")
-        .update({ title: input.title, remind_at: input.dueAt, rrule: input.rrule, status: "active" })
-        .eq("id", existingReminder.id);
-    } else {
-      await createLinkedReminder(supabase, user.id, input.id, input.title, input.dueAt, input.rrule);
-    }
-  } else if (!input.remindMe && existingReminder) {
-    await supabase.from("reminders").delete().eq("id", existingReminder.id);
-  }
+  await syncTaskNudge(
+    supabase,
+    user.id,
+    input.id,
+    input.title,
+    input.dueAt,
+    input.notifyOffsetMinutes,
+    input.rrule
+  );
 
   revalidatePath("/tasks");
   return {};

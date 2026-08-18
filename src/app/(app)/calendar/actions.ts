@@ -216,39 +216,6 @@ export async function deleteReminder(input: { id: string }) {
 }
 
 // One-tap "Remind me" from a task with a due date (Part B4-style hook).
-export async function createReminderFromTask(input: { taskId: string }): Promise<{ error?: string }> {
-  const { supabase, user } = await requireUser();
-  const { data: task } = await supabase
-    .from("tasks")
-    .select("id, title, due_at, rrule")
-    .eq("id", input.taskId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!task || !task.due_at) return { error: "That task has no due date to remind you about." };
-
-  const { data: existing } = await supabase
-    .from("reminders")
-    .select("id")
-    .eq("linked_task_id", task.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (existing) return {};
-
-  // Copies the task's own rrule, matching updateTask's reminder-upsert path —
-  // otherwise a recurring task's bell-icon reminder would fire once and stop.
-  await supabase.from("reminders").insert({
-    user_id: user.id,
-    title: task.title,
-    remind_at: task.due_at,
-    rrule: task.rrule,
-    linked_task_id: task.id,
-  });
-
-  revalidatePath("/tasks");
-  revalidatePath("/calendar");
-  return {};
-}
 
 // ---------- Push subscriptions ----------
 

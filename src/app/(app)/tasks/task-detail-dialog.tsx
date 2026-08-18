@@ -5,7 +5,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+import { NudgePicker } from "@/components/nudge-picker";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { RecurrencePicker } from "@/components/recurrence-picker";
@@ -33,13 +33,11 @@ function isoToDateTimeLocal(iso: string | null): string {
 
 export function TaskDetailDialog({
   task,
-  hasReminder,
   onClose,
   onSaved,
   onDeleted,
 }: {
   task: Task;
-  hasReminder: boolean;
   onClose: () => void;
   onSaved: (task: Task) => void;
   onDeleted: (id: string) => void;
@@ -54,7 +52,7 @@ export function TaskDetailDialog({
   const [weekday, setWeekday] = useState(parsedRRule.weekday);
   const [intervalDays, setIntervalDays] = useState(parsedRRule.intervalDays);
   const [monthDay, setMonthDay] = useState(parsedRRule.monthDay);
-  const [remindMe, setRemindMe] = useState(hasReminder);
+  const [nudge, setNudge] = useState<number | null>(task.notify_offset_minutes);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -82,7 +80,7 @@ export function TaskDetailDialog({
       category,
       dueAt: dueAtIso,
       rrule,
-      remindMe: remindMe && !!dueAtIso,
+      notifyOffsetMinutes: dueAtIso ? nudge : null,
     });
     setSaving(false);
     if (result.error) {
@@ -90,7 +88,16 @@ export function TaskDetailDialog({
       return;
     }
     toast.success("Task updated");
-    onSaved({ ...task, title: trimmed, notes: notes.trim() || null, horizon, category, due_at: dueAtIso, rrule });
+    onSaved({
+      ...task,
+      title: trimmed,
+      notes: notes.trim() || null,
+      horizon,
+      category,
+      due_at: dueAtIso,
+      rrule,
+      notify_offset_minutes: dueAtIso ? nudge : null,
+    });
   }
 
   async function handleDelete() {
@@ -162,13 +169,7 @@ export function TaskDetailDialog({
             <p className="text-xs text-destructive">A repeating task needs a due date so it knows when to recur.</p>
           )}
 
-          <label className="flex items-center justify-between gap-2 border-2 border-rule px-3 py-2">
-            <span className="text-sm">
-              Remind me
-              {!dueAt && <span className="block text-xs text-muted-foreground">Set a due date first</span>}
-            </span>
-            <Switch checked={remindMe} onCheckedChange={setRemindMe} disabled={!dueAt} />
-          </label>
+          <NudgePicker value={nudge} onChange={setNudge} disabled={!dueAt} />
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
