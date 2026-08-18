@@ -1,5 +1,4 @@
 import {
-  CalendarDays,
   ListChecks,
   ShoppingCart,
   Wallet,
@@ -33,8 +32,7 @@ interface Destination {
 }
 
 const DESTINATIONS: Destination[] = [
-  { key: "tasks", label: "Tasks & Routines", hint: "Everything you owe yourself", href: "/tasks", icon: ListChecks },
-  { key: "calendar", label: "Calendar", hint: "Agenda and reminders", href: "/calendar", icon: CalendarDays },
+  { key: "tasks", label: "Plan", hint: "Tasks, routines and your calendar", href: "/plan", icon: ListChecks },
   { key: "money", label: "Money", hint: "Budgets, spending, goals", href: "/money", icon: Wallet },
   { key: "shopping", label: "Shopping", hint: "The list and your staples", href: "/shopping", icon: ShoppingCart },
   { key: "workout", label: "Workout", hint: "Sessions, crew, streaks", href: "/workout", icon: Dumbbell },

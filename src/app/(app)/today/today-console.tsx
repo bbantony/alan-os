@@ -158,7 +158,7 @@ export function TodayConsole({
         timeLabel: minutes === null ? null : formatClock(minutes),
         overdue: false,
         done: !!r.completedToday,
-        href: "/tasks",
+        href: "/plan",
         routine: r,
       });
     }
@@ -172,7 +172,7 @@ export function TodayConsole({
         timeLabel: null,
         overdue: true,
         done: doneTaskIds.has(t.id),
-        href: "/tasks",
+        href: "/plan",
       });
     }
 
@@ -191,7 +191,7 @@ export function TodayConsole({
         timeLabel: minutes === null ? null : formatClock(minutes),
         overdue: false,
         done: doneTaskIds.has(t.id),
-        href: "/tasks",
+        href: "/plan",
       });
     }
 
@@ -206,7 +206,7 @@ export function TodayConsole({
         timeLabel: minutes === null ? null : formatClock(minutes),
         overdue: false,
         done: false,
-        href: "/calendar",
+        href: "/plan?view=agenda",
       });
     }
 
@@ -244,7 +244,7 @@ export function TodayConsole({
             count={flow.length > 0 ? `${doneCount}/${flow.length}` : undefined}
             action={
               <Link
-                href="/tasks"
+                href="/plan"
                 className="micro-sm flex items-center gap-1 text-muted-foreground hover:text-foreground"
               >
                 All

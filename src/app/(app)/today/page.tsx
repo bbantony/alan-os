@@ -143,7 +143,7 @@ export default async function TodayPage() {
               <Stat
                 label="Due today"
                 value={dueCount}
-                href="/tasks"
+                href="/plan"
                 tone={overdueTasks.length > 0 ? "alert" : "default"}
                 sub={
                   overdueTasks.length > 0

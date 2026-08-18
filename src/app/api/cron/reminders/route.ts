@@ -41,7 +41,7 @@ export async function GET(request: Request) {
         body: reminder.notes ?? "Reminder",
         reminderId: reminder.id,
         actionToken,
-        url: "/calendar?tab=reminders",
+        url: "/plan",
       },
       async (subscriptionId) => {
         await supabase.rpc("delete_push_subscription_admin", { secret, subscription_id: subscriptionId });

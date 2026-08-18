@@ -177,7 +177,7 @@ export async function setTaskNudge(input: {
     task.rrule as string | null
   );
 
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
   return {};
 }
 
@@ -231,10 +231,13 @@ export async function createTask(input: {
       existingEventId: null,
       title: input.title,
       startIso: input.dueAt,
+      // Google gets the same nudge, so a phone that has the app closed still
+      // gets told — belt and braces on the app's own push.
+      reminderMinutesBefore: offset,
     });
   }
 
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
 }
 
 // Full-detail editor (horizon/category/due date/repeat/notes) — everything
@@ -283,6 +286,7 @@ export async function updateTask(input: {
       existingEventId: existingTask.gcal_event_id,
       title: input.title,
       startIso: input.dueAt,
+      reminderMinutesBefore: input.notifyOffsetMinutes,
     });
   }
 
@@ -296,7 +300,7 @@ export async function updateTask(input: {
     input.rrule
   );
 
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
   return {};
 }
 
@@ -407,10 +411,12 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
       existingEventId: null,
       title: task.title,
       startIso: next.toISOString(),
+      // The next instance inherits the nudge, on Google's side too.
+      reminderMinutesBefore: (task.notify_offset_minutes as number | null) ?? null,
     });
   }
 
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
   return { nextTask: (created as Task) ?? undefined };
 }
 

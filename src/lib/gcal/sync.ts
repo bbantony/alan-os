@@ -51,8 +51,18 @@ export async function syncToGcal(params: {
   startIso: string | null;
   durationMinutes?: number;
   recurrence?: string[] | null;
+  /**
+   * Minutes before the event for Google's own popup, mirroring the app's
+   * nudge. `null` means no popup; omitted leaves whatever Google already has.
+   * Alan asked that "all the data related to the task including a notification
+   * should sync with google calender and notify me" — this is that.
+   */
+  reminderMinutesBefore?: number | null;
 }): Promise<{ ok: boolean; error?: string }> {
-  const { supabase, userId, table, rowId, existingEventId, title, startIso, durationMinutes = 30, recurrence } = params;
+  const {
+    supabase, userId, table, rowId, existingEventId, title, startIso,
+    durationMinutes = 30, recurrence, reminderMinutesBefore,
+  } = params;
   const connection = await getConnection(supabase, userId);
   if (!connection) return { ok: true };
 
@@ -71,6 +81,7 @@ export async function syncToGcal(params: {
         startIso: start.toISOString(),
         endIso: end.toISOString(),
         recurrence: recurrence ?? null,
+        reminderMinutesBefore,
       });
     } else {
       const event = await createEvent(connection.refresh_token_encrypted, connection.calendar_id, {
@@ -78,6 +89,7 @@ export async function syncToGcal(params: {
         startIso: start.toISOString(),
         endIso: end.toISOString(),
         recurrence: recurrence ?? undefined,
+        reminderMinutesBefore: reminderMinutesBefore ?? undefined,
       });
       await supabase.from(table).update({ gcal_event_id: event.id }).eq("id", rowId).eq("user_id", userId);
     }

@@ -137,7 +137,16 @@ export async function updateEvent(
   refreshTokenEncrypted: string,
   calendarId: string,
   eventId: string,
-  input: { title?: string; startIso?: string; endIso?: string; recurrence?: string[] | null }
+  input: {
+    title?: string;
+    startIso?: string;
+    endIso?: string;
+    recurrence?: string[] | null;
+    // `null` explicitly means "no popup" — Google needs useDefault:false with
+    // an empty overrides array to express that, which is different from
+    // omitting the field (leave whatever is already there alone).
+    reminderMinutesBefore?: number | null;
+  }
 ): Promise<GcalEvent> {
   const calendar = await calendarClientFor(refreshTokenEncrypted);
   const { data } = await calendar.events.patch({
@@ -148,6 +157,17 @@ export async function updateEvent(
       ...(input.startIso ? { start: { dateTime: input.startIso } } : {}),
       ...(input.endIso ? { end: { dateTime: input.endIso } } : {}),
       ...(input.recurrence !== undefined ? { recurrence: input.recurrence ?? undefined } : {}),
+      ...(input.reminderMinutesBefore !== undefined
+        ? {
+            reminders:
+              input.reminderMinutesBefore === null
+                ? { useDefault: false, overrides: [] }
+                : {
+                    useDefault: false,
+                    overrides: [{ method: "popup", minutes: input.reminderMinutesBefore }],
+                  },
+          }
+        : {}),
     },
   });
   return toGcalEvent(data);

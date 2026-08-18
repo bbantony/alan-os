@@ -57,11 +57,26 @@ export function resolveModuleAccess(profile: PermissionProfile): ModuleAccess {
   return resolved;
 }
 
+// Routes whose URL doesn't match the module id that gates them.
+//
+// The rule below works by prefix-matching a path against the module ids, which
+// silently stops working the moment a route is named something other than its
+// module. `/plan` (Tasks and Calendar merged) is exactly that case: it matched
+// nothing, so `moduleForPath` returned null and `canAccessPath` waved it
+// through for every account — reopening precisely the direct-URL hole the
+// proxy guard exists to close.
+const ROUTE_MODULE_ALIASES: { prefix: string; module: ModuleId }[] = [
+  { prefix: "/plan", module: "tasks" },
+];
+
 // Maps a pathname to the module it belongs to. Returns null for paths that
 // aren't module-gated at all (/today, /more, /settings and its
 // Appearance/Password sub-pages, /settings/admin) — those are handled by
 // their own separate rule in canAccessPath below.
 function moduleForPath(pathname: string): ModuleId | null {
+  for (const alias of ROUTE_MODULE_ALIASES) {
+    if (pathname.startsWith(alias.prefix)) return alias.module;
+  }
   for (const id of MODULE_IDS) {
     if (pathname.startsWith(`/${id}`) || pathname.startsWith(`/settings/${id}`)) return id;
   }

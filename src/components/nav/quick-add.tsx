@@ -8,7 +8,6 @@ import {
   Wallet,
   ShoppingCart,
   Dumbbell,
-  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -48,9 +47,12 @@ interface QuickAddTarget {
 const TARGETS: QuickAddTarget[] = [
   {
     id: "tasks",
-    label: "Task",
-    hint: "Something to do",
-    href: "/tasks?new=1",
+    // Reminders used to be a separate entry here. They're a setting on a task
+    // now, so "Task or reminder" is one destination — offering both would send
+    // you to the same form under two names.
+    label: "Task or reminder",
+    hint: "Something to do, or a nudge",
+    href: "/plan?new=1",
     icon: ListChecks,
   },
   {
@@ -66,13 +68,6 @@ const TARGETS: QuickAddTarget[] = [
     hint: "Add to the list",
     href: "/shopping?new=1",
     icon: ShoppingCart,
-  },
-  {
-    id: "calendar",
-    label: "Reminder",
-    hint: "Get a nudge",
-    href: "/calendar?new=1",
-    icon: Bell,
   },
   {
     id: "workout",

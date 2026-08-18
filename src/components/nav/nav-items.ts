@@ -6,7 +6,6 @@ import {
   Dumbbell,
   Menu,
   Settings,
-  CalendarDays,
   BookImage,
   Disc3,
   ShoppingCart,
@@ -26,7 +25,7 @@ export interface NavItem {
 // it's a daily, at-the-store module — moved up here per owner feedback.
 const PRIMARY_CANDIDATES: { id: ModuleId; item: NavItem }[] = [
   { id: "money", item: { label: "Money", href: "/money", icon: Wallet } },
-  { id: "tasks", item: { label: "Tasks", href: "/tasks", icon: ListChecks } },
+  { id: "tasks", item: { label: "Plan", href: "/plan", icon: ListChecks } },
   { id: "shopping", item: { label: "Shop", href: "/shopping", icon: ShoppingCart } },
   { id: "workout", item: { label: "Workout", href: "/workout", icon: Dumbbell } },
 ];
@@ -41,7 +40,6 @@ export function getNavItems(moduleAccess: ModuleAccess): NavItem[] {
 }
 
 const MORE_CANDIDATES: { id: ModuleId; item: NavItem }[] = [
-  { id: "calendar", item: { label: "Calendar", href: "/calendar", icon: CalendarDays } },
   { id: "journal", item: { label: "Journal", href: "/journal", icon: BookImage } },
   { id: "vinyl", item: { label: "Vinyl", href: "/vinyl", icon: Disc3 } },
 ];
