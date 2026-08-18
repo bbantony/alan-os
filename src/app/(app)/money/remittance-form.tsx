@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { DateField } from "@/components/ui/date-field";
 import { todayInAppTimezone } from "@/lib/time";
 import { dollarsToCents, formatCents } from "@/lib/finance/money";
 import { balanceDeltaCents } from "@/lib/finance/balance";
@@ -104,7 +105,7 @@ export function RemittanceForm({
             <p className="text-xs text-muted-foreground">1 CAD ≈ {(Number(inr) / Number(cad)).toFixed(2)} INR</p>
           )}
           <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (optional)" />
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateField value={date} onChange={setDate} clearable={false} aria-label="Date" />
           {error && <p className="text-xs text-destructive">{error}</p>}
           <Button type="button" className="w-full" disabled={saving || !cad || !inr} onClick={handleSubmit}>
             {saving ? "Saving…" : "Log remittance"}

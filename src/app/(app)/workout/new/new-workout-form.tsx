@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Panel, PanelHead } from "@/components/ui/panel";
 import { PageHeader, HeaderFact } from "@/components/ui/page-header";
+import { DateField } from "@/components/ui/date-field";
 import { Tag } from "@/components/ui/tag";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -270,10 +271,10 @@ export function NewWorkoutForm({
         />
 
         <div className="flex items-stretch gap-2">
-          <Input
-            type="date"
+          <DateField
             value={workoutDate}
-            onChange={(e) => setWorkoutDate(e.target.value)}
+            onChange={setWorkoutDate}
+            clearable={false}
             aria-label="Workout date"
             className="flex-1"
           />

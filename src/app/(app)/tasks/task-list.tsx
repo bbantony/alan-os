@@ -19,6 +19,7 @@ import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { Tag, Micro } from "@/components/ui/tag";
+import { DateTimeField } from "@/components/ui/date-field";
 import { RecurrencePicker } from "@/components/recurrence-picker";
 import {
   Dialog,
@@ -342,10 +343,11 @@ export function TaskList({
                 </div>
                 <div>
                   <label className="micro-sm mb-1.5 block text-muted-foreground">Due</label>
-                  <Input
-                    type="datetime-local"
+                  <DateTimeField
                     value={quickDueAt}
-                    onChange={(e) => setQuickDueAt(e.target.value)}
+                    onChange={setQuickDueAt}
+                    placeholder="No due date"
+                    aria-label="Due date"
                   />
                 </div>
               </div>

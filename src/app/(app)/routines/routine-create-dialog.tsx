@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { RecurrencePicker } from "@/components/recurrence-picker";
+import { TimeField } from "@/components/ui/date-field";
 import { parseRecurrenceFromRRule } from "@/lib/reminders/rrule";
 import type { RecurrencePreset } from "@/lib/reminders/types";
 import { TASK_CATEGORY_LABELS, type TaskCategory } from "@/lib/tasks/types";
@@ -171,7 +172,7 @@ export function RoutineFormDialog({
             </div>
             <div>
               <label className="micro-sm mb-1.5 block text-muted-foreground">Around what time?</label>
-              <Input type="time" value={timeOfDay} onChange={(e) => setTimeOfDay(e.target.value)} />
+              <TimeField value={timeOfDay} onChange={setTimeOfDay} placeholder="Any time" aria-label="Time of day" />
             </div>
           </div>
 

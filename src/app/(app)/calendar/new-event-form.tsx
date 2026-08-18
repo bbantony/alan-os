@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DateField, TimeField } from "@/components/ui/date-field";
 import { todayInAppTimezone } from "@/lib/time";
 import { createCalendarEvent } from "./actions";
 
@@ -44,8 +45,8 @@ export function NewEventForm({ onClose, onCreated }: { onClose: () => void; onCr
         <div className="space-y-3">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" autoFocus />
           <div className="flex gap-2">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="flex-1" />
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-28" />
+            <DateField value={date} onChange={setDate} aria-label="Date" className="flex-1" />
+            <TimeField value={time} onChange={setTime} aria-label="Time" clearable={false} className="w-32" />
           </div>
           <div>
             <label className="micro-sm mb-1.5 block text-muted-foreground">Duration (minutes)</label>

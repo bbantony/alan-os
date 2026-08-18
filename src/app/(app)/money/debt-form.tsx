@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
+import { DateField } from "@/components/ui/date-field";
 import { dollarsToCents } from "@/lib/finance/money";
 import type { Debt } from "@/lib/finance/types";
 import { createDebt } from "./actions";
@@ -73,7 +74,7 @@ export function DebtForm({ onClose, onSaved }: { onClose: () => void; onSaved: (
           </div>
           <div>
             <label className="micro-sm mb-1.5 block text-muted-foreground">Target payoff date (optional)</label>
-            <Input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+            <DateField value={targetDate} onChange={setTargetDate} placeholder="No target date" aria-label="Target payoff date" />
           </div>
           {error && <p className="text-xs text-destructive">{error}</p>}
           <Button type="button" className="w-full" disabled={saving || !name.trim() || !balance || !minPayment} onClick={handleSubmit}>

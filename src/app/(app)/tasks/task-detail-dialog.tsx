@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { RecurrencePicker } from "@/components/recurrence-picker";
+import { DateTimeField } from "@/components/ui/date-field";
 import { buildRRuleString, parseRecurrenceFromRRule } from "@/lib/reminders/rrule";
 import type { RecurrencePreset } from "@/lib/reminders/types";
 import {
@@ -142,7 +143,7 @@ export function TaskDetailDialog({
 
           <div>
             <label className="micro-sm mb-1.5 block text-muted-foreground">Due date (optional)</label>
-            <Input type="datetime-local" value={dueAt} onChange={(e) => setDueAt(e.target.value)} />
+            <DateTimeField value={dueAt} onChange={setDueAt} placeholder="No due date" aria-label="Due date" />
           </div>
 
           <RecurrencePicker

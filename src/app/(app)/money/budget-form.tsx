@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { DateField } from "@/components/ui/date-field";
 import { todayInAppTimezone } from "@/lib/time";
 import { dollarsToCents } from "@/lib/finance/money";
 import { BUDGET_PERIOD_LABELS, type BudgetPeriod, type Category } from "@/lib/finance/types";
@@ -86,7 +87,7 @@ export function BudgetForm({
                 </option>
               ))}
             </Select>
-            <Input type="date" value={anchorDate} onChange={(e) => setAnchorDate(e.target.value)} className="flex-1" />
+            <DateField value={anchorDate} onChange={setAnchorDate} aria-label="Anchor date" clearable={false} className="flex-1" />
           </div>
           <p className="text-xs text-muted-foreground">
             The date sets which day the period resets on (e.g. your payday).

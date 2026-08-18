@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { RecurrencePicker } from "@/components/recurrence-picker";
+import { DateField, TimeField } from "@/components/ui/date-field";
 import { todayInAppTimezone } from "@/lib/time";
 import type { Reminder, RecurrencePreset } from "@/lib/reminders/types";
 import { createReminder, updateReminder } from "./actions";
@@ -101,8 +102,8 @@ export function ReminderForm({
             className="w-full border-2 border-rule bg-transparent px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="flex-1" />
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-28" />
+            <DateField value={date} onChange={setDate} aria-label="Date" className="flex-1" />
+            <TimeField value={time} onChange={setTime} aria-label="Time" clearable={false} className="w-32" />
           </div>
 
           {/* This was the fourth hand-rolled copy of the repeat picker — the

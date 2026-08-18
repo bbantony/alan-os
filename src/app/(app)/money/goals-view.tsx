@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
 import { Panel, PanelHead } from "@/components/ui/panel";
+import { DateField } from "@/components/ui/date-field";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
@@ -229,10 +230,11 @@ export function GoalsView({
                 <label className="micro-sm mb-1.5 block text-muted-foreground">
                   Deadline (optional)
                 </label>
-                <Input
-                  type="date"
+                <DateField
                   value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
+                  onChange={setDeadline}
+                  placeholder="No deadline"
+                  aria-label="Deadline"
                 />
               </div>
               <Button

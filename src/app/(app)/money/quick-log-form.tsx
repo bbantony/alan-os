@@ -8,6 +8,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toast";
+import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
 import { todayInAppTimezone } from "@/lib/time";
 import { formatCents } from "@/lib/finance/money";
@@ -290,7 +291,7 @@ export function QuickLogForm({
 
             <div>
               <label className="micro-sm mb-1.5 block text-muted-foreground">Date</label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateField value={date} onChange={setDate} clearable={false} aria-label="Date" />
             </div>
 
             {error && (

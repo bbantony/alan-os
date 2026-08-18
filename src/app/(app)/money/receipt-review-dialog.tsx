@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toast";
+import { DateField } from "@/components/ui/date-field";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import type { Account, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
 import { approveReceipt, discardReceipt } from "./receipt-actions";
@@ -99,7 +100,7 @@ export function ReceiptReviewDialog({
 
           <div className="flex gap-2">
             <Input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder="Merchant" className="flex-1" />
-            <Input type="date" value={txnDate} onChange={(e) => setTxnDate(e.target.value)} className="w-36" />
+            <DateField value={txnDate} onChange={setTxnDate} clearable={false} aria-label="Date" className="w-40" />
           </div>
 
           <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
