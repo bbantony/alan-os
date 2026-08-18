@@ -1,6 +1,7 @@
 import "server-only";
 import type { createClient } from "@/lib/supabase/server";
 import { createEvent, updateEvent, deleteEvent } from "./client";
+import { describeGcalFailure, type GcalFailure } from "./errors";
 import { firstReminderInstant } from "@/lib/reminders/rrule";
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -25,12 +26,7 @@ async function getConnection(supabase: SupabaseClient, userId: string): Promise<
 // Best-effort readable message out of a googleapis error — these carry the
 // real reason (invalid_grant, insufficient scope, etc.) in response.data,
 // not in .message, which googleapis leaves as a generic HTTP status line.
-function describeGcalError(err: unknown): string {
-  const e = err as { message?: string; response?: { status?: number; data?: unknown } };
-  const detail = e?.response?.data ? JSON.stringify(e.response.data) : undefined;
-  const status = e?.response?.status ? ` (HTTP ${e.response.status})` : "";
-  return `${detail ?? e?.message ?? String(err)}${status}`;
-}
+
 
 // The one place a task/routine/reminder's mirrored Google Calendar event
 // gets created, moved, or turned into/out of a recurring series — called
@@ -58,7 +54,7 @@ export async function syncToGcal(params: {
    * should sync with google calender and notify me" — this is that.
    */
   reminderMinutesBefore?: number | null;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; failure?: GcalFailure }> {
   const {
     supabase, userId, table, rowId, existingEventId, title, startIso,
     durationMinutes = 30, recurrence, reminderMinutesBefore,
@@ -96,7 +92,11 @@ export async function syncToGcal(params: {
     return { ok: true };
   } catch (err) {
     // Push/DB save already went through — a calendar mirror failure isn't fatal.
-    return { ok: false, error: describeGcalError(err) };
+    // The raw text is kept inside the failure for logs; only `message` is ever
+    // shown to Alan.
+    const failure = describeGcalFailure(err);
+    console.error("[gcal] sync failed:", failure.raw);
+    return { ok: false, failure };
   }
 }
 
@@ -123,6 +123,12 @@ export async function removeFromGcal(params: {
   await supabase.from(table).update({ gcal_event_id: null }).eq("id", rowId).eq("user_id", userId);
 }
 
+export interface GcalSyncSummary {
+  synced: number;
+  failed: number;
+  failure: GcalFailure | null;
+}
+
 // Run once right after a Google Calendar connection is created, so existing
 // tasks/routines/reminders don't stay invisible on the calendar until they
 // happen to be edited. Only touches rows that don't already have a mirrored
@@ -131,13 +137,16 @@ export async function removeFromGcal(params: {
 export async function backfillGcalSync(
   supabase: SupabaseClient,
   userId: string
-): Promise<{ synced: number; failed: number; firstError: string | null }> {
-  const result = { synced: 0, failed: 0, firstError: null as string | null };
-  function record(outcome: { ok: boolean; error?: string }) {
+): Promise<GcalSyncSummary> {
+  const result: GcalSyncSummary = { synced: 0, failed: 0, failure: null };
+  function record(outcome: { ok: boolean; failure?: GcalFailure }) {
     if (outcome.ok) result.synced += 1;
     else {
       result.failed += 1;
-      if (!result.firstError) result.firstError = outcome.error ?? "Unknown error";
+      // Only the first failure is kept: when the Calendar API is switched off
+      // every single item fails with the identical error, and reporting it
+      // once is the useful version.
+      if (!result.failure && outcome.failure) result.failure = outcome.failure;
     }
   }
 

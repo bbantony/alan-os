@@ -1,13 +1,19 @@
 import { getGcalStatus, getPushSubscriptions } from "@/app/(app)/calendar/actions";
 import { Panel, PanelHead } from "@/components/ui/panel";
 import { SettingsPageShell } from "../settings-page-shell";
-import { CalendarConnect } from "./calendar-connect";
+import { CalendarConnect, SyncProblem } from "./calendar-connect";
 import { PushDevices } from "./push-devices";
 
 export default async function CalendarSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; connected?: string; syncWarning?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    connected?: string;
+    syncWarning?: string;
+    syncActionUrl?: string;
+    syncActionLabel?: string;
+  }>;
 }) {
   const [status, devices, params] = await Promise.all([
     getGcalStatus(),
@@ -30,10 +36,19 @@ export default async function CalendarSettingsPage({
           Google Calendar connected.
         </p>
       )}
+      {/* Connecting succeeded but the first sync didn't. Uses the same
+          explained-with-a-fix-link panel as the "Sync now" button rather than
+          a bare red strip, because the two failures are identical and only
+          differ in what triggered them. */}
       {params.syncWarning && (
-        <p className="border-2 border-destructive bg-destructive px-3 py-2.5 text-sm font-semibold text-destructive-foreground">
-          {params.syncWarning}
-        </p>
+        <SyncProblem
+          failure={{
+            message: params.syncWarning,
+            actionUrl: params.syncActionUrl,
+            actionLabel: params.syncActionLabel,
+            raw: "",
+          }}
+        />
       )}
 
       <Panel>

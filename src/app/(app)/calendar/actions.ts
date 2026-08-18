@@ -11,7 +11,7 @@ import {
   getOwnGcalConnection,
   listEvents as gcalListEvents,
 } from "@/lib/gcal/client";
-import { syncToGcal, removeFromGcal, backfillGcalSync } from "@/lib/gcal/sync";
+import { syncToGcal, removeFromGcal, backfillGcalSync, type GcalSyncSummary } from "@/lib/gcal/sync";
 import { getTasks } from "@/app/(app)/tasks/actions";
 import type { Task } from "@/lib/tasks/types";
 import type { Reminder, TopGoal } from "@/lib/reminders/types";
@@ -381,7 +381,7 @@ export async function setGcalSyncEnabled(input: { enabled: boolean }) {
 // Manual retry for whatever the one-time backfill-on-connect missed or
 // failed on (e.g. a transient Google API error) — same idempotent function,
 // just re-triggerable without disconnecting and reconnecting.
-export async function retryGcalSync(): Promise<{ synced: number; failed: number; firstError: string | null }> {
+export async function retryGcalSync(): Promise<GcalSyncSummary> {
   const { supabase, user } = await requireUser();
   const result = await backfillGcalSync(supabase, user.id);
   revalidatePath("/settings/calendar");

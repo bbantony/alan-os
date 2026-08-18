@@ -43,11 +43,14 @@ export async function GET(request: Request) {
     // So existing tasks/routines/reminders don't stay invisible on the
     // calendar until each one happens to be edited — one-time, idempotent.
     const backfill = await backfillGcalSync(supabase, user.id);
-    if (backfill.failed > 0) {
-      const note = `Connected, but ${backfill.failed} existing item(s) couldn't sync yet: ${backfill.firstError}`;
-      return NextResponse.redirect(
-        new URL(`/settings/calendar?connected=1&syncWarning=${encodeURIComponent(note)}`, request.url)
-      );
+    if (backfill.failed > 0 && backfill.failure) {
+      const params = new URLSearchParams({
+        connected: "1",
+        syncWarning: backfill.failure.message,
+      });
+      if (backfill.failure.actionUrl) params.set("syncActionUrl", backfill.failure.actionUrl);
+      if (backfill.failure.actionLabel) params.set("syncActionLabel", backfill.failure.actionLabel);
+      return NextResponse.redirect(new URL(`/settings/calendar?${params}`, request.url));
     }
   } catch (err) {
     return fail((err as Error).message || "Could not connect Google Calendar.");
