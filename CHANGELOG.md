@@ -1727,3 +1727,88 @@ Google notifies too.
 `npm run build`, `npx tsc --noEmit` and `eslint` clean at every commit. Migrations applied
 to production and their effects confirmed by query. Not verified: nobody has walked the
 new pickers or the nudge control on a phone.
+
+## 28. Tasks + Calendar merged into Plan; nudges sync to Google
+
+The second half of entry 27's work, built to the answers Alan gave there.
+
+### Plan
+
+New `/plan` module with three views — **List** (default), **Calendar**, **Agenda**.
+
+Tasks and Calendar were two modules describing the same commitments in different words: a
+task with a due date appeared in the task list, again in the Agenda, and a third time as a
+reminder. One module with three ways of looking at it removes the duplication without
+losing a single view. List stays the default because it's the one opened forty times a
+day; the other two are for planning rather than doing.
+
+**New `getPlanRange(start, end)`** in `plan/actions.ts` is the single assembler for tasks,
+routines and Google events — replacing three separate merge implementations (the old
+Agenda, the Today dashboard, and what the calendar grid would have needed) that each had
+their own idea of what counted and how to deduplicate.
+
+Two decisions inside it worth recording:
+
+- **Reminder rows are deliberately excluded.** Under the nudge model a reminder fires
+  *before* its task is due, so including both would put one commitment on the agenda twice
+  at two different times — once when you're warned and once when it's actually due. The
+  task is the thing; the nudge rides along on the item as `nudgeMinutes`.
+- **Routines are expanded per-day** across the range via `isDueOnDate`, because a routine
+  is one row with a repeat rule rather than a row per occurrence. That's only tractable
+  for a bounded range, which is why the function takes explicit start/end rather than
+  "upcoming".
+
+**Calendar view** marks a day by which *kinds* of thing are on it, not how many — three
+dots is all that's legible at that size, and a count would be unreadable. A day where
+everything is already done still gets a mark, just a quiet one, or a productive day would
+look identical to an empty one. Three months (previous, current, next) load up front so
+paging one either way costs no round trip; going further fetches on demand.
+
+### Retired
+
+**The Reminders tab is gone.** A reminder is a setting on a task now, so there is nothing
+left to list. `reminders-view.tsx`, `reminder-form.tsx`, `agenda-view.tsx` and
+`calendar-shell.tsx` deleted. Nothing was actually lost: creating a standalone reminder is
+creating a task with a due date and a nudge; pausing one is turning the nudge off; snoozing
+still works from the notification itself; and seeing everything upcoming is the Agenda view.
+
+`/tasks` and `/calendar` are **redirects rather than deletions** — both are in Alan's
+history, likely on his home screen, and are the targets of `?new=1` links inside any page
+the service worker still has cached. Push notifications now open `/plan` instead of the
+Reminders tab that no longer exists. The quick-add's separate "Reminder" entry was folded
+into "Task or reminder", since both went to the same form.
+
+### Google Calendar notifications
+
+Alan asked that "all the data related to the task including a notification should sync with
+google calender and notify me".
+
+`updateEvent` can now set an event's popup reminder, which it previously couldn't — so
+changing a task's nudge only ever moved the app's own notification. `null` means *no
+popup*, which Google expresses as `useDefault: false` with an empty `overrides` array, and
+which is meaningfully different from omitting the field (leave whatever's there alone).
+`syncToGcal` threads `reminderMinutesBefore` through to both create and update, and all
+three task call sites pass it — create, update, and the next instance of a recurring task.
+Net effect: a phone with the app closed still gets told, by Google.
+
+### A hole caught before it shipped
+
+`canAccessPath` maps a path to its gating module by prefix-matching the module ids. `/plan`
+matches none of them, so `moduleForPath` returned `null`, `canAccessPath` returned `true`,
+and **every account could reach the module by typing the URL** — reopening exactly the
+direct-URL gap the `proxy.ts` guard was added in Phase 2 to close.
+
+Fixed with an explicit `ROUTE_MODULE_ALIASES` table, and verified rather than assumed: a
+`workout_member` with no tasks access is blocked from `/plan`, `/plan?view=agenda` and
+`/tasks`, while a `full_user` with tasks access is allowed, and unrelated routes are
+unaffected. The general lesson is in a comment at the alias table — the prefix convention
+silently stops working the moment a route is named something other than its module.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit` and `eslint` clean. Deploy confirmed live: `/plan`,
+`/tasks` and `/calendar` all resolve and all sit behind the auth guard.
+
+**Not verified:** nobody has logged in and used the calendar view, the agenda, or the new
+pickers on a phone. Also unverified end-to-end: the Google popup reminder, which needs a
+connected Google account and a real task to observe.

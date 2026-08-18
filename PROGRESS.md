@@ -422,6 +422,37 @@ design of this thing… just get to work and make it awesome")
 
 ---
 
+## Plan — Tasks, Calendar and Reminders unified (owner-requested, not a
+numbered SPEC.md phase)
+
+- [x] **Reminder-ownership bug fixed at the schema level.** `reminders`
+      linked to tasks with `ON DELETE SET NULL`, so deleting a task orphaned
+      its reminder and it kept firing forever with no way to find it. One live
+      orphan ("Watches for anushas dad", recurring, next fire 19 Aug) plus five
+      dead ones deleted; both FKs switched to `ON DELETE CASCADE`
+      (migration 0022). Verified against production with a rolled-back probe.
+- [x] **Two sibling bugs** found in the same pass: completing a task didn't
+      silence its nudge, and completing a *recurring* task fired the next nudge
+      immediately because `remind_at` was left on the finished occurrence.
+- [x] **Due and nudge are now separate** (migration 0023). A task has a due
+      time and a `notify_offset_minutes` — at the time / 30 min / 1 hour /
+      1 day / 1 week before. The old bell could only fire at the exact moment
+      something became late.
+- [x] **Reminders are no longer a user-facing concept.** "Bin day Tuesday 8pm"
+      is a task due Tuesday 8pm with a nudge. The `reminders` table survives
+      only as the dispatcher's queue.
+- [x] **Calendar date picker and clock-dial time picker**, replacing all 15
+      native date/time inputs app-wide.
+- [x] **`/plan` replaces `/tasks` and `/calendar`** — List / Calendar / Agenda
+      views over one set of data. Reminders tab retired. Old routes redirect.
+- [x] **Task nudges mirror to Google Calendar** as popup reminders.
+- [x] Route guard hole caught and closed: `/plan` matched no module id, so
+      `canAccessPath` waved it through for every account.
+
+See CHANGELOG.md entries 27 and 28.
+
+---
+
 Next session: the app-wide redesign above is complete but **not yet committed
 or deployed** — it lives as uncommitted working-tree changes (95 files). The
 first thing to do is either deploy it or act on the owner's feedback after he
