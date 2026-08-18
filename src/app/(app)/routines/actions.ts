@@ -130,6 +130,11 @@ export async function createRoutine(input: {
       title: input.title.trim(),
       startIso,
       recurrence: [rrule],
+      // A routine fires at its time of day rather than ahead of it, so
+      // Google's popup is 0 minutes before. Without this the app would nudge
+      // you and Google would sit silent, which is the opposite of what "syncs
+      // to Google Calendar" should mean.
+      reminderMinutesBefore: input.remindMe ? 0 : null,
     });
   }
 
@@ -223,6 +228,7 @@ export async function updateRoutine(input: {
     title: trimmedTitle,
     startIso,
     recurrence: [rrule],
+    reminderMinutesBefore: input.remindMe && input.timeOfDay ? 0 : null,
   });
 
   revalidatePath("/tasks");

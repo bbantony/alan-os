@@ -129,11 +129,17 @@ export interface GcalSyncSummary {
   failure: GcalFailure | null;
 }
 
-// Run once right after a Google Calendar connection is created, so existing
-// tasks/routines/reminders don't stay invisible on the calendar until they
-// happen to be edited. Only touches rows that don't already have a mirrored
-// event, so it's safe to call more than once. Returns a summary so the
-// caller can surface a real error instead of silent, invisible failure.
+// Makes Google match the app: everything scheduled gets an event, and every
+// existing event gets its time, recurrence and popup reminder brought back in
+// line. Runs right after a connection is created, and behind the "Sync now"
+// button.
+//
+// It used to skip anything that already had a `gcal_event_id`, on the logic
+// that a mirrored row needed nothing further. That was wrong the moment the
+// event itself could be out of date — which it immediately was: the first
+// sync created every event with no popup reminder at all (backfill didn't
+// pass the nudge), and because those rows then had an id, no amount of
+// pressing "Sync now" would ever repair them. Repairing is now the job.
 export async function backfillGcalSync(
   supabase: SupabaseClient,
   userId: string
@@ -156,31 +162,51 @@ export async function backfillGcalSync(
   const [{ data: tasks }, { data: routines }, { data: reminders }] = await Promise.all([
     supabase
       .from("tasks")
-      .select("id, title, due_at")
+      .select("id, title, due_at, notify_offset_minutes, gcal_event_id")
       .eq("user_id", userId)
       .is("completed_at", null)
-      .is("gcal_event_id", null)
       .not("due_at", "is", null),
     supabase
       .from("routines")
-      .select("id, title, time_of_day, rrule")
+      .select("id, title, time_of_day, rrule, gcal_event_id")
       .eq("user_id", userId)
       .eq("active", true)
-      .is("gcal_event_id", null)
       .not("time_of_day", "is", null),
     supabase
       .from("reminders")
-      .select("id, title, remind_at, rrule")
+      .select("id, title, remind_at, rrule, gcal_event_id")
       .eq("user_id", userId)
       .eq("status", "active")
-      .is("gcal_event_id", null)
       .is("linked_task_id", null)
       .is("linked_routine_id", null),
   ]);
 
   for (const t of tasks ?? []) {
-    record(await syncToGcal({ supabase, userId, table: "tasks", rowId: t.id, existingEventId: null, title: t.title, startIso: t.due_at }));
+    record(
+      await syncToGcal({
+        supabase,
+        userId,
+        table: "tasks",
+        rowId: t.id,
+        existingEventId: (t.gcal_event_id as string | null) ?? null,
+        title: t.title,
+        startIso: t.due_at,
+        // Backfill never carried the nudge, so everything created by
+        // "Sync now" or by connecting landed in Google with no popup at all —
+        // even for tasks that had one set in the app.
+        reminderMinutesBefore: (t.notify_offset_minutes as number | null) ?? null,
+      })
+    );
   }
+  const { data: routineReminders } = await supabase
+    .from("reminders")
+    .select("linked_routine_id")
+    .eq("user_id", userId)
+    .not("linked_routine_id", "is", null);
+  const routinesWithReminder = new Set(
+    (routineReminders ?? []).map((r) => r.linked_routine_id as string)
+  );
+
   for (const r of routines ?? []) {
     const startIso = firstReminderInstant(r.rrule, r.time_of_day as string).toISOString();
     record(
@@ -189,10 +215,11 @@ export async function backfillGcalSync(
         userId,
         table: "routines",
         rowId: r.id,
-        existingEventId: null,
+        existingEventId: (r.gcal_event_id as string | null) ?? null,
         title: r.title,
         startIso,
         recurrence: r.rrule ? [r.rrule] : null,
+        reminderMinutesBefore: routinesWithReminder.has(r.id) ? 0 : null,
       })
     );
   }
@@ -203,7 +230,7 @@ export async function backfillGcalSync(
         userId,
         table: "reminders",
         rowId: rem.id,
-        existingEventId: null,
+        existingEventId: (rem.gcal_event_id as string | null) ?? null,
         title: rem.title,
         startIso: rem.remind_at,
         recurrence: rem.rrule ? [rem.rrule] : null,
