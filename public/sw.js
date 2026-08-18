@@ -1,5 +1,14 @@
-const CACHE_NAME = "alan-os-shell-v1";
-const SHELL_URLS = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
+// Bumped to v2 when the notification badge was added — the activate handler
+// below deletes any cache whose name doesn't match, so a version change is
+// what makes existing installs pick up the new shell list.
+const CACHE_NAME = "alan-os-shell-v2";
+const SHELL_URLS = [
+  "/",
+  "/manifest.json",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/badge-96.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -57,8 +66,17 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
+      // `icon` is the large picture inside the notification — a normal,
+      // full-colour, fully-opaque image is correct there.
       icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
+      // `badge` is the small mark Android draws in the status bar, and it is
+      // NOT a small version of the icon. Android discards the colours and
+      // keeps only the alpha channel, filling whatever is opaque with a flat
+      // colour. Pointing this at icon-192 — opaque on every single pixel —
+      // meant the silhouette was the whole square, so Samsung rendered a
+      // plain white block. badge-96.png is the chevron alone on a fully
+      // transparent ground, which is what this field has always wanted.
+      badge: "/icons/badge-96.png",
       tag: data.reminderId ? `reminder-${data.reminderId}` : undefined,
       data,
       actions,
