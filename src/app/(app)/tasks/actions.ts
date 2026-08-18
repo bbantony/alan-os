@@ -241,6 +241,18 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
       .update({ completed_at: null })
       .eq("id", input.id)
       .eq("user_id", user.id);
+
+    // Un-ticking brings the nudge back, but only if its moment hasn't already
+    // passed — reviving a notification for a time that's already gone by would
+    // fire it immediately, which is noise rather than a reminder.
+    await supabase
+      .from("reminders")
+      .update({ status: "active" })
+      .eq("linked_task_id", input.id)
+      .eq("user_id", user.id)
+      .eq("status", "done")
+      .gt("remind_at", new Date().toISOString());
+
     return {};
   }
 
@@ -260,6 +272,18 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
   if (task?.gcal_event_id) {
     await removeFromGcal({ supabase, userId: user.id, table: "tasks", rowId: input.id, existingEventId: task.gcal_event_id });
   }
+
+  // Ticking a task off has to silence its nudge. It didn't, which is the same
+  // bug as the deleted-task orphan wearing a different hat: finish something
+  // on Thursday that's due Friday at 6pm, and Friday at 6pm you were still
+  // told to do it. Marked done rather than deleted so un-ticking can revive it
+  // (see the branch above).
+  await supabase
+    .from("reminders")
+    .update({ status: "done" })
+    .eq("linked_task_id", input.id)
+    .eq("user_id", user.id)
+    .eq("status", "active");
 
   if (!task?.rrule || !task.due_at) return {};
 
@@ -284,11 +308,21 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
     .single();
 
   // Re-point any reminder that was tracking the just-completed instance at
-  // the new one, so recurring tasks with "Remind me" on don't go silent
-  // after their very first completion.
+  // the new one, so recurring tasks with a nudge on don't go silent after
+  // their very first completion.
+  //
+  // Three things move together here, and previously only the first did: the
+  // link, the status (the block above just marked it done, correctly, because
+  // this instance *is* finished), and the time. Leaving `remind_at` pointing
+  // at the occurrence that just completed meant the nudge for the next one was
+  // already in the past, so it fired the moment the task was ticked off.
   await supabase
     .from("reminders")
-    .update({ linked_task_id: newId })
+    .update({
+      linked_task_id: newId,
+      status: "active",
+      remind_at: next.toISOString(),
+    })
     .eq("linked_task_id", input.id)
     .eq("user_id", user.id);
 
@@ -326,9 +360,33 @@ export async function deleteTask(input: { id: string }) {
     .eq("user_id", user.id)
     .maybeSingle();
 
+  // Any Google Calendar entries belonging to this task's reminders have to be
+  // collected BEFORE the delete. Migration 0022 makes the database cascade
+  // those reminder rows away, which is what finally stops them firing — but a
+  // deleted row can't tell us afterwards which Google events to tidy up, so
+  // they'd be stranded in Google Calendar. A task-linked reminder shouldn't
+  // have its own mirror any more (entry 21), so this is normally empty; it's
+  // here so the cascade can't silently leak.
+  const { data: linkedReminders } = await supabase
+    .from("reminders")
+    .select("id, gcal_event_id")
+    .eq("linked_task_id", input.id)
+    .eq("user_id", user.id)
+    .not("gcal_event_id", "is", null);
+
   await supabase.from("tasks").delete().eq("id", input.id).eq("user_id", user.id);
 
   if (existing?.gcal_event_id) {
     await removeFromGcal({ supabase, userId: user.id, table: "tasks", rowId: input.id, existingEventId: existing.gcal_event_id });
+  }
+
+  for (const reminder of linkedReminders ?? []) {
+    await removeFromGcal({
+      supabase,
+      userId: user.id,
+      table: "reminders",
+      rowId: reminder.id as string,
+      existingEventId: reminder.gcal_event_id as string,
+    });
   }
 }
