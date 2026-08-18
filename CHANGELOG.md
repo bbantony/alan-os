@@ -1600,3 +1600,130 @@ live in production at `/icons/badge-96.png`.
 **What Alan has to do:** the badge is baked into a notification by the service worker at
 the moment it fires, so the new service worker has to be running first. Close the app
 fully and reopen it once, then use Settings → Calendar → **Send test notification**.
+
+## 27. The reminder that outlived its task — root cause, three related bugs, and the start of the Tasks/Calendar rebuild
+
+Alan reported a reminder still firing for a task he had deleted, naming it: "anushas
+father watch". He also asked for Tasks and Calendar to be merged and streamlined, a
+calendar view inside Tasks, and a proper calendar-style date picker — and asked to be
+consulted before implementation.
+
+### Diagnosis, against the live database
+
+Queried production directly rather than reasoning from the schema. Found **"Watches for
+anushas dad"**: `status = 'active'`, recurring, next fire `2026-08-19 00:28`,
+`linked_task_id` NULL. Plus five finished leftovers. Alan reviewed the list and asked for
+all six to go.
+
+**Root cause: one word.** `reminders.linked_task_id` was declared `on delete set null`
+(migration 0011), and `linked_routine_id` the same (0020). Deleting a task blanked the
+link rather than removing the reminder. The row kept its `remind_at`, its rrule and its
+active flag, and `claim_due_reminders` only ever asks *"is it active and is it due"* — it
+has no idea whether the task still exists. Once the link was blanked there was also no
+path back to it, so nothing in Tasks could clean it up; it simply appeared in the
+Reminders tab as though Alan had made it on purpose.
+
+Routines had always handled this correctly in application code (`archiveRoutine` deletes
+linked reminders explicitly). Tasks never did. **That inconsistency was the entire bug** —
+and it's exactly the kind that survives because the fix lived in one caller's head rather
+than in the schema.
+
+### Two more of the same family, found while fixing it
+
+- **Completing a task didn't silence its nudge.** Finish something on Thursday that's due
+  Friday 6pm, and Friday 6pm you were still told to do it. `setTaskCompleted` returned
+  early for non-recurring tasks without touching reminders at all.
+- **Completing a *recurring* task fired its next nudge immediately.** The reminder was
+  re-pointed at the new instance but `remind_at` was left on the occurrence that had just
+  been completed — i.e. in the past — so the dispatcher claimed it on its next sweep.
+
+### Fixes
+
+Migration `0022_reminder_ownership.sql`: deletes the six unattached rows and switches both
+FKs to `ON DELETE CASCADE`, so the database enforces ownership instead of trusting
+callers. Adds a partial index on unattached-and-active rows for future sweeps.
+
+**Verified against production**, not assumed: 0 unattached rows remain, both constraints
+report `confdeltype = 'c'`, and an insert-task → insert-reminder → delete-task probe
+inside a rolled-back transaction confirms the reminder now dies with its task.
+
+Application side: completion marks linked reminders `done` (not deleted, so un-ticking can
+revive them — and only when their moment hasn't already passed); the recurring path moves
+link, status and time together; `deleteTask` collects linked reminders' Google Calendar
+ids *before* the delete, since a cascaded row can't tell you afterwards what to tidy up.
+
+### Due vs nudge — answering the question Alan asked back
+
+He said: *"i dont like the current logic where there is a due date and then a reminder
+button. does it mean that itll remind me only at the time its due? i am not a big fan of
+that system suggest something much better."* He'd read it correctly — that is precisely
+what it did.
+
+Migration `0023_task_nudge_offset.sql` adds `tasks.notify_offset_minutes`: how long
+**before** the deadline to say something. `null` = never, `0` = at the due time (the old
+behaviour, now a deliberate choice), `60` = an hour before, `1440` = the day before.
+Existing tasks with a reminder are backfilled to `0` so nothing changes underneath him.
+
+This also absorbs standalone reminders, per his *"every reminder is basically a task"*:
+"bin day Tuesday 8pm" is simply a task due Tuesday 8pm with an offset of 0. **The
+`reminders` table survives only as the dispatcher's queue** — `remind_at` is derived, and
+nothing in the UI edits a reminder directly any more.
+
+New `src/lib/tasks/nudge.ts` owns the vocabulary and arithmetic; new `NudgePicker`
+replaces the remind-me switch (a toggle for the common decision, a dropdown for how far
+ahead). Task rows now read "6pm · 1h before" rather than lighting a bell and leaving you
+to infer what it means.
+
+**One consolidation worth recording:** `syncTaskNudge` is now the single place a
+task-linked reminder is created, moved or removed. Three call sites each had their own
+version of that logic and had already drifted — which is how the completion and recurrence
+bugs got in. Dead code removed: `createReminderFromTask`, `getTaskIdsWithReminders`.
+
+### Date and time pickers
+
+Alan: *"its just like a scroll wheel. i would like a calender view with todays date
+highlighted and for time, you know how android has a round clock and you select hour and
+min, something like that with an option to type and change as well."*
+
+Three new components:
+
+- `calendar-grid.tsx` — the month grid. Always six rows, never five: a grid that shrinks
+  in short months makes everything below it jump on every page turn. Today is an outline
+  rather than a fill so it stays visible when another day is selected. Takes optional
+  per-day marks, because this is the same component the Plan calendar view will use —
+  those were never going to be two different calendars.
+- `clock-picker.tsx` — the round dial. Tap or drag for the hour, then it advances itself
+  to minutes. The digital readout doubles as the mode switch and a text input, so a time
+  can always be typed. A circle is the one shape the language squares everywhere else; a
+  clock face genuinely is round, and that's what makes it read as a clock instantly.
+- `date-field.tsx` — `DateField` / `DateTimeField` / `TimeField`, taking and emitting the
+  exact string formats the native inputs did, so every caller's UTC conversion keeps
+  working and no timezone behaviour changes.
+
+All 15 native date/time inputs swapped across Tasks, Calendar, Routines, Money and
+Workout. Nothing native remains outside the picker components.
+
+### Decisions taken from Alan for the remaining work
+
+Asked before implementing, per his request. His answers, recorded because the next session
+should build to them:
+
+- **Merge Tasks and Calendar and rename** — something like "Plan" — with switchable views:
+  List (default), Calendar, and any others that make sense.
+- **Everything a task's data touches should sync to Google Calendar and notify**, including
+  the notification itself.
+- **Every reminder is basically a task.** His stated end goal is typing a sentence and
+  having AI create the task/event with reminders and a target date — Phase 7 quick-capture.
+  Worth noting the Gemini key owner action is still outstanding, so that can't be built yet.
+
+### Still to do
+
+`Plan` module merge (List / Calendar / Agenda in one place, retiring the separate Calendar
+tab), and pushing a task's nudge onto its Google Calendar event as a popup reminder so
+Google notifies too.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit` and `eslint` clean at every commit. Migrations applied
+to production and their effects confirmed by query. Not verified: nobody has walked the
+new pickers or the nudge control on a phone.
