@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Plus, Send, Trash2, Upload, Wallet } from "lucide-react";
+import { Pencil, Plus, Scale, Send, Trash2, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { Panel, PanelHead, PanelEmpty, PanelRow } from "@/components/ui/panel";
@@ -34,6 +34,7 @@ export function OverviewView({
   remittance,
   receipts,
   recurring,
+  lastReconciled,
   onAccountsChanged,
   onTransactionDeleted,
   onReceiptsChanged,
@@ -46,6 +47,8 @@ export function OverviewView({
   remittance: { cadTotalCents: number; inrTotalCents: number };
   receipts: Receipt[];
   recurring: RecurringTransaction[];
+  /** Statement date of the most recent reconciliation, any account. */
+  lastReconciled: string | null;
   onAccountsChanged: (updater: (prev: Account[]) => Account[]) => void;
   onTransactionDeleted: (id: string) => void;
   onReceiptsChanged: (updater: (prev: Receipt[]) => Receipt[]) => void;
@@ -69,6 +72,14 @@ export function OverviewView({
   // used to offer every account, which would have logged a CAD amount against
   // an Indian one.
   const cadAccounts = accounts.filter((a) => a.currency === "CAD");
+
+  const lastReconciledLabel = lastReconciled
+    ? `Last checked against a statement dated ${formatInAppTimezone(`${lastReconciled}T12:00:00Z`, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })}`
+    : null;
 
   async function askToDeleteAccount(account: Account) {
     const txnCount = await getAccountTransactionCount({ id: account.id });
@@ -280,6 +291,17 @@ export function OverviewView({
           the screen where you'd go looking for it. */}
       {accounts.length > 0 && (
         <Panel>
+          <PanelRow href="/money/reconcile">
+            <span className="flex items-center gap-3">
+              <Scale className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">Check against your bank</span>
+                <Micro className="block truncate">
+                  {lastReconciledLabel ?? "Month-end check — never done"}
+                </Micro>
+              </span>
+            </span>
+          </PanelRow>
           <PanelRow href="/settings/money" last>
             <span className="flex items-center gap-3">
               <Upload className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />

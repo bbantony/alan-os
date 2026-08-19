@@ -546,22 +546,60 @@ costs" section.
 
 ---
 
-Next session (written 2026-08-18).
+## Month-end bank reconciliation (owner-requested, 2026-08-19)
 
-**In flight: two finished rounds of work, neither committed.** `git status` shows
-the Money bug-fix round (entry 30) and this AI/recurring round (entry 31)
-together. Both are build/lint/typecheck clean and verified against the live
-database. Nothing is half-done.
+"Is there a way to reconcile all expenses and account details with my bank
+accounts at the end of every month for verification and adjust the
+discrepancies? I would love to do that." CHANGELOG.md entry 32.
 
-**Migrations already applied to production but uncommitted:** `0024_journal_vinyl.sql`
-(written before Alan redirected off Phase 6 — inert, nothing references those
-tables, and it's the schema Phase 6 will want, so don't write it again) and
-`0025_recurring_and_ai_usage.sql` (in active use).
+The problem it solves is drift: every balance here is maintained incrementally,
+so one unlogged $4 coffee makes the app wrong by $4 forever — and silently makes
+safe-to-spend, net worth and every report wrong too.
+
+- [x] Migration `0026`: `reconciliations` (statement date, what the bank said,
+      what the app thought, the gap *before* correcting, the correcting
+      transaction) plus `reconciled_at`/`reconciliation_id` on transactions so a
+      confirmed transaction never appears in a later month's list.
+- [x] `/money/reconcile` — its own route, not a sixth Money tab. Pick account,
+      statement date and closing balance; optionally drop in the statement CSV.
+- [x] With the CSV it shows **what's on the statement and not in the app** —
+      pick a category, tap Add, and watch the gap close — and flags logged
+      transactions that never appeared on the statement.
+- [x] Any remaining gap closes with **one real, dated, categorised "Balance
+      adjustment" transaction**, not a silent balance edit, so a gap that keeps
+      recurring is visible as a pattern.
+- [x] `get_reconciliation_status` tool so the assistant can answer "are my
+      numbers right?".
+- [x] Verified: 23 checks against the shipped matching/rewind/adjustment logic
+      (including the credit-card sign inversion, which is the easy thing to get
+      wrong), plus a rolled-back live-database scenario with post-statement
+      activity and an unlogged expense that ends with the app matching the bank
+      exactly.
+
+**Design notes worth not undoing:** matching is exact on amount and direction,
+±3 days on date, and **ignores bank descriptions entirely** — a false match hides
+a real discrepancy, a missed match costs a second look. The balance is rewound
+past anything dated after the statement, or a mid-month check just reports the
+last two weeks of spending as a "gap".
+
+---
+
+Next session (written 2026-08-19).
+
+**In flight: one finished round, uncommitted** — the reconciliation work above
+(entry 32). Build/lint/typecheck clean and verified against the live database.
+Migration `0026_reconciliation.sql` is already applied to production.
+
+Entries 30 and 31 (the Money bug fixes, and gallery receipts + recurring money +
+the AI framework) were committed and pushed in `9b08ce8`.
 
 **The one thing blocking everything AI:** `GEMINI_API_KEY` is still empty. No AI
 call has ever been made from this codebase — the assistant, the tool loop and
-the meter have never run against the real API. That is the only untested part of
-this round and it can't be tested without the key.
+the meter have never run against the real API, and it can't be tested without
+the key.
+
+**Also never exercised for real:** no bank CSV has been through the reconcile
+flow, and nobody has used any of the recent work on a phone.
 
 Earlier work is CHANGELOG.md entries 24-28: the app-wide redesign, the Workout
 logging rebuild, the reminder-ownership bug, the due/nudge model, the calendar +

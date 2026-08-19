@@ -1018,4 +1018,104 @@ more.
 
 ---
 
+---
+
+## Does receipt scanning need AI? (short answer: no)
+
+This comes up a lot, so here it is plainly.
+
+**The receipt feature works completely without AI.** Take or pick a photo, it
+uploads and is stored, a review screen opens showing the photo, you fill in the
+merchant, date and each item, tap Approve, and it becomes a real transaction —
+and anything on it that's still on your shopping list gets ticked off there
+automatically. None of that touches AI.
+
+**What AI adds is only the typing.** With the key set up, the app reads the
+photo first and the review screen opens with the merchant, date and every line
+item already filled in. You check it and tap Approve.
+
+So the difference is:
+
+| | Without the AI key | With it |
+|---|---|---|
+| Take/choose a photo | ✅ | ✅ |
+| Photo saved and shown to you | ✅ | ✅ |
+| Review screen | ✅ (blank, you type) | ✅ (pre-filled, you check) |
+| Becomes a transaction | ✅ | ✅ |
+| Ticks off your shopping list | ✅ | ✅ |
+
+Same for importing a bank CSV: it works fully without AI — the app guesses
+categories from merchants you've used before. AI just improves the guesses on
+merchants it's never seen.
+
+The one thing that genuinely doesn't work without the key is the **Assistant**,
+because there's nothing for it to think with.
+
+---
+
+## Checking your accounts against your bank (month-end)
+
+This is the one that keeps your numbers honest. Do it once a month, when your
+statement arrives.
+
+### Why bother
+
+Every balance in the app is built by adding up what you've logged. That's only
+right for as long as you log everything — and nobody does. One forgotten $4
+coffee and the app is quietly $4 wrong forever, and so is your safe-to-spend,
+your net worth and every report. This is the check that catches it.
+
+### Doing it
+
+1. Tap **Money → Overview → Check against your bank**.
+2. Pick the account, the **closing date** on your statement, and the **closing
+   balance** it shows.
+3. **Optional but worth it:** download that same statement as a CSV from your
+   bank and choose the file. Confirm which column is the date, which is the
+   description and which is the amount (the app guesses first), then tap
+   **Read it**.
+4. Tap **Compare**.
+
+### What you'll see
+
+Three numbers across the top: what the **bank says**, what the **app says**, and
+the **difference**. If the difference is zero, you're done — tap finish.
+
+If it isn't zero, and you gave it the statement file, the app shows you exactly
+what's wrong:
+
+- **"On the statement, not in the app"** — things you forgot to log. Pick a
+  category for each and tap **Add it**. Watch the difference shrink as you go.
+  This is usually the whole story.
+- **Your transactions**, with everything the statement confirms already ticked.
+  Anything left unticked and highlighted didn't appear on your statement —
+  normal if it happened in the last day or two, worth a look if it's older
+  (you might have logged it twice, or it never actually went through).
+
+### Closing the gap
+
+Once you've added what was missing, if there's still a difference, tap
+**Correct by $X and finish**. That adds one transaction called "Balance
+adjustment" so the app matches your bank exactly.
+
+It's a real transaction, not a hidden fudge — it shows up in your list like
+anything else. That's deliberate: if you keep needing a $30 correction every
+month, you can *see* that something regular isn't being logged. A silently
+edited balance would hide it.
+
+### Afterwards
+
+Everything you ticked is marked as confirmed and won't come up again next
+month, so each check only ever asks about new activity. Previous checks are
+listed at the bottom of the screen — a run of "Matched" is a good feeling, and
+a run of "Off by $40" is telling you something.
+
+### A note on part-months
+
+If you reconcile on the 25th against a statement that closed on the 20th, the
+app ignores everything after the 20th — it belongs to next month's statement.
+It'll tell you how many transactions it set aside.
+
+---
+
 *(Phase 6 section will be added here once its checklist is complete.)*

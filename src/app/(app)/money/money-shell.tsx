@@ -38,6 +38,7 @@ export function MoneyShell({
   remittance,
   initialReceipts,
   initialRecurring,
+  lastReconciled,
   autoOpenQuickLog = false,
 }: {
   initialAccounts: Account[];
@@ -50,6 +51,7 @@ export function MoneyShell({
   remittance: { cadTotalCents: number; inrTotalCents: number };
   initialReceipts: Receipt[];
   initialRecurring: RecurringTransaction[];
+  lastReconciled: string | null;
   /** Set by the `?new=1` link the app-wide quick-add sends here. */
   autoOpenQuickLog?: boolean;
 }) {
@@ -191,6 +193,7 @@ export function MoneyShell({
             }
             recurring={recurring}
             onRecurringChanged={setRecurring}
+            lastReconciled={lastReconciled}
           />
         )}
         {tab === "budgets" && (

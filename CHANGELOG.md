@@ -2195,3 +2195,106 @@ deleting the rule keeps the transaction, and a usage row totals correctly for th
 assistant, the tool loop and the meter have never run against the real API. That is the one
 thing standing between this and working, and it is the same owner action outstanding since
 Phase 5. Nobody has used any of this on a phone either.
+
+---
+
+## 32. Month-end reconciliation against the real bank statement
+
+Alan asked two questions and made one request. The questions — does the receipt log need AI,
+and does the scanner work without it — are answered in MANUAL.md rather than here (short
+version: no, and yes, respectively; AI only ever pre-fills a form that works fully by hand).
+The request was the real work: "is there a way to reconcile all expenses and account details
+with my bank accounts at the end of every month for verification and adjust the
+discrepancies? I would love to do that."
+
+### Why this was the right thing to build
+
+Every balance in this app is maintained *incrementally*: an account starts at whatever opening
+balance was typed in, and each logged transaction nudges it. That is correct only for as long
+as everything gets logged — and nothing real ever does. One forgotten $4 coffee and the app is
+wrong by $4 forever, with no way to notice and no way to fix it short of editing the balance by
+hand and hoping. Every number built on top of it — safe-to-spend, net worth, the reports — is
+wrong by the same amount and just as silently.
+
+A reconciliation is the periodic truth check that stops the drift compounding.
+
+### Migration 0026
+
+`reconciliations` records each check: account, statement date, what the bank said, what the app
+thought, the gap **before** any correction, the correcting transaction, and how many
+transactions were confirmed. The gap is stored rather than recomputed, because recomputing it
+after the correction would always return zero and the record would be worthless.
+
+`transactions.reconciled_at` / `reconciliation_id` mark a transaction as confirmed against a
+real statement. Confirmed transactions never appear in a later month's list — otherwise the
+list grows forever and the job becomes unbearable by March.
+
+`adjustment_txn_id` is `ON DELETE SET NULL`: deleting the correcting transaction later must not
+erase the fact that a check happened.
+
+### The flow (`/money/reconcile`)
+
+Its own route, not a sixth Money tab — this is a job with a beginning and an end, and a sixth
+cell in the segmented control is where labels stop being readable on a phone.
+
+**Step 1.** Pick the account, the statement's closing date, and its closing balance.
+Optionally drop in the statement CSV (four column pickers, pre-guessed by the existing
+`guessColumns`).
+
+**Step 2** is where the work happens. Three figures across the top — bank says / app says /
+difference — then:
+
+- **On the statement, not in the app.** The valuable list: things you never logged. Pick a
+  category, tap *Add it*, and the gap closes by that amount in front of you.
+- **Your transactions**, ticked automatically wherever the statement confirms them, so what's
+  left highlighted is the exceptions rather than the whole month.
+- A warning when logged transactions *didn't* appear on the statement — normal for something
+  recent, suspicious for something old (logged twice, or never went through).
+
+**Step 3.** If the difference is zero, finish. If it isn't, one tap posts a correction.
+
+### Three decisions worth recording
+
+**Matching is strict on money and blind to descriptions.** Amount and direction must be exactly
+equal; the date may be up to three days out (a Friday restaurant bill posts on Monday, and
+demanding an exact date would report half a real month as "missing", which trains you to ignore
+the answer). Bank descriptions — `SQ *THE GOOD FORK 604-555` — are not consulted at all: matching
+on them produces confident wrong answers, and in a reconciliation a false match hides a real
+discrepancy while a missed match only costs a second look. Each side is consumed once, so two
+identical $5 coffees on one day match two statement lines rather than both matching the first.
+
+**The correction is a real transaction, not a balance edit.** An edited balance is invisible the
+moment it's made and silently rewrites history. A dated, categorised "Balance adjustment"
+transaction shows up in the ledger, in the reports, and in next month's check — so a gap that
+keeps recurring is *visible* as a pattern rather than quietly absorbed each month.
+
+**The balance is rewound to the statement date.** Reconciling on the 25th against a statement
+that closed on the 20th must ignore the last five days, or the "gap" it reports is just recent
+spending. `appBalanceOnDate` subtracts the effect of everything dated after the statement from
+the live balance — which is the only anchor available, since balances here are incremental
+rather than recomputed.
+
+Also added: a `get_reconciliation_status` tool, so the assistant can answer "are my numbers
+right?" and "am I due a check?" from the record.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit`, `eslint` all clean; `/money/reconcile` compiles as a route.
+
+**23 checks against the real shipped logic** (compiled from `reconcile.ts` itself, not
+reimplemented): exact-date and near-date matching, the exact-date pass winning over a tolerant
+one, two identical same-day amounts consuming two statement lines, a duplicate on the statement
+with only one logged leaving exactly one missing, same-amount-opposite-direction *not* matching,
+8-days-apart not matching, the balance rewind for chequing and credit card in both directions,
+and — the fiddly one — that the correcting transaction produces a delta exactly equal to the
+gap for all four account types in both directions. A credit card's balance means the opposite of
+a chequing account's, so "the bank says more" is an expense on one and income on the other.
+
+Against the **live database**, rolled back: the table and both columns exist with RLS, a
+realistic scenario (an account with post-statement activity and a $14 unlogged coffee run) is
+rewound correctly, the gap is found, the correction makes the app match the bank **exactly**,
+confirmed transactions drop out of the next month's list, and deleting the correction keeps the
+record of the check.
+
+**Not verified:** nobody has run this against a real bank CSV. The column guessing is the same
+code the existing CSV import uses, but no real statement file has been through this path.

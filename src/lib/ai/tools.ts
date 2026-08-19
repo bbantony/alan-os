@@ -534,6 +534,45 @@ const logExpense: AiTool = {
   },
 };
 
+const reconciliationStatus: AiTool = {
+  name: "get_reconciliation_status",
+  description:
+    "When each account was last checked against a real bank statement, and whether it matched. Use for 'are my numbers right', 'am I due a check', or anything about accuracy.",
+  module: "money",
+  writes: false,
+  parameters: NO_ARGS,
+  async run(ctx) {
+    const { data } = await ctx.supabase
+      .from("reconciliations")
+      .select("statement_date, difference_cents, cleared_count, accounts(name)")
+      .eq("user_id", ctx.userId)
+      .order("statement_date", { ascending: false })
+      .limit(12);
+
+    const rows = (data as unknown as {
+      statement_date: string;
+      difference_cents: number;
+      cleared_count: number;
+      accounts: { name: string } | null;
+    }[]) ?? [];
+
+    return {
+      today: todayInAppTimezone(),
+      checks: rows.map((r) => ({
+        account: r.accounts?.name ?? "Account",
+        statement_date: r.statement_date,
+        matched: r.difference_cents === 0,
+        was_off_by: r.difference_cents === 0 ? null : formatCents(Math.abs(r.difference_cents)),
+        confirmed_transactions: r.cleared_count,
+      })),
+      note:
+        rows.length === 0
+          ? "No account has ever been checked against a statement."
+          : "A gap that keeps appearing usually means something regular isn't being logged.",
+    };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Shopping
 // ---------------------------------------------------------------------------
@@ -650,6 +689,7 @@ export const ALL_TOOLS: AiTool[] = [
   listTransactions,
   spendingByCategory,
   listRecurring,
+  reconciliationStatus,
   logExpense,
   listShopping,
   addShopping,

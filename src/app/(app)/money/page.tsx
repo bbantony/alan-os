@@ -10,6 +10,7 @@ import {
 } from "./actions";
 import { getPendingReceipts } from "./receipt-actions";
 import { getRecurringTransactions, postDueRecurringTransactions } from "./recurring-actions";
+import { getReconciliationHistory } from "./reconcile-actions";
 import { MoneyShell } from "./money-shell";
 
 export default async function MoneyPage({
@@ -27,6 +28,7 @@ export default async function MoneyPage({
   const [
     { new: isNew },
     accounts, categories, transactions, budgets, goals, debts, merchants, remittance, receipts, recurring,
+    reconciliations,
   ] = await Promise.all([
       searchParams,
       getAccounts(),
@@ -39,6 +41,7 @@ export default async function MoneyPage({
       getRemittanceSummary(),
       getPendingReceipts(),
       getRecurringTransactions(),
+      getReconciliationHistory(1),
     ]);
 
   return (
@@ -53,6 +56,7 @@ export default async function MoneyPage({
       remittance={remittance}
       initialReceipts={receipts}
       initialRecurring={recurring}
+      lastReconciled={reconciliations[0]?.statement_date ?? null}
       autoOpenQuickLog={isNew === "1"}
     />
   );
