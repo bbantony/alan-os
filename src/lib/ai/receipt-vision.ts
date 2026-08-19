@@ -40,6 +40,8 @@ export async function extractReceiptData(imageBase64: string, mimeType: string):
   if (!isAiConfigured()) return null;
 
   const result = await callGeminiJson({
+    feature: "receipt",
+    tier: "standard",
     systemPrompt: SYSTEM_PROMPT,
     imageBase64,
     imageMimeType: mimeType,

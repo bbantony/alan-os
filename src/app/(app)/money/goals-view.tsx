@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/toast";
 import { EmptyState } from "@/components/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Panel, PanelHead } from "@/components/ui/panel";
 import { DateField } from "@/components/ui/date-field";
 import { Tag } from "@/components/ui/tag";
@@ -53,38 +54,36 @@ export function GoalsView({
   const [target, setTarget] = useState("");
   const [deadline, setDeadline] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState<SavingsGoal | null>(null);
 
   async function handleCreate() {
     if (!name.trim() || !target) return;
     const trimmedName = name.trim();
     const targetCents = dollarsToCents(Number(target));
     setSaving(true);
-    await createSavingsGoal({
+    // The goal that goes on screen is the row the database actually created.
+    // This used to be a locally-invented object with a made-up id, so the
+    // first "add to goal" against a brand-new goal wrote nothing at all while
+    // cheerfully reporting success — the money reappeared as missing on the
+    // next page load.
+    const result = await createSavingsGoal({
       name: trimmedName,
       targetCents,
       deadline: deadline || null,
       icon: "PiggyBank",
     });
     setSaving(false);
+    if (result.error || !result.goal) {
+      toast.error(result.error ?? "Couldn't create that goal.");
+      return;
+    }
     setShowForm(false);
     setName("");
     setTarget("");
     setDeadline("");
     toast.success(`"${trimmedName}" goal created`);
-    onChanged((prev) => [
-      {
-        id: crypto.randomUUID(),
-        user_id: "",
-        name: trimmedName,
-        target_cents: targetCents,
-        saved_cents: 0,
-        deadline: deadline || null,
-        icon: "PiggyBank",
-        is_done: false,
-        created_at: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
+    const created = result.goal;
+    onChanged((prev) => [created, ...prev]);
   }
 
   async function handleAddToGoal() {
@@ -92,26 +91,31 @@ export function GoalsView({
     const amountCents = dollarsToCents(Number(addAmount));
     const id = addingTo.id;
     const goalName = addingTo.name;
-    onChanged((prev) =>
-      prev.map((g) =>
-        g.id === id
-          ? {
-              ...g,
-              saved_cents: g.saved_cents + amountCents,
-              is_done: g.saved_cents + amountCents >= g.target_cents,
-            }
-          : g
-      )
-    );
     setAddingTo(null);
     setAddAmount("");
+
+    const result = await addToGoal({ id, amountCents });
+    if (result.error || result.savedCents === undefined) {
+      toast.error(result.error ?? "Couldn't add that.");
+      return;
+    }
+    // Reconciled against what was really banked rather than assumed — the
+    // server is the one that knows the goal's true running total.
+    const savedCents = result.savedCents;
+    const isDone = result.isDone ?? false;
+    onChanged((prev) =>
+      prev.map((g) => (g.id === id ? { ...g, saved_cents: savedCents, is_done: isDone } : g))
+    );
     toast.success(`${formatCents(amountCents)} added to "${goalName}"`);
-    await addToGoal({ id, amountCents });
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete() {
+    if (!confirmingDelete) return;
+    const id = confirmingDelete.id;
+    setConfirmingDelete(null);
     onChanged((prev) => prev.filter((g) => g.id !== id));
     await deleteSavingsGoal({ id });
+    toast.success("Goal deleted");
   }
 
   return (
@@ -186,7 +190,7 @@ export function GoalsView({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(g.id)}
+                      onClick={() => setConfirmingDelete(g)}
                       className="tap-press text-muted-foreground/50 transition-colors hover:text-destructive"
                       aria-label={`Delete ${g.name}`}
                     >
@@ -275,6 +279,20 @@ export function GoalsView({
           </DialogContent>
         </Dialog>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmingDelete)}
+        title={`Delete "${confirmingDelete?.name ?? "this goal"}"?`}
+        description="This can't be undone."
+        detail={
+          confirmingDelete && confirmingDelete.saved_cents > 0
+            ? `${formatCents(confirmingDelete.saved_cents)} of progress will be lost.`
+            : undefined
+        }
+        confirmLabel="Delete goal"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingDelete(null)}
+      />
     </div>
   );
 }

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "@/components/ui/toast";
 import { Panel, PanelHead } from "@/components/ui/panel";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
@@ -23,15 +25,20 @@ export function BudgetsView({
   onChanged: (updater: (prev: BudgetWithProgress[]) => BudgetWithProgress[]) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState<BudgetWithProgress | null>(null);
 
   // The safe-to-spend headline moved up into the page-level vitals strip
   // (money-shell.tsx) so it stays visible on every tab. Repeating it here as
   // well would be the same number twice on one screen.
   const budgetedCategoryIds = new Set(budgets.map((b) => b.category_id));
 
-  async function handleDelete(id: string) {
+  async function handleDelete() {
+    if (!confirmingDelete) return;
+    const id = confirmingDelete.id;
+    setConfirmingDelete(null);
     onChanged((prev) => prev.filter((b) => b.id !== id));
     await deleteBudget({ id });
+    toast.success("Budget deleted");
   }
 
   return (
@@ -84,7 +91,7 @@ export function BudgetsView({
                       {close && <Tag tone="warn">Close</Tag>}
                       <button
                         type="button"
-                        onClick={() => handleDelete(b.id)}
+                        onClick={() => setConfirmingDelete(b)}
                         className="tap-press text-muted-foreground/50 transition-colors hover:text-destructive"
                         aria-label={`Delete ${b.category_name} budget`}
                       >
@@ -147,6 +154,15 @@ export function BudgetsView({
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmingDelete)}
+        title={`Delete the ${confirmingDelete?.category_name ?? ""} budget?`}
+        description="Spending already logged in that category is kept — only the limit goes."
+        confirmLabel="Delete budget"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingDelete(null)}
+      />
     </div>
   );
 }

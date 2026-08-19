@@ -1,4 +1,4 @@
-import { Palette, KeyRound, ShoppingCart, Dumbbell, CalendarClock, Wallet, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Palette, KeyRound, ShoppingCart, Dumbbell, CalendarClock, Wallet, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
 import type { CurrentProfile } from "@/lib/supabase/profile";
 import type { ModuleId } from "@/lib/permissions";
 
@@ -13,6 +13,9 @@ interface RawLink {
 
 const ACCOUNT_LINKS: RawLink[] = [
   { label: "Appearance", href: "/settings/appearance", icon: Palette },
+  // Not gated on a module: the assistant is available to every account, and
+  // this page is where what it has cost is visible.
+  { label: "AI & cost", href: "/settings/ai", icon: Sparkles },
   { label: "Password", href: "/settings/password", icon: KeyRound },
 ];
 

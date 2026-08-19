@@ -1,17 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Send, Trash2, Wallet } from "lucide-react";
+import { Pencil, Plus, Send, Trash2, Upload, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
-import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
+import { Panel, PanelHead, PanelEmpty, PanelRow } from "@/components/ui/panel";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Micro } from "@/components/ui/tag";
+import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { formatInAppTimezone } from "@/lib/time";
 import { formatCents } from "@/lib/finance/money";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/finance/types";
-import type { Account, Category, Receipt, Transaction } from "@/lib/finance/types";
-import { deleteTransaction } from "./actions";
+import type {
+  Account,
+  Category,
+  Receipt,
+  RecurringTransaction,
+  Transaction,
+} from "@/lib/finance/types";
+import { deleteAccount, deleteTransaction, getAccountTransactionCount } from "./actions";
 import { AccountForm } from "./account-form";
+import { RecurringView } from "./recurring-view";
 import { RemittanceForm } from "./remittance-form";
 import { ReceiptScanButton } from "./receipt-scan-button";
 import { ReceiptReviewDialog } from "./receipt-review-dialog";
@@ -22,29 +33,70 @@ export function OverviewView({
   categories,
   remittance,
   receipts,
+  recurring,
   onAccountsChanged,
   onTransactionDeleted,
   onReceiptsChanged,
   onTransactionsAdded,
+  onRecurringChanged,
 }: {
   accounts: Account[];
   transactions: Transaction[];
   categories: Category[];
   remittance: { cadTotalCents: number; inrTotalCents: number };
   receipts: Receipt[];
+  recurring: RecurringTransaction[];
   onAccountsChanged: (updater: (prev: Account[]) => Account[]) => void;
   onTransactionDeleted: (id: string) => void;
   onReceiptsChanged: (updater: (prev: Receipt[]) => Receipt[]) => void;
   onTransactionsAdded: (transactions: Transaction[]) => void;
+  onRecurringChanged: (updater: (prev: RecurringTransaction[]) => RecurringTransaction[]) => void;
 }) {
   const [showAccountForm, setShowAccountForm] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [showRemittanceForm, setShowRemittanceForm] = useState(false);
   const [reviewingReceipt, setReviewingReceipt] = useState<Receipt | null>(null);
+  // Both destructive actions now ask first. `deletingAccount` carries the
+  // number of transactions that would go with it — `transactions.account_id`
+  // is ON DELETE CASCADE, so deleting an account really does take its whole
+  // history, and that has to be said out loud before it happens.
+  const [confirmingTransaction, setConfirmingTransaction] = useState<Transaction | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState<{ account: Account; txnCount: number } | null>(null);
+  const [pending, setPending] = useState(false);
   const categoryById = new Map(categories.map((c) => [c.id, c]));
+  // A remittance is money leaving a Canadian account, and `logRemittance`
+  // writes the transaction in CAD — so only CAD accounts may be picked. It
+  // used to offer every account, which would have logged a CAD amount against
+  // an Indian one.
+  const cadAccounts = accounts.filter((a) => a.currency === "CAD");
 
-  async function handleDeleteTransaction(id: string) {
+  async function askToDeleteAccount(account: Account) {
+    const txnCount = await getAccountTransactionCount({ id: account.id });
+    setDeletingAccount({ account, txnCount });
+  }
+
+  async function handleDeleteAccount() {
+    if (!deletingAccount) return;
+    const { account } = deletingAccount;
+    setPending(true);
+    const result = await deleteAccount({ id: account.id });
+    setPending(false);
+    setDeletingAccount(null);
+    if (result.error) {
+      toast.error("Couldn't delete that account.");
+      return;
+    }
+    onAccountsChanged((prev) => prev.filter((a) => a.id !== account.id));
+    toast.success(`${account.name} deleted`);
+  }
+
+  async function handleDeleteTransaction() {
+    if (!confirmingTransaction) return;
+    const id = confirmingTransaction.id;
+    setConfirmingTransaction(null);
     onTransactionDeleted(id);
     await deleteTransaction({ id });
+    toast.success("Transaction deleted");
   }
 
   return (
@@ -84,12 +136,26 @@ export function OverviewView({
         )}
       </Panel>
 
-      {/* ---------------- Accounts ---------------- */}
+      {/* ---------------- Accounts ----------------
+
+          The empty state carries its own "Add account" button. It didn't
+          before, and the `+` that adds one lives inside the panel header
+          below — which only renders once an account already exists. So a new
+          account holder had no way in at all: the quick-log's account picker
+          was empty, Save stayed disabled, and Money was a locked door. Every
+          other empty state in this module (budgets, goals, debts) already
+          passed an action; this one was simply missed. */}
       {accounts.length === 0 ? (
         <EmptyState
           title="No accounts yet"
           description="Add your chequing, credit card, or cash accounts to start logging."
           icon={<Wallet className="size-8" />}
+          action={
+            <Button onClick={() => setShowAccountForm(true)}>
+              <Plus className="size-4" strokeWidth={3} />
+              New account
+            </Button>
+          }
         />
       ) : (
         <Panel>
@@ -126,17 +192,42 @@ export function OverviewView({
                       <p className="truncate text-sm font-semibold">{a.name}</p>
                       <p className="micro-sm mt-0.5 truncate text-muted-foreground">
                         {a.institution} · {ACCOUNT_TYPE_LABELS[a.type]}
+                        {a.currency !== "CAD" && ` · ${a.currency}`}
                       </p>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <p className="stat text-lg">
-                        {formatCents(a.current_balance_cents, a.currency)}
-                      </p>
-                      {a.type === "credit_card" && a.credit_limit_cents && (
-                        <p className="micro-sm mt-0.5 text-muted-foreground">
-                          of {formatCents(a.credit_limit_cents, a.currency)}
+                    <div className="flex shrink-0 items-start gap-2">
+                      <div className="text-right">
+                        <p className="stat text-lg">
+                          {formatCents(a.current_balance_cents, a.currency)}
                         </p>
-                      )}
+                        {a.type === "credit_card" && a.credit_limit_cents && (
+                          <p className="micro-sm mt-0.5 text-muted-foreground">
+                            of {formatCents(a.credit_limit_cents, a.currency)}
+                          </p>
+                        )}
+                      </div>
+                      {/* Editing an account is new — a mistyped opening
+                          balance used to be permanent. Both controls are
+                          always visible rather than appearing on hover,
+                          which on a phone means never. */}
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingAccount(a)}
+                          aria-label={`Edit ${a.name}`}
+                          className="tap-press text-muted-foreground/60 transition-colors hover:text-foreground"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => askToDeleteAccount(a)}
+                          aria-label={`Delete ${a.name}`}
+                          className="tap-press text-muted-foreground/60 transition-colors hover:text-destructive"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -176,15 +267,45 @@ export function OverviewView({
         </Panel>
       )}
 
+      {/* ---------------- Repeating ---------------- */}
+      <RecurringView
+        recurring={recurring}
+        accounts={accounts}
+        categories={categories}
+        onChanged={onRecurringChanged}
+      />
+
+      {/* Importing a bank statement is a Money job, not a Settings job — the
+          wizard itself still lives under Settings, but it was unfindable from
+          the screen where you'd go looking for it. */}
+      {accounts.length > 0 && (
+        <Panel>
+          <PanelRow href="/settings/money" last>
+            <span className="flex items-center gap-3">
+              <Upload className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold">Import from your bank</span>
+                <Micro className="block truncate">Upload a CSV export and file it all at once</Micro>
+              </span>
+            </span>
+          </PanelRow>
+        </Panel>
+      )}
+
       {/* ---------------- Remittances ---------------- */}
       <Panel>
         <PanelHead
           title="Remittances this year"
           action={
+            // Was silently inert with no accounts: the button opened a form
+            // gated on `accounts.length > 0`, so tapping it did nothing at all
+            // and said nothing about why.
             <button
               type="button"
               onClick={() => setShowRemittanceForm(true)}
-              className="micro-sm tap-press flex items-center gap-1 border-2 border-rule bg-surface px-2 py-1 transition-colors hover:bg-foreground hover:text-background"
+              disabled={cadAccounts.length === 0}
+              title={cadAccounts.length === 0 ? "Add a Canadian account first" : undefined}
+              className="micro-sm tap-press flex items-center gap-1 border-2 border-rule bg-surface px-2 py-1 transition-colors hover:bg-foreground hover:text-background disabled:pointer-events-none disabled:opacity-40"
             >
               <Send className="size-3" strokeWidth={2.5} />
               Send
@@ -258,7 +379,7 @@ export function OverviewView({
 
                   <button
                     type="button"
-                    onClick={() => handleDeleteTransaction(t.id)}
+                    onClick={() => setConfirmingTransaction(t)}
                     className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
                     aria-label="Delete transaction"
                   >
@@ -274,16 +395,59 @@ export function OverviewView({
       {showAccountForm && (
         <AccountForm
           onClose={() => setShowAccountForm(false)}
-          onCreated={(account) => {
+          onSaved={(account) => {
             onAccountsChanged((prev) => [...prev, account]);
             setShowAccountForm(false);
           }}
         />
       )}
 
-      {showRemittanceForm && accounts.length > 0 && (
+      {editingAccount && (
+        <AccountForm
+          account={editingAccount}
+          onClose={() => setEditingAccount(null)}
+          onSaved={(account) => {
+            onAccountsChanged((prev) => prev.map((a) => (a.id === account.id ? account : a)));
+            setEditingAccount(null);
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={Boolean(deletingAccount)}
+        title={`Delete ${deletingAccount?.account.name ?? "this account"}?`}
+        description="This can't be undone."
+        detail={
+          deletingAccount && deletingAccount.txnCount > 0
+            ? `${deletingAccount.txnCount} transaction${
+                deletingAccount.txnCount === 1 ? "" : "s"
+              } logged against it will be deleted too.`
+            : undefined
+        }
+        confirmLabel="Delete account"
+        pending={pending}
+        onConfirm={handleDeleteAccount}
+        onCancel={() => setDeletingAccount(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(confirmingTransaction)}
+        title="Delete this transaction?"
+        description={
+          confirmingTransaction
+            ? `${confirmingTransaction.merchant || categoryById.get(confirmingTransaction.category_id)?.name || "Transaction"} — ${formatCents(
+                confirmingTransaction.amount_cents,
+                confirmingTransaction.currency
+              )}. The account balance goes back up by the same amount.`
+            : undefined
+        }
+        onConfirm={handleDeleteTransaction}
+        onCancel={() => setConfirmingTransaction(null)}
+      />
+
+      {showRemittanceForm && cadAccounts.length > 0 && (
         <RemittanceForm
-          accounts={accounts}
+          accounts={cadAccounts}
           onClose={() => setShowRemittanceForm(false)}
           onLogged={(updatedAccount) => {
             onAccountsChanged((prev) =>

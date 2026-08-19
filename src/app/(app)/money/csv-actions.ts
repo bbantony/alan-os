@@ -145,18 +145,21 @@ export async function importCsvTransactions(input: {
 
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, type, current_balance_cents")
+    .select("id, type, currency, current_balance_cents")
     .eq("id", input.accountId)
     .eq("user_id", user.id)
     .maybeSingle();
   if (!account) return { error: "Couldn't find that account." };
 
+  // The account's own currency, not a hardcoded "CAD" — importing an Indian
+  // statement used to label every row Canadian, which then counted straight
+  // into the CAD budgets and reports at 60x its real value.
   const inserts = input.rows.map((r) => ({
     user_id: user.id,
     account_id: input.accountId,
     category_id: r.categoryId,
     amount_cents: r.amountCents,
-    currency: "CAD",
+    currency: account.currency as string,
     merchant: r.merchant,
     note: null,
     txn_date: r.txnDate,

@@ -9,6 +9,7 @@ import {
   BookImage,
   Disc3,
   ShoppingCart,
+  Sparkles,
 } from "lucide-react";
 import type { ModuleAccess, ModuleId } from "@/lib/permissions";
 
@@ -45,7 +46,13 @@ const MORE_CANDIDATES: { id: ModuleId; item: NavItem }[] = [
 ];
 
 export function getMoreLinks(moduleAccess: ModuleAccess): NavItem[] {
-  const items = MORE_CANDIDATES.filter((c) => moduleAccess[c.id]).map((c) => c.item);
+  // The assistant has no module of its own — what it can *do* is gated per
+  // tool on this same grid (lib/ai/tools.ts), so everyone gets the door and
+  // the door only opens onto what they already have.
+  const items: NavItem[] = [
+    { label: "Assistant", href: "/assistant", icon: Sparkles },
+    ...MORE_CANDIDATES.filter((c) => moduleAccess[c.id]).map((c) => c.item),
+  ];
   items.push({ label: "Settings", href: "/settings", icon: Settings });
   return items;
 }

@@ -29,6 +29,30 @@ export async function getReceipt(id: string): Promise<Receipt | null> {
   return (data as Receipt) ?? null;
 }
 
+// A viewable link to the photo itself.
+//
+// The bucket is private, so the stored path is not a URL anyone can open — it
+// has to be signed. Without this the review screen had no way to show the
+// receipt at all: the photo was uploaded, stored, and then never seen again,
+// which with no AI key configured meant typing every line in from the paper
+// receipt while the phone showed a blank form. One hour is long enough for any
+// realistic review session and short enough that a leaked link is worthless.
+export async function getReceiptPhotoUrl(input: { id: string }): Promise<string | null> {
+  const { supabase, user } = await requireUser();
+  const { data: receipt } = await supabase
+    .from("receipts")
+    .select("storage_path")
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!receipt) return null;
+
+  const { data } = await supabase.storage
+    .from("receipts")
+    .createSignedUrl(receipt.storage_path as string, 60 * 60);
+  return data?.signedUrl ?? null;
+}
+
 export async function getPendingReceipts(): Promise<Receipt[]> {
   const { supabase, user } = await requireUser();
   const { data } = await supabase
@@ -49,6 +73,13 @@ export async function uploadReceipt(formData: FormData): Promise<{ receiptId?: s
 
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "No photo was attached." };
+  // The client shrinks photos to ~1600px before sending (src/lib/images.ts),
+  // which is what keeps them under the 1 MB Server Action body limit. This is
+  // the backstop for a file that somehow arrives un-shrunk — a returned error
+  // the person can read, rather than the framework's own 413.
+  if (file.size > 4 * 1024 * 1024) {
+    return { error: "That photo is too big to send. Try taking it again." };
+  }
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);

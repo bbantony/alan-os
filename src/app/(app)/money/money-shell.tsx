@@ -7,7 +7,7 @@ import { PageHeader, HeaderFact } from "@/components/ui/page-header";
 import { Stat, StatStrip } from "@/components/ui/stat";
 import { formatCents } from "@/lib/finance/money";
 import type {
-  Account, Category, Debt, Receipt, SavingsGoal, Transaction,
+  Account, Category, Debt, Receipt, RecurringTransaction, SavingsGoal, Transaction,
 } from "@/lib/finance/types";
 import type { BudgetWithProgress, MerchantMemory } from "./actions";
 import { QuickLogForm } from "./quick-log-form";
@@ -37,6 +37,7 @@ export function MoneyShell({
   recentMerchants,
   remittance,
   initialReceipts,
+  initialRecurring,
   autoOpenQuickLog = false,
 }: {
   initialAccounts: Account[];
@@ -48,6 +49,7 @@ export function MoneyShell({
   recentMerchants: MerchantMemory[];
   remittance: { cadTotalCents: number; inrTotalCents: number };
   initialReceipts: Receipt[];
+  initialRecurring: RecurringTransaction[];
   /** Set by the `?new=1` link the app-wide quick-add sends here. */
   autoOpenQuickLog?: boolean;
 }) {
@@ -58,6 +60,7 @@ export function MoneyShell({
   const [goals, setGoals] = useState(initialGoals);
   const [debts, setDebts] = useState(initialDebts);
   const [receipts, setReceipts] = useState(initialReceipts);
+  const [recurring, setRecurring] = useState(initialRecurring);
   // Arriving from the app-wide quick-add (`?new=1`) drops you straight into
   // the amount keypad rather than on the Money page with the form still to be
   // opened. Seeded as initial state rather than set from an effect — the value
@@ -73,9 +76,22 @@ export function MoneyShell({
     const overCount = budgets.filter((b) => b.spent_cents > b.amount_cents).length;
     const safeToSpendCents = budgetedCents - spentCents;
 
-    // Net worth in CAD terms: assets minus what's owed. Credit cards and
-    // loans are stored as debt accounts, so they subtract.
-    const netCents = accounts.reduce(
+    // Net worth: assets minus what's owed. Credit cards and loans are stored
+    // as debt accounts, so they subtract.
+    //
+    // CAD accounts only. This used to add every account's balance together
+    // regardless of currency, so a ₹50,000 Indian balance counted as $50,000
+    // Canadian — an account can be CAD or INR and nothing anywhere converted
+    // between them. Non-CAD accounts are totalled separately below and shown
+    // in their own currency rather than being quietly folded in or dropped.
+    const cadAccounts = accounts.filter((a) => a.currency === "CAD");
+    const otherAccounts = accounts.filter((a) => a.currency !== "CAD");
+    const netCents = cadAccounts.reduce(
+      (sum, a) => sum + (a.is_debt ? -a.current_balance_cents : a.current_balance_cents),
+      0
+    );
+    const otherCurrency = otherAccounts[0]?.currency ?? null;
+    const otherNetCents = otherAccounts.reduce(
       (sum, a) => sum + (a.is_debt ? -a.current_balance_cents : a.current_balance_cents),
       0
     );
@@ -85,6 +101,7 @@ export function MoneyShell({
 
     return {
       budgetedCents, spentCents, overCount, safeToSpendCents, netCents,
+      otherCurrency, otherNetCents,
       goalSavedCents, goalTargetCents,
       budgetProgress: budgetedCents > 0 ? spentCents / budgetedCents : 0,
     };
@@ -143,7 +160,11 @@ export function MoneyShell({
             label="Net"
             value={formatCents(vitals.netCents)}
             tone={vitals.netCents < 0 ? "alert" : "default"}
-            sub="across all accounts"
+            sub={
+              vitals.otherCurrency
+                ? `+ ${formatCents(vitals.otherNetCents, vitals.otherCurrency)} in ${vitals.otherCurrency}`
+                : "across all accounts"
+            }
           />
         </StatStrip>
 
@@ -168,6 +189,8 @@ export function MoneyShell({
             onTransactionsAdded={(newTxns) =>
               setTransactions((prev) => [...newTxns, ...prev])
             }
+            recurring={recurring}
+            onRecurringChanged={setRecurring}
           />
         )}
         {tab === "budgets" && (

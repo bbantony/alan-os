@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ImageOff, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,9 +9,10 @@ import { Select } from "@/components/ui/select";
 import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toast";
 import { DateField } from "@/components/ui/date-field";
+import { cn } from "@/lib/utils";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import type { Account, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
-import { approveReceipt, discardReceipt } from "./receipt-actions";
+import { approveReceipt, discardReceipt, getReceiptPhotoUrl } from "./receipt-actions";
 
 export function ReceiptReviewDialog({
   receipt,
@@ -39,6 +40,22 @@ export function ReceiptReviewDialog({
   const [splitByCategory, setSplitByCategory] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoState, setPhotoState] = useState<"loading" | "ready" | "failed">("loading");
+  const [photoExpanded, setPhotoExpanded] = useState(false);
+
+  // The bucket is private, so the photo needs a signed link fetched on open.
+  useEffect(() => {
+    let cancelled = false;
+    getReceiptPhotoUrl({ id: receipt.id }).then((url) => {
+      if (cancelled) return;
+      setPhotoUrl(url);
+      setPhotoState(url ? "ready" : "failed");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [receipt.id]);
 
   const expenseCategories = categories.filter((c) => c.kind === "expense");
   const total = items.reduce((sum, li) => sum + li.price_cents, 0);
@@ -92,6 +109,47 @@ export function ReceiptReviewDialog({
         </DialogHeader>
 
         <div className="space-y-3">
+          {/* The photo itself. It was uploaded and then never shown, which
+              made hand-entry a job of holding the paper receipt in one hand
+              while typing with the other — the photo you'd just taken was
+              sitting in storage the whole time. Tap to enlarge, since a
+              thumbnail is enough to check against but not to read from. */}
+          {photoState !== "failed" && (
+            <button
+              type="button"
+              onClick={() => photoUrl && setPhotoExpanded((v) => !v)}
+              className="tap-press block w-full overflow-hidden border-2 border-rule bg-muted"
+              aria-label={photoExpanded ? "Shrink receipt photo" : "Enlarge receipt photo"}
+            >
+              {photoState === "loading" ? (
+                <span className="micro-sm flex h-24 items-center justify-center text-muted-foreground">
+                  Loading photo…
+                </span>
+              ) : (
+                // A plain <img>: this is a short-lived signed URL to a private
+                // bucket, so next/image's optimiser can't cache or re-serve it
+                // usefully, and the photo was already shrunk in the browser
+                // before upload.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photoUrl!}
+                  alt="The receipt you photographed"
+                  className={cn(
+                    "w-full bg-surface object-contain transition-[max-height] duration-150",
+                    photoExpanded ? "max-h-[60vh]" : "max-h-40"
+                  )}
+                />
+              )}
+            </button>
+          )}
+
+          {photoState === "failed" && (
+            <p className="hatch flex items-center gap-2 border-2 border-rule px-3 py-2 text-xs text-muted-foreground">
+              <ImageOff className="size-3.5 shrink-0" />
+              The photo couldn&rsquo;t be loaded — the details below still save fine.
+            </p>
+          )}
+
           {!aiFilledSomething && (
             <p className="hatch border-2 border-rule px-3 py-2 text-xs text-muted-foreground">
               This one needs to be typed in by hand — add each item below.

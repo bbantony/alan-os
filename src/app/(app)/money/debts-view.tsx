@@ -5,6 +5,8 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "@/components/ui/toast";
 import { Panel, PanelHead } from "@/components/ui/panel";
 import { Segmented } from "@/components/ui/segmented";
 import { Stat, StatStrip } from "@/components/ui/stat";
@@ -25,6 +27,7 @@ export function DebtsView({
   const [showForm, setShowForm] = useState(false);
   const [extra, setExtra] = useState("");
   const [strategy, setStrategy] = useState<"avalanche" | "snowball">("avalanche");
+  const [confirmingDelete, setConfirmingDelete] = useState<Debt | null>(null);
 
   const totalBalance = debts.reduce((sum, d) => sum + d.balance_cents, 0);
   const totalMinPayment = debts.reduce((sum, d) => sum + d.min_payment_cents, 0);
@@ -43,9 +46,13 @@ export function DebtsView({
   const result = projection ? projection[strategy] : null;
   const nameById = new Map(debts.map((d) => [d.id, d.name]));
 
-  async function handleDelete(id: string) {
+  async function handleDelete() {
+    if (!confirmingDelete) return;
+    const id = confirmingDelete.id;
+    setConfirmingDelete(null);
     onChanged((prev) => prev.filter((d) => d.id !== id));
     await deleteDebt({ id });
+    toast.success("Debt removed");
   }
 
   if (debts.length === 0) {
@@ -125,7 +132,7 @@ export function DebtsView({
               <span className="stat shrink-0 text-lg">{formatCents(d.balance_cents)}</span>
               <button
                 type="button"
-                onClick={() => handleDelete(d.id)}
+                onClick={() => setConfirmingDelete(d)}
                 className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
                 aria-label={`Delete ${d.name}`}
               >
@@ -227,6 +234,15 @@ export function DebtsView({
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmingDelete)}
+        title={`Remove ${confirmingDelete?.name ?? "this debt"}?`}
+        description="It disappears from your payoff plan. This can't be undone."
+        confirmLabel="Remove debt"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmingDelete(null)}
+      />
     </div>
   );
 }

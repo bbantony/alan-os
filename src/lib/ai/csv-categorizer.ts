@@ -23,6 +23,10 @@ chosen from exactly this list: ${categoryNames.join(", ")}. If you're not
 confident for a given transaction, use null for that entry instead of guessing.`;
 
   const result = await callGeminiJson({
+    // The cheap tier: this is mechanical sorting over many rows at once, which
+    // is exactly what the cheapest model is for. See models.ts.
+    feature: "csv-import",
+    tier: "cheap",
     systemPrompt,
     userText: JSON.stringify(rows),
     maxOutputTokens: 2048,

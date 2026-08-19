@@ -2,7 +2,8 @@ export type AccountType = "chequing" | "credit_card" | "investment" | "cash";
 export type CurrencyCode = "CAD" | "INR";
 export type CategoryKind = "expense" | "income";
 export type BudgetPeriod = "weekly" | "biweekly" | "monthly";
-export type TransactionSource = "manual" | "receipt" | "csv" | "quick_capture";
+export type TransactionSource = "manual" | "receipt" | "csv" | "quick_capture" | "recurring";
+export type RecurrenceFrequency = "weekly" | "biweekly" | "monthly" | "yearly";
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   chequing: "Chequing",
@@ -101,6 +102,30 @@ export interface Receipt {
   line_items: ReceiptLineItem[];
   status: ReceiptStatus;
   created_at: string;
+}
+
+// A template that posts real transactions on a schedule. Whether a posting is
+// income or expense comes from its category's `kind` at post time, never from
+// a flag here — one source of truth, so the two can't disagree.
+export interface RecurringTransaction {
+  id: string;
+  user_id: string;
+  account_id: string;
+  category_id: string;
+  name: string;
+  amount_cents: number;
+  currency: CurrencyCode;
+  merchant: string | null;
+  note: string | null;
+  frequency: RecurrenceFrequency;
+  anchor_date: string;
+  next_date: string;
+  last_posted_date: string | null;
+  end_date: string | null;
+  auto_post: boolean;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Debt {

@@ -480,6 +480,18 @@ setup — it all works the moment you open it.
    is used.
 4. Every account you add shows up as a tile on the Overview tab with its
    live balance.
+5. Got the opening balance wrong, or want to rename it? Tap the **pencil**
+   on the account. You can change the name, the bank and the balance. The
+   type and the currency stay locked once set — changing those would change
+   how everything you've already logged against the account is counted.
+6. The **bin** deletes an account. It asks first, and it tells you exactly
+   how many transactions will be deleted along with it — deleting an account
+   really does take its whole history with it.
+
+> If you have both a Canadian and an Indian account, the app keeps them
+> apart rather than adding dollars to rupees. Budgets, reports and the
+> **Net** figure are all Canadian dollars; anything in another currency is
+> shown next to Net in its own currency.
 
 ### Logging an expense in under 5 seconds
 
@@ -503,7 +515,9 @@ setup — it all works the moment you open it.
    anchored to the 31st resets on the 28th in February).
 3. The big number at the top, **Safe to spend**, is the total of every
    budget's remaining room added together — the one number to glance at
-   before making a purchase.
+   before making a purchase. If you've gone over on something it goes
+   negative and turns red, rather than pretending you're still in the
+   clear. It's the same number you see on Today.
 4. Each budget shows a progress bar that turns amber past 80% and red once
    you've gone over.
 
@@ -526,9 +540,17 @@ setup — it all works the moment you open it.
 3. Type an extra monthly amount you could put toward debt to see how much
    time and interest that would save, under either strategy.
 
+### Deleting things
+
+Every bin icon in Money now asks before it does anything, and tells you what
+it's about to cost — the amount of the transaction, the progress you'd lose on
+a savings goal, or the number of transactions that would go with an account.
+Nothing in Money deletes on a single tap any more.
+
 ### Sending money home (remittances)
 
-1. From the Overview tab, tap **+ Send** on the remittance card.
+1. From the Overview tab, tap **+ Send** on the remittance card. (It's greyed
+   out until you have a Canadian account to send from.)
 2. Pick which account the money left from, type the CAD amount you sent,
    then tap **Use today's rate** to auto-fill the INR amount received (or
    type it yourself if you already know the exact number from your transfer
@@ -600,14 +622,18 @@ automatic.
 
 1. Tap **More → Money → Overview** tab. Under "Receipts," tap **Scan
    receipt**.
-2. Pick a photo or take one with your camera. It uploads right away.
+2. Pick a photo or take one with your camera. Your phone takes very large
+   photos, so the app shrinks it first — that happens by itself and takes
+   about a second. If something goes wrong it now tells you instead of
+   spinning forever.
 3. If the AI key is set up, it reads the merchant, date, and each item off
    the receipt for you within a few seconds — a review screen opens
    automatically. If it's not set up (or couldn't read something), the same
    review screen opens with blank fields ready for you to type in by hand.
-4. On the review screen: fix the merchant/date if needed, edit or add line
-   items (name, price, category for each), and pick which account it came
-   out of.
+4. On the review screen: **your photo is right there at the top** — tap it
+   to make it bigger so you can read the prices off it. Fix the
+   merchant/date if needed, edit or add line items (name, price, category
+   for each), and pick which account it came out of.
 5. Choose **Save as one transaction** (the whole receipt logs as a single
    expense) or **Split by category** (creates one transaction per category
    the items span — e.g. groceries and a magazine on the same receipt each
@@ -618,8 +644,9 @@ automatic.
 
 ### Importing transactions from a CSV file
 
-1. Tap **More → Settings → Money**. Scroll to **Import from CSV** → **Choose
-   file** → pick your bank's exported .csv file.
+1. Tap **More → Money → Overview** and tap **Import from your bank** (or go
+   the long way: **More → Settings → Money**). Scroll to **Import from CSV**
+   → **Choose file** → pick your bank's exported .csv file.
 2. Confirm which columns are which — the app guesses based on the column
    headers, but double-check them. If your bank uses separate "Debit" and
    "Credit" columns instead of one signed amount column, tick that box and
@@ -868,6 +895,126 @@ browser during the build. If a screen looks broken, cramped, unreadable, or just
 wrong — say which screen and what looks off. Nothing about your data, money,
 reminders or accounts was touched, so anything wrong is cosmetic and quick to
 fix.
+
+---
+
+---
+
+## Things that repeat — rent, salary, subscriptions
+
+Anything that comes out (or goes in) on a schedule can log itself, so you never
+type it again.
+
+1. Tap **More → Money → Overview** and find the **Repeating** panel. Tap the
+   **+**.
+2. Choose **Goes out** or **Comes in**, name it ("Rent", "Salary"), put in the
+   amount, and pick how often: every week, every 2 weeks, every month, or every
+   year.
+3. Pick the category and the account, then set **Next one due** — the next date
+   it should happen, not the first time it ever happened.
+4. Optionally add who it's paid to, and a **Stop after** date if it's something
+   with an end (a 12-month loan, say).
+5. Tap **Set it up**. That's it.
+
+### How it actually posts
+
+The next time you open the app after one comes due, it logs itself — dated to
+the day it was due, not the day you happened to look. If you don't open the app
+for three weeks, all three weeks' worth appear at once, each on its own correct
+date. Your balance and your budgets update with them.
+
+Short months are handled properly: rent set to the 31st comes out on the 28th
+in February and goes back to the 31st in March. It doesn't drift.
+
+### Pausing and stopping
+
+- The **pause** button stops it posting without deleting it — useful for a
+  subscription you've frozen. Tap **play** to start it again.
+- The **bin** stops it for good. Everything it has already logged stays exactly
+  where it is — that money really did leave your account.
+
+---
+
+## The Assistant
+
+Tap **More → Assistant** (or the Assistant row at the bottom of Today).
+
+It's a box you can type anything into. It can look at anything you can see in
+the app and answer from the real numbers — and it can do a few small things for
+you.
+
+### Things worth asking it
+
+- "What did I spend on groceries this month?"
+- "How does this month compare to last month?"
+- "Write me a summary of last month's money"
+- "What's overdue?"
+- "How much have I trained in the last month?"
+- "Add a task to renew my passport on the 3rd"
+- "Add milk and eggs to the shopping list"
+- "I spent $14 at Tim Hortons"
+
+### What it will and won't do
+
+It **can** add a task, tick one off, log an expense, and add things to the
+shopping list — the small, easily-undone things.
+
+It **can't** delete anything, move money between accounts, or change your
+budgets, goals, debts or repeating payments. Those stay on the screens built for
+them, on purpose: they're decisions, not chores.
+
+It only sees what your account can see. If someone else's account doesn't have
+Money turned on, their assistant can't talk about money at all — not because
+it's told not to, but because it isn't given the ability.
+
+### It needs the key
+
+The assistant can't answer anything until the free Google AI key is added (the
+same one receipt-scanning needs — see the Phase 5 section above). Everything
+else in the app works without it.
+
+---
+
+## What the AI costs
+
+Short answer: **about $1 to $3 US a month**, and there's a hard ceiling of $5
+that nothing can spend past. On Google's free tier it's **$0**.
+
+### Where that comes from
+
+Every question you ask the assistant costs roughly **a quarter of a cent**.
+Reading a receipt costs about **a fifth of a cent**. Sorting a whole bank
+statement import costs less than a tenth of a cent.
+
+So:
+
+| What you do | How often | Cost per month |
+|---|---|---|
+| Ask the assistant 10 times a day | 300 questions | about $0.71 |
+| Ask it 30 times a day | 900 questions | about $2.13 |
+| Scan 30 receipts | 30 | about $0.06 |
+| Import your bank statement weekly | 4 | under $0.01 |
+
+Even asking it thirty times a day, every day, you're at roughly the price of a
+coffee for the whole month.
+
+### The safety net
+
+Tap **More → Settings → AI & cost**. It shows exactly what's been spent this
+month, broken down by what spent it, against the $5 ceiling. If the ceiling is
+ever reached, the AI features simply stop and everything else in the app keeps
+working normally until the 1st. It's not possible for a bug to run up a bill.
+
+### Free or paid — your call
+
+Google's free tier allows far more than you'd ever use here (over a thousand
+requests a day), so realistically you'd pay nothing. The one thing to know: on
+the free tier Google may use what you send to improve their products. On the
+paid one they don't.
+
+For a personal finance app that's worth thinking about for a second. If you'd
+rather it stay private, turning on billing costs you the $1-3 above and nothing
+more.
 
 ---
 

@@ -1812,3 +1812,386 @@ silently stops working the moment a route is named something other than its modu
 **Not verified:** nobody has logged in and used the calendar view, the agenda, or the new
 pickers on a phone. Also unverified end-to-end: the Google popup reminder, which needs a
 connected Google account and a real task to observe.
+
+---
+
+## 29. Money audit — "see if it works and how well it works", and what the receipt scanner needs
+
+Alan asked for an analysis of the Money module and of the receipt scanner specifically:
+what state they're actually in, and what it would take to make scanning work. **This entry
+is findings only — no code was changed.** (One unrelated file exists uncommitted:
+`supabase/migrations/0024_journal_vinyl.sql`, applied at the start of the session before
+Alan redirected the work away from Phase 6. Nothing references it; it is inert.)
+
+### The headline: it has never been used, and there's a structural reason
+
+Live database, read directly: **0 accounts, 0 transactions, 0 receipts, 0 savings goals,
+0 debts.** One budget (Groceries, $400/month, monthly, anchored 2026-07-22). 52 categories,
+which is just the 13 seeded defaults across the four accounts in the system.
+
+The reason is a single missing button. In `overview-view.tsx` the "add account" `+` lives
+inside `PanelHead`, and that whole `Panel` is only rendered in the `accounts.length > 0`
+branch. The zero-accounts branch renders an `EmptyState` **with no `action` prop** — even
+though `EmptyState` supports one and Budgets, Goals and Debts all pass it. So from a cold
+start there is no way to create an account, and without an account:
+
+- Quick-log's account `<Select>` is empty, `accountId` stays `""`, Save is permanently disabled.
+- Remittance's "Send" button is wired to `showRemittanceForm && accounts.length > 0` — it
+  opens nothing and reports nothing.
+- CSV import (`settings/money/csv-import.tsx`) has the same empty select and disabled button.
+
+Money is a locked door, and the data shows Alan hit it and stopped.
+
+### Bugs behind the door, in severity order
+
+1. **Fabricated ids in three optimistic-update paths.** `createAccount`, `createSavingsGoal`
+   and `createDebt` insert without `.select()`, so they return nothing; the client then
+   invents `id: crypto.randomUUID()` for its local copy. That id matches no database row.
+   Consequences: the first expense logged after adding an account fails with "Couldn't find
+   that account" until the page is reloaded; "add to goal" on a just-created goal shows the
+   money added, toasts success, and writes nothing; deleting a just-created goal or debt
+   removes it from the screen only. Budgets are the one path that got this right — it
+   refetches via `getBudgets()` rather than guessing.
+2. **Reports break for any month before January.** `monthRange()` in `actions.ts` does
+   `((month - 1) % 12) + 1`, and JavaScript's `%` returns a *negative* result for negative
+   inputs, so an offset that crosses a year boundary produces `2025-00-01` or `2025--4-01`.
+   Postgres rejects those (`date/time field value out of range`, confirmed against the live
+   database), the error is discarded by `const { data } =`, and the screen shows $0 rather
+   than a failure. Reachable **today** by tapping the month navigator back 8 times (it has
+   no lower bound), and from January 2027 it will silently empty five of the six bars in the
+   "last 6 months" trend chart.
+3. **Two different "safe to spend" numbers for the same data.** `getSafeToSpend()` (Today
+   dashboard) sums `Math.max(0, left)` per budget, so overspending is invisible; the Money
+   screen's own vitals strip computes `budgeted - spent`, which goes negative. The two
+   screens disagree whenever any budget is over.
+4. **Every delete is one tap, with no confirmation and no undo** — transactions, budgets,
+   goals, debts. The transaction delete also reverses the account balance by re-deriving
+   "was this income" from the category's current `kind`, so a category flipped between
+   expense and income after the fact reverses the wrong way.
+5. **An account can never be corrected or removed.** `deleteAccount` and
+   `updateAccountBalance` exist in `actions.ts` but are called from nowhere. A typo'd opening
+   balance is permanent. (Related latent hazard: `transactions.account_id` is
+   `ON DELETE CASCADE`, so the unused `deleteAccount` would silently take the account's whole
+   history with it — and its error message, "Can't delete — it still has transactions logged
+   against it", describes a `RESTRICT` behaviour the schema doesn't have.)
+6. **Currencies are added together.** Accounts can be CAD or INR, and every aggregate —
+   budgets, safe-to-spend, reports, net worth — sums `amount_cents` with no conversion. CSV
+   import hardcodes `currency: "CAD"` regardless of the account it imports into.
+7. **CSV import is filed under Settings**, which is not where anyone looks for "import my
+   bank statement". `getTopMerchants` also includes income rows, so a salary deposit with a
+   merchant name would top the merchant chart.
+
+### What is genuinely good (and should not be touched)
+
+- **RLS is uniform and correct** across all six finance tables — `auth.uid() = user_id` for
+  both read and write, verified in `0016_finance_core.sql`, plus the per-user-folder storage
+  policy on the receipts bucket.
+- **Budget period maths** (`period.ts`) is careful: payday-anchored weekly/biweekly, monthly
+  with real short-month clamping.
+- **Debt payoff** (`debt-payoff.ts`) is an honest month-by-month amortisation with interest
+  accrual, avalanche/snowball re-evaluated each month, rolling extra payments, and a
+  600-month cap.
+- **The quick-log keypad flow** is well built for its stated job — 64px keys, amount block
+  stays visible through the details step, merchant memory autocomplete.
+- **CSV duplicate detection** and the **receipt → shopping-list cross-check** both work
+  without AI, as designed.
+
+### The receipt scanner: four things, one of them Alan's
+
+1. **`GEMINI_API_KEY` is empty** in `.env.local` (the known outstanding owner action). Without
+   it `extractReceiptData` returns `null` by design and the review dialog opens blank for
+   manual entry — working as specified, not broken.
+2. **Photos over 1 MB never reach the AI at all.** `uploadReceipt` is a Server Action and the
+   whole image is posted to it; Next.js caps Server Action bodies at 1 MB by default
+   (`action-handler.js`: `defaultBodySizeLimit = '1 MB'`) and `next.config.ts` doesn't raise
+   it. Phone photos are 2-5 MB. Worse, `receipt-scan-button.tsx` has no `try/catch` around
+   `await uploadReceipt(...)`, so the 413 rejection escapes, `setUploading(false)` never runs,
+   and the button sits on "Reading receipt…" forever with no error. **This is the bug that
+   would make scanning look dead even after the key is added.** Fix: compress to ~1600px in
+   the browser before upload (the same helper SPEC.md Part E6 requires for journal photos),
+   and catch the failure.
+3. **The review screen never shows the photo.** `receipt-review-dialog.tsx` renders no image —
+   the file is uploaded to private storage and never read back. With AI off, that means typing
+   items in blind. Needs a signed URL from the `receipts` bucket and an `<img>` at the top of
+   the dialog.
+4. **It needs an account to exist**, same blocker as everything else.
+
+### Recommended order if this gets built
+
+Add the account button (unblocks everything) → fix the three fabricated ids → compress and
+catch on receipt upload → show the receipt photo → fix `monthRange` → reconcile the two
+safe-to-spend numbers → confirmation on destructive deletes.
+
+---
+
+## 30. "Fix all the bugs in money" — every finding from entry 29, fixed
+
+Alan read the audit above and asked for the whole list fixed. Nothing new was designed
+here; this is entry 29's findings, one by one.
+
+### The front door
+
+`overview-view.tsx`'s zero-accounts branch rendered an `EmptyState` with no `action`, while
+the `+` that adds an account lived inside the panel header that only renders when an account
+already exists. Budgets, Goals and Debts all passed an action to their empty state — Accounts
+was simply missed, and that one omission is why the module has never held a single
+transaction. It now carries a **New account** button.
+
+Three follow-on dead ends closed with it:
+
+- **Remittance "Send"** opened a form gated on `accounts.length > 0`, so with no accounts it
+  did nothing and explained nothing. Now disabled, with a reason. It also now only offers
+  **CAD accounts** — `logRemittance` writes the transaction in CAD, so offering an Indian
+  account would have logged dollars against rupees.
+- **Quick-log** showed an empty account picker and a permanently greyed-out Save. It now says
+  what to do instead.
+- **CSV import** is reachable from Money at last (a row on the Overview tab). The wizard still
+  lives under Settings; it just isn't invisible from the screen you'd look on.
+
+### Fabricated ids — the bug that made the app lie
+
+`createAccount`, `createSavingsGoal` and `createDebt` inserted without `.select()` and
+returned nothing, so each caller invented `id: crypto.randomUUID()` for the copy it put on
+screen. That id matched no row anywhere:
+
+- the first expense logged against a just-added account failed with "couldn't find that
+  account" until a page reload;
+- "add to goal" on a just-created goal showed the money added, toasted success, and wrote
+  nothing;
+- deleting a just-created goal or debt cleared it from the screen and left the row.
+
+All three now return the row the database actually wrote, and every caller uses it.
+`addToGoal` additionally returns the goal's **true** saved total, so the screen reconciles
+against what was banked rather than what it assumed — and returns an error instead of failing
+silently when the row can't be found. (`createBudget` was always fine: it refetches.)
+
+### Reports' month arithmetic
+
+`monthRange()` normalised with `((month - 1) % 12) + 1`. JavaScript's `%` keeps the sign of
+its left operand, so any offset crossing back over a year boundary produced `2025-00-01` or
+`2025--4-01`. Postgres rejects those outright, the error was discarded by `const { data } =`,
+and the screen showed **$0 spent instead of a failure** — reachable today by tapping Reports'
+month navigator back past January, and it would have emptied five of the six bars in the
+trend chart every January. Replaced with `Date.UTC`, which normalises correctly in either
+direction; verified against the live database for offsets 0 to −24 from both August 2026 and
+January 2027.
+
+### One safe-to-spend number
+
+`getSafeToSpend()` (Today) summed `Math.max(0, left)` per budget, hiding overspend; Money's
+own vitals strip computed `budgeted - spent`, which goes negative. Two screens, same data,
+different answers, and the cheerier one was on the screen you land on every morning. Today
+now uses the same arithmetic as Money.
+
+### Currencies stopped being added together
+
+Accounts can be CAD or INR and nothing converted between them, so a ₹50,000 balance counted
+as $50,000. Aggregates are Canadian-dollar figures and now say so:
+
+- budget spend, spend-by-category, the 6-month trend and top merchants all filter to
+  `currency = 'CAD'`;
+- **Net** on the Money vitals strip totals CAD accounts, with any non-CAD accounts shown
+  beside it in their own currency rather than folded in or dropped;
+- CSV import writes **the account's** currency instead of a hardcoded `"CAD"`.
+
+Verified: a ₹50,000 transaction contributes 0 to the dollar total for the same category.
+
+### Nothing is deleted on one tap any more
+
+New `components/ui/confirm-dialog.tsx` — the app's one "are you sure", in the same language as
+everything else (the two existing confirmations elsewhere in the app used the browser's grey
+`window.confirm`, which can't say what is about to be lost). Wired to transactions, budgets,
+goals, debts and accounts. Each states the actual cost: the transaction's amount and that the
+balance goes back up, a goal's progress lost, and — for an account — the **real number of
+transactions that will be deleted with it**, fetched via a new `getAccountTransactionCount`.
+
+That count matters because `transactions.account_id` is `ON DELETE CASCADE` (0016). The old
+`deleteAccount` claimed the opposite ("Can't delete — it still has transactions logged against
+it") and could never have shown that message, since the delete always succeeds. Confirmed
+against the live database: deleting an account really does take its transactions.
+
+### Accounts can be corrected
+
+`updateAccountBalance` and `deleteAccount` existed in `actions.ts` and were called from
+nowhere — a mistyped opening balance was permanent and an account could never be removed.
+`AccountForm` now does double duty as an edit form (pencil and bin on every account row,
+always visible rather than on hover, which on a phone means never). Type and currency are
+locked once set, because changing either silently reinterprets every transaction already
+logged against the account. The Add-account button also no longer submits with an empty
+institution, which used to be a silent no-op.
+
+### The receipt scanner
+
+Three fixes; the fourth thing it needs is still Alan's Gemini key.
+
+1. **Photos never reached the AI.** `uploadReceipt` is a Server Action and Next.js caps those
+   bodies at 1 MB by default (`action-handler.js`: `defaultBodySizeLimit = '1 MB'`), which
+   `next.config.ts` doesn't raise. Phone photos are 2-5 MB. New `src/lib/images.ts`
+   downscales to a 1600px longest edge and steps JPEG quality down until it's comfortably
+   under the limit, in the browser, before upload — which is also exactly what SPEC.md Part E6
+   requires for Phase 6 journal photos, hence `lib/` rather than the money module. Raising the
+   server limit instead would only have moved the cost onto shop wifi and the 1GB storage tier.
+2. **The button hung forever.** The 413 came back as a *thrown* error, not a returned one, so
+   it escaped `handleChange` entirely, `setUploading(false)` never ran, and "Reading receipt…"
+   stayed on screen with nothing explaining it. The whole handler is now wrapped, with a
+   `finally` that always clears the spinner, plus a server-side size backstop that returns a
+   readable error rather than the framework's 413.
+3. **The photo was never shown.** It was uploaded to a private bucket and never read back,
+   so hand-entry meant holding the paper receipt while typing at a blank form. New
+   `getReceiptPhotoUrl` signs a one-hour link and the review dialog shows the photo at the
+   top, tap-to-enlarge, with a quiet fallback line if the link can't be fetched.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit` and `eslint` all clean. Dev-server smoke test: `/login`
+renders 200, `/money` still redirects to `/login` for a signed-out request. Against the **live
+database**, inside a transaction that was rolled back: a real account insert returning a real
+id, an expense logged against that id, the transaction count behind the delete warning, the
+account-delete cascade, the CAD filter excluding a rupee transaction, and RLS still enabled
+with a policy on all seven finance tables. Live counts confirmed unchanged afterwards.
+
+**Not verified:** nobody has walked these screens logged in on a phone. In particular the
+receipt photo display and the compression path need a real camera photo to prove out — the
+compression runs in the browser, so it cannot be exercised from here at all.
+
+---
+
+## 31. Gallery receipts, recurring money, and the AI framework the whole app plugs into
+
+Four things asked for in one message: attach old receipts from the gallery, recurring income
+and expenses that debit themselves, "AI to be a big part of the whole app ... an assistant
+that can do anything within the app or pull up or create reports", and — the reason the
+fourth one is built the way it is — "my fear is the expense as well since there will be a lot
+of data, how much will everything cost approximately on a monthly basis".
+
+### Receipts from the gallery
+
+`capture="environment"` on a file input is a directive, not a hint: Android went straight to
+the camera and there was no route to a photo taken last month. The scan control is now two
+buttons — **Take photo** (still `capture`, for the at-the-till case) and **From gallery**
+(no `capture`, `multiple`, for the backlog case).
+
+A gallery pick accepts several at once and works through them in order, each getting its own
+review screen, and each upload is wrapped individually so one unreadable photo out of eight
+doesn't abandon the other seven. The review screen's date field was already editable, which
+is what makes an old receipt file under the day it was actually spent.
+
+### Recurring income and expenses
+
+New migration `0025`. `recurring_transactions` is a template — account, category, amount,
+frequency, anchor, `next_date`, optional `end_date` — that posts real rows into
+`transactions`, tagged with a new `recurring` source and a `recurring_id` back-reference.
+
+**Not built on RRULE**, deliberately, even though the reminders and routines side of the app
+runs on it. `FREQ=MONTHLY;BYMONTHDAY=31` *skips* every month without a 31st — correct by the
+iCalendar spec and completely wrong for rent. `src/lib/finance/recurring.ts` clamps instead,
+exactly as budgets already do for payday anchors, and computes every occurrence from the
+anchor rather than from the previous one so a February clamp doesn't drag the series to the
+28th forever. Verified against the shipped code: Jan 31 → Feb 28 → **Mar 31** → Apr 30, and
+Feb 29 → Feb 28 in a non-leap year.
+
+**Posting runs on page open, not on a cron**, from both Money and Today. Two reasons, and the
+first is the honest one: a cron would have to reach across every user's rows with no session,
+which in this codebase means another security-definer RPC taking the cron secret (0012) — real
+machinery for a job whose result nobody can see until they open the app. The second is that
+posting on open is *correct whenever it's observed*: rent due Tuesday is dated Tuesday whether
+the sweep runs Tuesday or Friday, because each occurrence posts under its own date, and
+`dueOccurrences` catches up on everything missed (capped at 24, so a stale rule can't post
+hundreds).
+
+**Idempotence** is the part that had to be right. Each occurrence is *claimed* before it is
+inserted: the update moving `next_date` forward is conditional on `next_date` still being the
+value this call read. Two page loads racing means the second one's claim matches no row and it
+stops. Proved against the live database — the second claim returns zero rows.
+
+`transactions.recurring_id` is `ON DELETE SET NULL`: stopping a recurring rule must not delete
+the spending it already posted, because that money really did leave the account. The opposite
+call from reminders in 0022, for the opposite reason — also proved.
+
+The UI is a **Repeating** panel on Money → Overview: what's coming and when, pause/resume, and
+stop (with the confirmation every destructive action in Money now gets).
+
+### The AI framework
+
+Not a feature — the layer every future AI feature plugs into. Four files:
+
+**`lib/ai/models.ts`** — the only place a model name or a price appears. Everything else asks
+for a *tier*: `cheap` (bulk sorting), `standard` (the assistant, receipts), `deep` (monthly
+reviews). Prices are stored as micro-dollars, integers, for the same reason money is integer
+cents everywhere else. Carries a dated note: `gemini-2.5-flash-lite` retires 16 Oct 2026 and
+the replacement is a three-value change in one file.
+
+**`lib/ai/usage.ts`** — the meter and the brake. Every call is written to a new `ai_usage`
+table (feature, model, tokens both ways, cost in micros). `MONTHLY_BUDGET_MICROS` is a hard
+$5 ceiling checked *inside the client* so no feature can route around it; over the line,
+features fall back to their manual paths rather than erroring.
+
+**`lib/ai/gemini.ts`** — rewritten from a single JSON call into the one door: `callGeminiJson`
+for one-shot structured extraction (receipts, CSV) and `callGeminiWithTools` for
+function-calling turns. Metering happens here, on every call, including the ones that come
+back useless — a meter that only counts successes understates the bill. Note in passing:
+tool-calling and forced-JSON output are mutually exclusive on the Gemini API, so the config
+picks one.
+
+**`lib/ai/tools.ts`** — twelve tools across Plan, Money, Shopping and Workout. The security
+model is the part worth stating plainly:
+
+- Every tool runs against the **user's own** Supabase client. Row Level Security is still
+  doing the work, so a tool cannot reach another account's data even if the model is talked
+  into asking. No service-role client appears anywhere in this path.
+- Tools are filtered by `module_access` *before the model is shown them*. An account without
+  Money access is never told a `log_expense` tool exists — prompt injection can't reach a tool
+  that wasn't in the request.
+- **Writes are narrow on purpose**: add a task, tick one off, log an expense, add to the
+  shopping list. It cannot delete anything, move money between accounts, or touch budgets,
+  goals, debts or recurring rules. Those are decisions and they stay on the screens built for
+  them.
+
+**`lib/ai/assistant.ts`** is the loop: the model calls tools, the tools answer from the
+database, and it replies from what it actually found. Three hard limits keep it cheap — four
+model calls per question, twelve messages of history re-sent, and the monthly budget beneath
+both.
+
+### The assistant, and the cost screen
+
+`/assistant` — a conversation you can ask anything, reachable from More, from Today's "jump
+to", and from Settings. It answers questions, writes summaries and reports from real figures,
+and does the small everyday things on request. The running monthly cost sits under the
+composer, always visible.
+
+`/settings/ai` shows the month's spend broken down by feature, the hard ceiling with a meter,
+and which model each kind of job uses. It exists because the honest answer to "what will this
+cost" is a number he can look at, not a reassurance.
+
+### What it costs (the arithmetic, checked against Google's published prices on 18 Aug 2026)
+
+Per assistant question: ~2 model calls, ~5,300 input + ~310 output tokens on
+gemini-2.5-flash ($0.30 / $2.50 per million) = **about a quarter of a cent**. Ten questions a
+day is **$0.71/month**; thirty a day is **$2.13**. A receipt is ~0.2 cents; thirty a month is
+6 cents. A CSV import is under a tenth of a cent. The Phase 7 morning briefing would add ~5
+cents a month, a monthly review ~2.5 cents.
+
+**Realistic total: $1-3 USD a month. The hard cap is $5.** And on Google's free tier
+(1,000-1,500 Flash requests a day, far more than this uses) it is **$0** — with the caveat
+that free-tier prompts may be used by Google to improve their products, which is a real
+consideration for a personal finance app. Paid pay-as-you-go isn't.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit`, `eslint` all clean; `/assistant` and `/settings/ai` both
+compile as routes and both sit behind the auth guard (dev-server smoke test: signed-out
+requests redirect to `/login`).
+
+Twenty date-maths checks run against the **real shipped** `recurring.ts` (Node's native type
+stripping, not a reimplementation): month-end clamping in both directions, leap years, catch-up
+after an absence, the end-date stop, and the catch-up cap — all pass.
+
+Against the **live database**, inside a rolled-back transaction: both new tables exist with RLS
+and a policy, `recurring` is a valid transaction source, a rule saves, an occurrence claims
+exactly once and a second claim gets nothing, a posted transaction carries its `recurring_id`,
+deleting the rule keeps the transaction, and a usage row totals correctly for the month.
+
+**Not verified:** no AI call has ever been made — `GEMINI_API_KEY` is still empty, so the
+assistant, the tool loop and the meter have never run against the real API. That is the one
+thing standing between this and working, and it is the same owner action outstanding since
+Phase 5. Nobody has used any of this on a phone either.

@@ -10,6 +10,10 @@ import { dollarsToCents } from "@/lib/finance/money";
 import type { Debt } from "@/lib/finance/types";
 import { createDebt } from "./actions";
 
+// The saved debt is the row the database returned, not a locally-invented one
+// with a fabricated id — deleting a just-added debt used to remove it from the
+// screen while leaving the real row untouched.
+
 export function DebtForm({ onClose, onSaved }: { onClose: () => void; onSaved: (debt: Debt) => void }) {
   const [name, setName] = useState("");
   const [balance, setBalance] = useState("");
@@ -34,22 +38,12 @@ export function DebtForm({ onClose, onSaved }: { onClose: () => void; onSaved: (
       targetPayoffDate: targetDate || null,
     });
     setSaving(false);
-    if (result.error) {
-      setError(result.error);
+    if (result.error || !result.debt) {
+      setError(result.error ?? "Something went wrong saving that debt.");
       return;
     }
     toast.success(`${name.trim()} added`);
-    onSaved({
-      id: crypto.randomUUID(),
-      user_id: "",
-      account_id: null,
-      name: name.trim(),
-      balance_cents: balanceCents,
-      interest_rate_pct: interestRatePct,
-      min_payment_cents: minPaymentCents,
-      target_payoff_date: targetDate || null,
-      created_at: new Date().toISOString(),
-    });
+    onSaved(result.debt);
   }
 
   return (

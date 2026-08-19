@@ -38,6 +38,15 @@ export async function getAccounts(): Promise<Account[]> {
   return (data as Account[]) ?? [];
 }
 
+// Every create action returns the row the database actually wrote.
+//
+// They used to return nothing, and each caller then invented its own
+// `crypto.randomUUID()` for the copy it put on screen — an id matching no row
+// anywhere. The screen looked right and every follow-up action against that
+// item silently missed: logging an expense against a just-added account failed
+// with "couldn't find that account", and adding to a just-created goal wrote
+// nothing while showing the money added. Returning the real row is the fix,
+// and it's why `.select("*").single()` is now on all three.
 export async function createAccount(input: {
   name: string;
   institution: string;
@@ -46,7 +55,7 @@ export async function createAccount(input: {
   currentBalanceCents: number;
   isDebt: boolean;
   creditLimitCents: number | null;
-}): Promise<{ error?: string }> {
+}): Promise<{ account?: Account; error?: string }> {
   const { supabase, user } = await requireUser();
   const { data: existing } = await supabase
     .from("accounts")
@@ -56,38 +65,75 @@ export async function createAccount(input: {
     .limit(1);
   const nextSort = (existing?.[0]?.sort_order ?? -1) + 1;
 
-  const { error } = await supabase.from("accounts").insert({
-    user_id: user.id,
-    name: input.name.trim(),
-    institution: input.institution.trim(),
-    type: input.type,
-    currency: input.currency,
-    current_balance_cents: input.currentBalanceCents,
-    is_debt: input.isDebt,
-    credit_limit_cents: input.creditLimitCents,
-    sort_order: nextSort,
-  });
-  if (error) return { error: error.message };
-  revalidatePath("/money");
-  return {};
-}
-
-export async function updateAccountBalance(input: { id: string; balanceCents: number }) {
-  const { supabase, user } = await requireUser();
-  await supabase
+  const { data, error } = await supabase
     .from("accounts")
-    .update({ current_balance_cents: input.balanceCents })
-    .eq("id", input.id)
-    .eq("user_id", user.id);
+    .insert({
+      user_id: user.id,
+      name: input.name.trim(),
+      institution: input.institution.trim(),
+      type: input.type,
+      currency: input.currency,
+      current_balance_cents: input.currentBalanceCents,
+      is_debt: input.isDebt,
+      credit_limit_cents: input.creditLimitCents,
+      sort_order: nextSort,
+    })
+    .select("*")
+    .single();
+  if (error || !data) return { error: error?.message ?? "Could not add that account." };
   revalidatePath("/money");
   revalidatePath("/today");
+  return { account: data as Account };
+}
+
+export async function updateAccount(input: {
+  id: string;
+  name: string;
+  institution: string;
+  balanceCents: number;
+  creditLimitCents: number | null;
+}): Promise<{ account?: Account; error?: string }> {
+  const { supabase, user } = await requireUser();
+  const { data, error } = await supabase
+    .from("accounts")
+    .update({
+      name: input.name.trim(),
+      institution: input.institution.trim(),
+      current_balance_cents: input.balanceCents,
+      credit_limit_cents: input.creditLimitCents,
+    })
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .select("*")
+    .single();
+  if (error || !data) return { error: error?.message ?? "Could not save that account." };
+  revalidatePath("/money");
+  revalidatePath("/today");
+  return { account: data as Account };
+}
+
+// How many transactions an account would take with it. `transactions.account_id`
+// is ON DELETE CASCADE (0016), so deleting an account really does delete its
+// whole history — the old code claimed the opposite ("Can't delete — it still
+// has transactions logged against it") and would never have shown that message,
+// because the delete always succeeds. The count is returned so the UI can warn
+// with the real number instead of a reassurance that isn't true.
+export async function getAccountTransactionCount(input: { id: string }): Promise<number> {
+  const { supabase, user } = await requireUser();
+  const { count } = await supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("account_id", input.id);
+  return count ?? 0;
 }
 
 export async function deleteAccount(input: { id: string }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const { error } = await supabase.from("accounts").delete().eq("id", input.id).eq("user_id", user.id);
-  if (error) return { error: "Can't delete — it still has transactions logged against it." };
+  if (error) return { error: error.message };
   revalidatePath("/money");
+  revalidatePath("/today");
   return {};
 }
 
@@ -270,11 +316,17 @@ export async function getBudgets(): Promise<BudgetWithProgress[]> {
   const results: BudgetWithProgress[] = [];
   for (const budget of rows) {
     const { start, end } = currentPeriodBounds(budget.period, budget.anchor_date, today);
+    // CAD only. Accounts can be CAD or INR and every figure on this screen is
+    // a Canadian-dollar figure, so adding an INR amount in as if it were
+    // dollars would overstate the spend by roughly 60x. An Indian account's
+    // spending isn't part of a Winnipeg grocery budget anyway — it's shown
+    // separately, in its own currency, on the accounts panel.
     const { data: spentRows } = await supabase
       .from("transactions")
       .select("amount_cents")
       .eq("user_id", user.id)
       .eq("category_id", budget.category_id)
+      .eq("currency", "CAD")
       .gte("txn_date", start)
       .lt("txn_date", end);
     const spent = (spentRows ?? []).reduce((sum, r) => sum + (r.amount_cents as number), 0);
@@ -320,13 +372,21 @@ export async function deleteBudget(input: { id: string }) {
   revalidatePath("/money");
 }
 
+// Budgeted minus spent, across every active budget — the same arithmetic the
+// Money screen's own vitals strip does.
+//
+// It used to clamp each budget at zero (`Math.max(0, left)`), which made
+// overspending invisible: blow $300 on one budget and have $300 left on
+// another and the dashboard said "$300 safe to spend" while Money said "$0".
+// Two screens, same data, different answers, and the more optimistic one was
+// on the screen you see first every morning.
 export async function getSafeToSpend(): Promise<{ remainingCents: number; overCount: number }> {
   const budgets = await getBudgets();
   let remaining = 0;
   let overCount = 0;
   for (const b of budgets) {
     const left = b.amount_cents - b.spent_cents;
-    remaining += Math.max(0, left);
+    remaining += left;
     if (left < 0) overCount += 1;
   }
   return { remainingCents: remaining, overCount };
@@ -350,21 +410,33 @@ export async function createSavingsGoal(input: {
   targetCents: number;
   deadline: string | null;
   icon: string;
-}): Promise<{ error?: string }> {
+}): Promise<{ goal?: SavingsGoal; error?: string }> {
   const { supabase, user } = await requireUser();
-  const { error } = await supabase.from("savings_goals").insert({
-    user_id: user.id,
-    name: input.name.trim(),
-    target_cents: input.targetCents,
-    deadline: input.deadline,
-    icon: input.icon,
-  });
-  if (error) return { error: error.message };
+  const { data, error } = await supabase
+    .from("savings_goals")
+    .insert({
+      user_id: user.id,
+      name: input.name.trim(),
+      target_cents: input.targetCents,
+      deadline: input.deadline,
+      icon: input.icon,
+    })
+    .select("*")
+    .single();
+  if (error || !data) return { error: error?.message ?? "Could not create that goal." };
   revalidatePath("/money");
-  return {};
+  return { goal: data as SavingsGoal };
 }
 
-export async function addToGoal(input: { id: string; amountCents: number }) {
+// Returns the goal's true saved total rather than nothing, so the screen shows
+// what was actually banked instead of what it optimistically assumed. If the
+// row can't be found the caller gets an error to show — previously this
+// returned silently, which is how "money added" could appear over a write that
+// never happened.
+export async function addToGoal(input: {
+  id: string;
+  amountCents: number;
+}): Promise<{ savedCents?: number; isDone?: boolean; error?: string }> {
   const { supabase, user } = await requireUser();
   const { data: goal } = await supabase
     .from("savings_goals")
@@ -372,14 +444,17 @@ export async function addToGoal(input: { id: string; amountCents: number }) {
     .eq("id", input.id)
     .eq("user_id", user.id)
     .maybeSingle();
-  if (!goal) return;
+  if (!goal) return { error: "Couldn't find that goal." };
   const nextSaved = Math.max(0, (goal.saved_cents as number) + input.amountCents);
-  await supabase
+  const isDone = nextSaved >= (goal.target_cents as number);
+  const { error } = await supabase
     .from("savings_goals")
-    .update({ saved_cents: nextSaved, is_done: nextSaved >= (goal.target_cents as number) })
+    .update({ saved_cents: nextSaved, is_done: isDone })
     .eq("id", input.id)
     .eq("user_id", user.id);
+  if (error) return { error: error.message };
   revalidatePath("/money");
+  return { savedCents: nextSaved, isDone };
 }
 
 export async function deleteSavingsGoal(input: { id: string }) {
@@ -406,19 +481,23 @@ export async function createDebt(input: {
   interestRatePct: number;
   minPaymentCents: number;
   targetPayoffDate: string | null;
-}): Promise<{ error?: string }> {
+}): Promise<{ debt?: Debt; error?: string }> {
   const { supabase, user } = await requireUser();
-  const { error } = await supabase.from("debts").insert({
-    user_id: user.id,
-    name: input.name.trim(),
-    balance_cents: input.balanceCents,
-    interest_rate_pct: input.interestRatePct,
-    min_payment_cents: input.minPaymentCents,
-    target_payoff_date: input.targetPayoffDate,
-  });
-  if (error) return { error: error.message };
+  const { data, error } = await supabase
+    .from("debts")
+    .insert({
+      user_id: user.id,
+      name: input.name.trim(),
+      balance_cents: input.balanceCents,
+      interest_rate_pct: input.interestRatePct,
+      min_payment_cents: input.minPaymentCents,
+      target_payoff_date: input.targetPayoffDate,
+    })
+    .select("*")
+    .single();
+  if (error || !data) return { error: error?.message ?? "Could not add that debt." };
   revalidatePath("/money");
-  return {};
+  return { debt: data as Debt };
 }
 
 export async function deleteDebt(input: { id: string }) {
@@ -530,18 +609,34 @@ export interface CategorySpend {
   totalCents: number;
 }
 
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// The month `monthOffset` months from now, as an inclusive start / exclusive
+// end pair of YYYY-MM-DD strings.
+//
+// THE BUG THIS FIXES. The old version normalised with `((month - 1) % 12) + 1`,
+// and JavaScript's `%` keeps the sign of its left operand — so any offset that
+// crossed back over a year boundary produced a *negative* month number and
+// dates like "2025-00-01" or "2025--4-01". Postgres rejects those outright
+// ("date/time field value out of range"), the query's error was discarded by
+// `const { data } =`, and the screen showed $0 spent rather than a failure.
+// Reachable by tapping Reports' month navigator back past January, and it
+// would have emptied five of the six bars in the trend chart every January.
+//
+// Date.UTC does the normalisation correctly for any offset in either
+// direction, so the arithmetic is handed to it rather than done by hand.
 function monthRange(monthOffset: number): { start: string; end: string; label: string } {
-  const now = new Date(`${todayInAppTimezone()}T00:00:00Z`);
-  const year = now.getUTCFullYear();
-  const month = now.getUTCMonth() + 1 + monthOffset;
-  const normYear = year + Math.floor((month - 1) / 12);
-  const normMonth = ((month - 1) % 12) + 1;
-  const start = `${normYear}-${String(normMonth).padStart(2, "0")}-01`;
-  const nextMonth = normMonth === 12 ? 1 : normMonth + 1;
-  const nextYear = normMonth === 12 ? normYear + 1 : normYear;
-  const end = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01`;
-  const label = new Date(`${start}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
-  return { start, end, label };
+  const [year, month] = todayInAppTimezone().split("-").map(Number);
+  const startDate = new Date(Date.UTC(year, month - 1 + monthOffset, 1));
+  const endDate = new Date(Date.UTC(year, month + monthOffset, 1));
+  return {
+    start: startDate.toISOString().slice(0, 10),
+    end: endDate.toISOString().slice(0, 10),
+    label: MONTH_LABELS[startDate.getUTCMonth()],
+  };
 }
 
 export async function getMonthlySpendByCategory(monthOffset = 0): Promise<CategorySpend[]> {
@@ -552,6 +647,7 @@ export async function getMonthlySpendByCategory(monthOffset = 0): Promise<Catego
     .from("transactions")
     .select("amount_cents, category_id, categories(name, kind)")
     .eq("user_id", user.id)
+    .eq("currency", "CAD")
     .gte("txn_date", start)
     .lt("txn_date", end);
 
@@ -580,6 +676,7 @@ export async function getMonthlyTrend(monthsBack = 6): Promise<{ label: string; 
       .from("transactions")
       .select("amount_cents, categories(kind)")
       .eq("user_id", user.id)
+      .eq("currency", "CAD")
       .gte("txn_date", start)
       .lt("txn_date", end);
     const total = (data ?? []).reduce((sum, row) => {
@@ -594,16 +691,22 @@ export async function getMonthlyTrend(monthsBack = 6): Promise<{ label: string; 
 export async function getTopMerchants(limit = 5): Promise<{ merchant: string; totalCents: number }[]> {
   const { supabase, user } = await requireUser();
   const { start, end } = monthRange(0);
+  // Expenses only — this answers "where is the money going", so a payday
+  // deposit that happens to carry an employer name doesn't belong at the top
+  // of the list (it used to sit there, dwarfing everything real).
   const { data } = await supabase
     .from("transactions")
-    .select("amount_cents, merchant")
+    .select("amount_cents, merchant, categories(kind)")
     .eq("user_id", user.id)
+    .eq("currency", "CAD")
     .not("merchant", "is", null)
     .gte("txn_date", start)
     .lt("txn_date", end);
 
   const totals = new Map<string, number>();
   for (const row of data ?? []) {
+    const kind = (row as unknown as { categories: { kind: string } | null }).categories?.kind;
+    if (kind !== "expense") continue;
     const merchant = row.merchant as string;
     totals.set(merchant, (totals.get(merchant) ?? 0) + (row.amount_cents as number));
   }

@@ -241,13 +241,23 @@ export function QuickLogForm({
 
             <div>
               <label className="micro-sm mb-1.5 block text-muted-foreground">Account</label>
-              <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </Select>
+              {accounts.length === 0 ? (
+                // Says why Save is greyed out. Before, the picker was simply
+                // empty and the button dead, with nothing explaining either.
+                <p className="hatch border-2 border-rule px-3 py-2 text-xs text-muted-foreground">
+                  You need an account first — close this and tap{" "}
+                  <span className="font-semibold">New account</span> on the Overview tab.
+                </p>
+              ) : (
+                <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.currency !== "CAD" ? ` (${a.currency})` : ""}
+                    </option>
+                  ))}
+                </Select>
+              )}
             </div>
 
             <div>

@@ -6,6 +6,7 @@ import {
   BookImage,
   Disc3,
   Settings,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -62,6 +63,16 @@ export function JumpTo({ moduleAccess }: { moduleAccess: ModuleAccess }) {
         );
       })}
 
+      <PanelRow href="/assistant">
+        <span className="flex items-center gap-3">
+          <Sparkles className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold">Assistant</span>
+            <Micro className="block truncate">Ask anything, or tell it to do something</Micro>
+          </span>
+        </span>
+      </PanelRow>
+
       <PanelRow href="/settings" last>
         <span className="flex items-center gap-3">
           <Settings className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />
@@ -74,8 +85,8 @@ export function JumpTo({ moduleAccess }: { moduleAccess: ModuleAccess }) {
 
       <p className="hatch border-t-2 border-rule px-3 py-2.5">
         <Micro>
-          Coming later — journal &amp; vinyl (phase 6) · ai briefing, weather &amp;
-          news (phase 7)
+          Coming later — journal &amp; vinyl (phase 6) · morning briefing, weather
+          &amp; news (phase 7)
         </Micro>
       </p>
     </Panel>

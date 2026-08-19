@@ -3,6 +3,7 @@ import { getTasks } from "@/app/(app)/tasks/actions";
 import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
 import { getWorkoutDashboardSummary } from "@/app/(app)/workout/actions";
 import { getFinanceDashboardSummary } from "@/app/(app)/money/actions";
+import { postDueRecurringTransactions } from "@/app/(app)/money/recurring-actions";
 import {
   getCalendarDashboardSummary,
   getTodayFocus,
@@ -55,6 +56,12 @@ const WEEKDAYS = [
 export default async function TodayPage() {
   const profile = await getCurrentProfile();
   const access = profile?.moduleAccess ?? NO_MODULES_ACCESS;
+
+  // Repeating money (rent, salary, subscriptions) posts itself here too, not
+  // only on the Money screen — otherwise this dashboard's safe-to-spend would
+  // still be showing last month's picture until Money happened to be opened.
+  // Idempotent, so both pages doing it is harmless.
+  if (access.money) await postDueRecurringTransactions();
 
   const [
     tasks,

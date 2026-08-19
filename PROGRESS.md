@@ -456,13 +456,116 @@ See CHANGELOG.md entries 27 and 28.
 
 ---
 
-Next session (written 2026-08-18, everything below is deployed and live).
+## Money audit + bug-fix round (owner-requested, 2026-08-18)
 
-**Nothing is in flight.** Working tree clean, master pushed, all migrations
-applied to production. Recent work is CHANGELOG.md entries 24-28: the app-wide
-redesign, the Workout logging rebuild, the reminder-ownership bug, the
-due/nudge model, the calendar + clock pickers, and the Tasks/Calendar merge
-into `/plan`.
+Alan asked for an honest assessment of Money and of the receipt scanner. The
+audit is CHANGELOG.md entry 29; the fixes are entry 30.
+
+**The finding that mattered:** Money had never held a single transaction — 0
+accounts, 0 transactions, 0 receipts, 0 goals, 0 debts, 1 budget — because the
+"add account" button only existed once you already had an account. Everything
+downstream (quick-log, remittances, CSV import, receipts) needs an account, so
+the whole module was a locked door.
+
+- [x] Front door opened: **New account** on the empty state; accounts can now
+      be edited and deleted (both server actions existed and were called from
+      nowhere); quick-log, remittances and CSV import all say why they're
+      unavailable instead of silently doing nothing.
+- [x] **Fabricated ids fixed.** `createAccount`/`createSavingsGoal`/`createDebt`
+      returned nothing, so callers invented a `crypto.randomUUID()` that matched
+      no row — the first action against anything just created either failed or
+      silently wrote nothing while reporting success. All three return the real
+      row now.
+- [x] **Reports' month arithmetic fixed.** A negative-modulo bug produced
+      `2025-00-01` for any month before January; Postgres rejected it, the error
+      was swallowed, and the screen showed $0 rather than a failure.
+- [x] **One safe-to-spend number.** Today and Money disagreed whenever a budget
+      was over.
+- [x] **Currencies no longer summed together** (CAD and INR were added as if
+      equal); every aggregate is CAD, non-CAD accounts shown separately.
+- [x] **Confirmation before every destructive delete**, via a new shared
+      `ConfirmDialog` — including the true count of transactions an account
+      delete would cascade.
+- [x] **Receipt scanner: three of its four blockers cleared.** Photos are now
+      compressed in the browser (they exceeded Next's 1MB Server Action limit
+      and failed every time), the failure can no longer hang the button
+      forever, and the review screen finally shows the photo. The fourth is
+      still the `GEMINI_API_KEY` owner action.
+- [x] Verified: build/typecheck/lint clean, dev-server smoke test, and a
+      rolled-back live-database round trip covering the real account id, the
+      cascade, the CAD filter, the month ranges and RLS.
+
+**Not verified:** nobody has used any of it logged in on a phone. The receipt
+compression path in particular runs in the browser and needs a real camera
+photo to prove out.
+
+---
+
+## Gallery receipts, recurring money, and the AI layer (owner-requested, 2026-08-18)
+
+Asked for in one message, built in one round. CHANGELOG.md entry 31.
+
+- [x] **Receipts can come from the gallery**, not only the camera — `capture` is
+      a directive, not a hint, so Android had no route to an old photo at all.
+      Several at once, each with its own review screen, each upload isolated so
+      one bad photo doesn't abandon the batch.
+- [x] **Recurring income and expenses** (migration `0025`): rent, salary,
+      subscriptions post themselves, dated to the day they were due, catching
+      up on anything missed while the app was closed. Deliberately *not* built
+      on RRULE — `BYMONTHDAY=31` skips February, which is right for calendars
+      and wrong for rent; `src/lib/finance/recurring.ts` clamps instead.
+      Posting is claim-then-insert, so two page loads can't double-post.
+- [x] **The AI framework** — the layer every future AI feature plugs into:
+      a model registry with cheap/standard/deep tiers and prices in one file
+      (`lib/ai/models.ts`), a usage ledger and hard $5 monthly ceiling
+      (`lib/ai/usage.ts` + `ai_usage` table), one door to the model with
+      metering built in (`lib/ai/gemini.ts`), and twelve tools across Plan,
+      Money, Shopping and Workout (`lib/ai/tools.ts`).
+- [x] **The assistant** at `/assistant` — asks and answers from real data,
+      writes reports, and can add a task, tick one off, log an expense or add
+      to the shopping list. It cannot delete anything or change budgets, goals,
+      debts or recurring rules.
+- [x] **`/settings/ai`** — what the AI has cost this month, by feature, against
+      the ceiling. Built because "my fear is the expense" deserves a number,
+      not a reassurance.
+- [x] Verified: build/typecheck/lint clean; 20 date-maths checks against the
+      real shipped `recurring.ts`; a rolled-back live-database round trip
+      covering both new tables, RLS, the claim, the `recurring` source, the
+      keep-the-money-on-delete rule and the usage ledger.
+
+**Security note worth not undoing:** every AI tool runs against the *user's own*
+Supabase client, so RLS is what stops the assistant reaching another account's
+data — not a prompt instruction. Tools are also filtered by `module_access`
+before the model is shown them. No service-role client appears anywhere in the
+AI path, and none should.
+
+**Cost, answered:** ~$1-3 USD/month realistic, $5 hard cap, $0 on Google's free
+tier (with the caveat that free-tier prompts may be used by Google for training,
+which paid pay-as-you-go isn't). Full arithmetic in MANUAL.md's "What the AI
+costs" section.
+
+---
+
+Next session (written 2026-08-18).
+
+**In flight: two finished rounds of work, neither committed.** `git status` shows
+the Money bug-fix round (entry 30) and this AI/recurring round (entry 31)
+together. Both are build/lint/typecheck clean and verified against the live
+database. Nothing is half-done.
+
+**Migrations already applied to production but uncommitted:** `0024_journal_vinyl.sql`
+(written before Alan redirected off Phase 6 — inert, nothing references those
+tables, and it's the schema Phase 6 will want, so don't write it again) and
+`0025_recurring_and_ai_usage.sql` (in active use).
+
+**The one thing blocking everything AI:** `GEMINI_API_KEY` is still empty. No AI
+call has ever been made from this codebase — the assistant, the tool loop and
+the meter have never run against the real API. That is the only untested part of
+this round and it can't be tested without the key.
+
+Earlier work is CHANGELOG.md entries 24-28: the app-wide redesign, the Workout
+logging rebuild, the reminder-ownership bug, the due/nudge model, the calendar +
+clock pickers, and the Tasks/Calendar merge into `/plan`.
 
 **Owner actions outstanding:**
 - **Gemini API key** (Phase 5). Free from Google AI Studio, pasted into Vercel
