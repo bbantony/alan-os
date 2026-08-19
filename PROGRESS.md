@@ -69,8 +69,11 @@ See `SPEC.md` for the full specification.
 - [x] Bonus: wired the real crew push notification for workout PRs that
       Phase 2 deferred (LATER.md) — now sends to the rest of the crew's
       devices, not just an in-app celebration
-- [ ] **Owner action**: create Google OAuth credentials (Google Cloud
-      Console) and paste into Vercel env vars — see MANUAL.md for exact steps
+- [x] **Owner action, done 2026-08-18**: Google OAuth credentials created and
+      pasted into Vercel — *and* the Google Calendar API itself enabled for the
+      Cloud project, which is a separate switch and was the reason sync kept
+      failing with a 403 long after the credentials existed. Google Calendar
+      sync is now live and confirmed working.
 - [x] **Owner action, done 2026-08-12**: cron-job.org account created,
       pointed at `/api/cron/reminders` with the bearer secret, pinging every
       1-5 minutes. Verified live: a real reminder fired on its own with no
@@ -377,9 +380,9 @@ diagnosis.
       Settings page shows a failure instead of a bare "Connected", and a new
       **"Sync now"** button retries without disconnecting. See CHANGELOG.md
       entry 22.
-- [ ] **Owner action, small**: open Settings → Calendar and tap **Sync now**.
-      The fix deployed but nobody has confirmed the sync actually succeeds —
-      it either works, or it finally shows the real error.
+- [x] **Done 2026-08-18**: Sync now surfaced the real error (Calendar API not
+      enabled), Alan enabled it, and sync succeeded. The whole point of entry
+      22's error-surfacing work — it turned a silent failure into a named one.
 
 ---
 
@@ -453,18 +456,38 @@ See CHANGELOG.md entries 27 and 28.
 
 ---
 
-Next session: the app-wide redesign above is complete but **not yet committed
-or deployed** — it lives as uncommitted working-tree changes (95 files). The
-first thing to do is either deploy it or act on the owner's feedback after he
-has walked the screens.
+Next session (written 2026-08-18, everything below is deployed and live).
 
-Owner actions outstanding: tap **Sync now** on Settings → Calendar to confirm
-Google Calendar sync works (Part 8 above), and the optional Gemini API key
-(Phase 5, upgrades receipt scanning/CSV categorization from manual to
-automatic, not blocking).
+**Nothing is in flight.** Working tree clean, master pushed, all migrations
+applied to production. Recent work is CHANGELOG.md entries 24-28: the app-wide
+redesign, the Workout logging rebuild, the reminder-ownership bug, the
+due/nudge model, the calendar + clock pickers, and the Tasks/Calendar merge
+into `/plan`.
 
-After that, the natural next step is "Read SPEC.md. Phase 5 is complete and
-deployed. Execute Phase 6 only" (Journal & Vinyl) — Phase 6 doesn't depend on
-either outstanding owner action — unless the owner has a new, more pressing
-request instead, which should take priority the same way every prior
-session's detour did.
+**Owner actions outstanding:**
+- **Gemini API key** (Phase 5). Free from Google AI Studio, pasted into Vercel
+  and `.env.local` as `GEMINI_API_KEY`. Currently blocks two things: receipt
+  scanning / CSV categorisation falling back to manual (Phase 5, by design),
+  and *everything* in Phase 7. Alan has said his real goal is typing a
+  sentence and having it become a task with a date and a reminder — that is
+  Phase 7 quick-capture and it cannot be built without this key.
+- **Onboard the 3 friends** to Workout (Phase 2) — send them the invite link
+  from Settings → Admin.
+
+**Not verified by any session so far:** nobody has walked the redesigned
+screens logged in on a phone. The redesign, the new Workout flow (full-screen
+exercise picker, one-at-a-time session), the calendar/clock pickers and the
+`/plan` views were all built, compiled, and checked against the live database
+where relevant — but never actually used. Ask Alan for feedback rather than
+assuming they're right.
+
+**Two cosmetic loose ends Alan has seen and chosen to leave** (do not "fix"
+unprompted): the app icon is still British Racing Green, from the palette
+retired in the redesign; and `components/nav/wordmark.tsx` shows a
+circle/square/triangle while the home-screen icon is the chevron, so the app
+carries two marks. He was shown four options and said keep the current logo.
+
+**The natural next build** is Phase 6 (Journal & Vinyl: photo-a-day + gallery,
+vinyl log with iTunes art, `/frame` wall display) — it depends on neither
+owner action. Phase 7 is the one Alan actually wants, and needs the Gemini key
+first. As always, a new request from Alan takes priority over both.
