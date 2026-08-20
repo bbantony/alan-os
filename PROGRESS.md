@@ -622,10 +622,55 @@ survives a write and a read; it can't prove the browser hands it back.
 
 ---
 
+## Interconnecting the modules — Round 1 of 3 (owner-requested, 2026-08-19)
+
+"Super innovative ways to interconnect these different sections", planned in plan
+mode with options. CHANGELOG.md entry 34.
+
+**Alan's choices:** the Life Ledger + weekly patterns first; then bills before
+they bite, goals that become habits, receipt does everything; Journal and Vinyl
+**removed entirely**; AI boldness = **notice and suggest**; and **all eight**
+Settings groups plus a real timezone.
+
+### Done in Round 1
+- [x] **Journal and Vinyl stripped out** — routes, `ModulePlaceholder`, both
+      module ids, nav, jump-to, the "coming later" line. Migration 0024's empty
+      tables are **deliberately left in the database** ("for now"); nothing
+      queries them. Don't rebuild that schema, and don't re-add the modules
+      without asking.
+- [x] **Migration 0028**: `profiles.preferences` jsonb, `shopping_purchases`
+      (the purchase history that never existed), `insights` (cached weekly
+      patterns, unique per week).
+- [x] **`src/lib/preferences.ts`** — every former hardcoded constant, read only
+      through `resolvePreferences`, which defaults *and clamps*.
+- [x] **Timezone is real.** The four functions that hardcoded Winnipeg take one
+      now. Rule: recurrences anchor to the profile's timezone, not the device's.
+- [x] **Purchase history recorded** by both `finishTrip` and `approveReceipt`
+      (the latter with price and merchant, from line items it already had).
+- [x] **`src/lib/ledger.ts` + `/timeline`** — one timeline across money,
+      training, tasks, routines, shopping and reconciliations.
+- [x] **Weekly patterns** — one cached model call a week (~2-3 cents/month) with
+      an optional one-tap suggestion. Suggest-only is enforced structurally: an
+      insight stores an *intent*; `runSuggestedAction` is the only executor, only
+      from a tap, only for tools the account already has.
+
+### Still to do
+- **Round 2 — Settings**, all eight groups: `/settings/account` (incl. the
+  avatar upload `profiles.avatar_url` has never had a UI for),
+  `/settings/notifications`, `/settings/today`, `/settings/plan`,
+  `/settings/data` (export/wipe), plus extending money/shopping/ai. The
+  preferences plumbing is done; these pages are the UI on top of it.
+- **Round 3** — bills before they bite, goals that become habits, and the price
+  book (`shopping_purchases` now has the data it needs).
+
+The full plan is at `.claude/plans/effervescent-yawning-waffle.md`.
+
+---
+
 Next session (written 2026-08-19).
 
-**In flight: one finished round, uncommitted** — the Workout rebuild above
-(entry 33). The reconciliation work (entry 32) was committed in `fc5ef35`. Build/lint/typecheck clean and verified against the live database.
+**In flight: one finished round, uncommitted** — interconnection Round 1 above
+(entry 34). The Workout rebuild (entry 33) was committed in `30ecf69`. The reconciliation work (entry 32) was committed in `fc5ef35`. Build/lint/typecheck clean and verified against the live database.
 Migration `0026_reconciliation.sql` is already applied to production.
 
 Entries 30 and 31 (the Money bug fixes, and gallery receipts + recurring money +

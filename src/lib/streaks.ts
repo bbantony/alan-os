@@ -60,10 +60,12 @@ export function computeStreak(completedDates: string[], today: string): StreakRe
 }
 
 // Monday on/before the given date (YYYY-MM-DD).
-export function startOfWeek(dateStr: string): string {
+export function startOfWeek(dateStr: string, weekStart: "monday" | "sunday" = "monday"): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
   const day = d.getUTCDay(); // 0=Sun..6=Sat
-  const diff = day === 0 ? 6 : day - 1;
+  // Monday was hardcoded. It's a preference now (lib/preferences.ts), with
+  // Monday still the default so no existing week boundary moved.
+  const diff = weekStart === "sunday" ? day : day === 0 ? 6 : day - 1;
   d.setUTCDate(d.getUTCDate() - diff);
   return d.toISOString().slice(0, 10);
 }

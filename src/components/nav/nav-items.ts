@@ -6,10 +6,9 @@ import {
   Dumbbell,
   Menu,
   Settings,
-  BookImage,
-  Disc3,
   ShoppingCart,
   Sparkles,
+  Activity,
 } from "lucide-react";
 import type { ModuleAccess, ModuleId } from "@/lib/permissions";
 
@@ -40,19 +39,18 @@ export function getNavItems(moduleAccess: ModuleAccess): NavItem[] {
   return items;
 }
 
-const MORE_CANDIDATES: { id: ModuleId; item: NavItem }[] = [
-  { id: "journal", item: { label: "Journal", href: "/journal", icon: BookImage } },
-  { id: "vinyl", item: { label: "Vinyl", href: "/vinyl", icon: Disc3 } },
-];
-
-export function getMoreLinks(moduleAccess: ModuleAccess): NavItem[] {
-  // The assistant has no module of its own — what it can *do* is gated per
-  // tool on this same grid (lib/ai/tools.ts), so everyone gets the door and
-  // the door only opens onto what they already have.
-  const items: NavItem[] = [
+/**
+ * What sits behind "More".
+ *
+ * Takes no module access any more: Journal and Vinyl were the only gated
+ * entries here and both are gone. The Assistant has no module of its own —
+ * what it can *do* is gated per tool on the same grid (lib/ai/tools.ts), so
+ * everyone gets the door and the door only opens onto what they already have.
+ */
+export function getMoreLinks(): NavItem[] {
+  return [
+    { label: "Timeline", href: "/timeline", icon: Activity },
     { label: "Assistant", href: "/assistant", icon: Sparkles },
-    ...MORE_CANDIDATES.filter((c) => moduleAccess[c.id]).map((c) => c.item),
+    { label: "Settings", href: "/settings", icon: Settings },
   ];
-  items.push({ label: "Settings", href: "/settings", icon: Settings });
-  return items;
 }

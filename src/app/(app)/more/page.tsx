@@ -1,15 +1,14 @@
 import { getMoreLinks } from "@/components/nav/nav-items";
-import { getCurrentProfile } from "@/lib/supabase/profile";
-import { NO_MODULES_ACCESS } from "@/lib/permissions";
 import { PageHeader } from "@/components/ui/page-header";
 import { Panel, PanelRow } from "@/components/ui/panel";
-import { Micro } from "@/components/ui/tag";
 
 // Phone-only overflow menu — the desktop rail lists these directly, so nobody
 // on a wide screen ever lands here.
-export default async function MorePage() {
-  const profile = await getCurrentProfile();
-  const links = getMoreLinks(profile?.moduleAccess ?? NO_MODULES_ACCESS);
+//
+// It no longer needs the profile: Journal and Vinyl were the only entries here
+// that were gated on module access, and both are gone.
+export default function MorePage() {
+  const links = getMoreLinks();
 
   return (
     <div>
@@ -29,10 +28,6 @@ export default async function MorePage() {
             );
           })}
         </Panel>
-
-        <p className="mt-4 px-1">
-          <Micro>Journal &amp; vinyl arrive in phase 6</Micro>
-        </p>
       </div>
     </div>
   );

@@ -1,21 +1,30 @@
-// Every timestamp is stored in the database as UTC and only ever converted
-// to America/Winnipeg at the point of display — never stored pre-converted.
-
+// Every timestamp is stored in the database as UTC and only ever converted to
+// the reader's timezone at the point of display — never stored pre-converted.
+//
+// TIMEZONE, HONESTLY. `profiles.timezone` has existed since migration 0001 and
+// was never read: every function here hardcoded America/Winnipeg. Alan travels,
+// so it's real now — each function takes a timezone, defaulting to the constant
+// so that any caller not yet threading it through keeps its old behaviour
+// exactly.
+//
+// THE RULE FOR RECURRENCES: they are anchored to the *profile's* timezone, not
+// the device's. "Daily at 9am" means 9am where you say you live, so flying to
+// India doesn't drag every reminder five and a half hours. Changing the setting
+// moves future occurrences only — nothing already stamped is rewritten.
 export const APP_TIMEZONE = "America/Winnipeg";
 
 export function formatInAppTimezone(
   value: string | Date,
-  options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" }
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" },
+  timeZone: string = APP_TIMEZONE
 ): string {
   const date = typeof value === "string" ? new Date(value) : value;
-  return new Intl.DateTimeFormat("en-CA", { ...options, timeZone: APP_TIMEZONE }).format(
-    date
-  );
+  return new Intl.DateTimeFormat("en-CA", { ...options, timeZone }).format(date);
 }
 
-export function todayInAppTimezone(): string {
+export function todayInAppTimezone(timeZone: string = APP_TIMEZONE): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: APP_TIMEZONE,
+    timeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -33,10 +42,24 @@ export function addDaysToDateString(dateStr: string, days: number): string {
 
 const WEEKEND_DAYS = new Set(["Sat", "Sun"]);
 
-// Work tasks collapse before 8am/after 6pm and on weekends, America/Winnipeg time.
-export function isOutsideWorkHours(date: Date = new Date()): boolean {
+export interface WorkHours {
+  start: number;
+  end: number;
+  weekendsOff: boolean;
+}
+
+const DEFAULT_WORK_HOURS: WorkHours = { start: 8, end: 18, weekendsOff: true };
+
+// Work tasks collapse outside working hours. The window was fixed at 8am-6pm
+// weekdays; it now comes from preferences (lib/preferences.ts), with the old
+// values as the default so nothing moved for anyone who never changes it.
+export function isOutsideWorkHours(
+  date: Date = new Date(),
+  hours: WorkHours = DEFAULT_WORK_HOURS,
+  timeZone: string = APP_TIMEZONE
+): boolean {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: APP_TIMEZONE,
+    timeZone,
     hour: "numeric",
     hour12: false,
     weekday: "short",
@@ -46,18 +69,33 @@ export function isOutsideWorkHours(date: Date = new Date()): boolean {
   const hour = rawHour === 24 ? 0 : rawHour;
   const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
 
-  return WEEKEND_DAYS.has(weekday) || hour < 8 || hour >= 18;
+  if (hours.weekendsOff && WEEKEND_DAYS.has(weekday)) return true;
+  return hour < hours.start || hour >= hours.end;
 }
 
-// The Today dashboard's day-planner ritual switches to "plan tomorrow" mode
-// after 8pm America/Winnipeg (SPEC.md Part E1).
-export function isEveningPlanningTime(date: Date = new Date()): boolean {
+// The Today dashboard's day-planner ritual switches to "plan tomorrow" mode in
+// the evening (SPEC.md Part E1). The hour was fixed at 8pm and is now a setting.
+export function isEveningPlanningTime(
+  date: Date = new Date(),
+  eveningHour = 20,
+  timeZone: string = APP_TIMEZONE
+): boolean {
   const hour = Number(
-    new Intl.DateTimeFormat("en-US", { timeZone: APP_TIMEZONE, hour: "numeric", hour12: false }).formatToParts(
+    new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hour12: false }).formatToParts(
       date
     ).find((p) => p.type === "hour")?.value ?? "0"
   );
-  return (hour === 24 ? 0 : hour) >= 20;
+  return (hour === 24 ? 0 : hour) >= eveningHour;
+}
+
+/** The hour of the day, in a given timezone — used by the quiet-hours check. */
+export function hourInTimezone(date: Date = new Date(), timeZone: string = APP_TIMEZONE): number {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", hour12: false }).formatToParts(
+      date
+    ).find((p) => p.type === "hour")?.value ?? "0"
+  );
+  return hour === 24 ? 0 : hour;
 }
 
 export interface WallClockParts {

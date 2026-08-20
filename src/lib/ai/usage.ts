@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
+import { resolvePreferences } from "@/lib/preferences";
 import { costMicros, formatMicros, type ModelTier } from "./models";
 
 // The meter, and the brake.
@@ -11,15 +12,31 @@ import { costMicros, formatMicros, type ModelTier } from "./models";
 // hard stop that cannot be exceeded even if something goes wrong in a loop.
 
 /**
- * The monthly ceiling, in micro-dollars. $5 USD.
+ * The default monthly ceiling, in micro-dollars. $5 USD.
  *
- * Chosen to be roughly ten times a realistic month (see MANUAL.md's cost
- * section) so it never gets in the way of normal use, while making a runaway
- * bug cost the price of a coffee rather than the price of a phone. Every AI
- * feature checks this before it calls anything; over the line, features fall
- * back to their manual paths rather than failing.
+ * Roughly ten times a realistic month (see MANUAL.md's cost section), so it
+ * never gets in the way of normal use while making a runaway bug cost the price
+ * of a coffee rather than the price of a phone. Every AI feature checks the
+ * ceiling before calling anything; over the line, features fall back to their
+ * manual paths rather than failing.
+ *
+ * This is now only the default — the live value comes from the account's
+ * preferences (Settings → AI & cost), resolved per request below.
  */
 export const MONTHLY_BUDGET_MICROS = 5_000_000;
+
+/** The account's own ceiling, falling back to the default. */
+async function budgetFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("preferences")
+    .eq("id", userId)
+    .maybeSingle();
+  return resolvePreferences(data?.preferences).aiMonthlyBudgetMicros;
+}
 
 export interface UsageSummary {
   spentMicros: number;
@@ -52,22 +69,25 @@ export async function getUsageSummary(): Promise<UsageSummary> {
   };
   if (!user) return empty;
 
-  const { data } = await supabase
-    .from("ai_usage")
-    .select("cost_micros")
-    .eq("user_id", user.id)
-    .gte("created_at", monthStartIso());
+  const [{ data }, budgetMicros] = await Promise.all([
+    supabase
+      .from("ai_usage")
+      .select("cost_micros")
+      .eq("user_id", user.id)
+      .gte("created_at", monthStartIso()),
+    budgetFor(supabase, user.id),
+  ]);
 
   const rows = (data as { cost_micros: number }[]) ?? [];
   const spentMicros = rows.reduce((sum, r) => sum + r.cost_micros, 0);
 
   return {
     spentMicros,
-    budgetMicros: MONTHLY_BUDGET_MICROS,
+    budgetMicros,
     calls: rows.length,
-    remainingMicros: Math.max(0, MONTHLY_BUDGET_MICROS - spentMicros),
-    overBudget: spentMicros >= MONTHLY_BUDGET_MICROS,
-    label: `${formatMicros(spentMicros)} of ${formatMicros(MONTHLY_BUDGET_MICROS)}`,
+    remainingMicros: Math.max(0, budgetMicros - spentMicros),
+    overBudget: spentMicros >= budgetMicros,
+    label: `${formatMicros(spentMicros)} of ${formatMicros(budgetMicros)}`,
   };
 }
 

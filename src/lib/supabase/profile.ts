@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { ThemeSettings } from "@/lib/palettes";
 import { normalizeThemeSettings } from "@/lib/palettes";
 import { resolveModuleAccess, type ModuleAccess } from "@/lib/permissions";
+import { resolvePreferences, type Preferences } from "@/lib/preferences";
+import { APP_TIMEZONE } from "@/lib/time";
 
 export interface CurrentProfile {
   id: string;
@@ -10,6 +12,9 @@ export interface CurrentProfile {
   role: "owner" | "workout_member" | "full_user";
   themeSettings: ThemeSettings;
   moduleAccess: ModuleAccess;
+  /** The account's own timezone. Every date in the app is rendered in it. */
+  timezone: string;
+  preferences: Preferences;
 }
 
 export async function getCurrentProfile(): Promise<CurrentProfile | null> {
@@ -21,7 +26,7 @@ export async function getCurrentProfile(): Promise<CurrentProfile | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("display_name, role, theme_settings, module_access")
+    .select("display_name, role, theme_settings, module_access, timezone, preferences")
     .eq("id", user.id)
     .single();
 
@@ -39,5 +44,9 @@ export async function getCurrentProfile(): Promise<CurrentProfile | null> {
       profile?.theme_settings as Partial<ThemeSettings> | null
     ),
     moduleAccess: resolveModuleAccess({ role, moduleAccess: profile?.module_access }),
+    // Both resolved rather than merged, for the same reason theme_settings is:
+    // what's stored is always partial.
+    timezone: (profile?.timezone as string) || APP_TIMEZONE,
+    preferences: resolvePreferences(profile?.preferences),
   };
 }

@@ -5,7 +5,7 @@ import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { Stat, StatStrip } from "@/components/ui/stat";
 import { Micro, Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
-import { getUsageByFeature, getUsageSummary, MONTHLY_BUDGET_MICROS } from "@/lib/ai/usage";
+import { getUsageByFeature, getUsageSummary } from "@/lib/ai/usage";
 import { isAiConfigured } from "@/lib/ai/gemini";
 import { MODELS, formatMicros } from "@/lib/ai/models";
 
@@ -55,11 +55,11 @@ export default async function AiSettingsPage() {
           value={formatMicros(usage.spentMicros)}
           sub={`across ${usage.calls} request${usage.calls === 1 ? "" : "s"}`}
           tone={usage.overBudget ? "alert" : "default"}
-          meter={Math.min(1, usage.spentMicros / MONTHLY_BUDGET_MICROS)}
+          meter={Math.min(1, usage.spentMicros / usage.budgetMicros)}
         />
         <Stat
           label="Monthly ceiling"
-          value={formatMicros(MONTHLY_BUDGET_MICROS)}
+          value={formatMicros(usage.budgetMicros)}
           sub="hard stop — nothing can spend past it"
         />
       </StatStrip>

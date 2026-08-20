@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { extractReceiptData } from "@/lib/ai/receipt-vision";
 import { findBestMatch } from "@/lib/finance/fuzzy-match";
+import { normalizeItemName } from "@/lib/shopping/purchases";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import type { AccountType, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
 
@@ -163,7 +164,8 @@ export async function discardReceipt(input: { id: string }) {
 async function applyShoppingCrossCheck(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  lineItems: ReceiptLineItem[]
+  lineItems: ReceiptLineItem[],
+  context: { merchant: string | null; txnDate: string; receiptId: string }
 ) {
   const { data: shoppingItems } = await supabase
     .from("shopping_items")
@@ -171,11 +173,32 @@ async function applyShoppingCrossCheck(
     .eq("user_id", userId)
     .eq("on_list", true)
     .eq("checked", false);
-  if (!shoppingItems || shoppingItems.length === 0) return;
 
+  const candidates = (shoppingItems as { id: string; name: string; is_staple: boolean }[]) ?? [];
   const now = new Date().toISOString();
+
+  // A receipt is the only place the app ever learns what something COST. Every
+  // line item becomes a purchase record whether or not it matched something on
+  // the list — the price book wants the lot, and an item bought without being
+  // on the list is still evidence of how often you buy it.
+  const purchases: Record<string, unknown>[] = [];
+
   for (const item of lineItems) {
-    const match = findBestMatch(item.clean_name || item.raw_name, shoppingItems, (s) => s.name as string);
+    const name = item.clean_name || item.raw_name;
+    const match = candidates.length > 0 ? findBestMatch(name, candidates, (s) => s.name) : null;
+
+    purchases.push({
+      user_id: userId,
+      item_name: name,
+      normalized_name: normalizeItemName(name),
+      shopping_item_id: match?.item.id ?? null,
+      purchased_on: context.txnDate,
+      price_cents: item.price_cents > 0 ? item.price_cents : null,
+      merchant: context.merchant,
+      source: "receipt",
+      receipt_id: context.receiptId,
+    });
+
     if (!match) continue;
     await supabase
       .from("shopping_items")
@@ -184,6 +207,10 @@ async function applyShoppingCrossCheck(
         ...(match.item.is_staple ? { last_purchased_at: now } : {}),
       })
       .eq("id", match.item.id);
+  }
+
+  if (purchases.length > 0) {
+    await supabase.from("shopping_purchases").insert(purchases);
   }
 }
 
@@ -261,7 +288,11 @@ export async function approveReceipt(input: {
   const updatedBalance = (account.current_balance_cents as number) + delta;
   await supabase.from("accounts").update({ current_balance_cents: updatedBalance }).eq("id", account.id);
 
-  await applyShoppingCrossCheck(supabase, user.id, items);
+  await applyShoppingCrossCheck(supabase, user.id, items, {
+    merchant: input.merchant,
+    txnDate: input.txnDate,
+    receiptId: input.id,
+  });
 
   await supabase
     .from("receipts")

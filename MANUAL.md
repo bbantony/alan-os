@@ -1186,4 +1186,69 @@ days, which is what it always meant.
 
 ---
 
-*(Phase 6 section will be added here once its checklist is complete.)*
+---
+
+## Timeline — everything you did, in one line
+
+**More → Timeline** (or the Timeline row at the bottom of Today).
+
+Until now the app has been six separate sections that couldn't see each other.
+This is the first screen that reads them all together: what you spent, what you
+trained, what you ticked off, what you bought, all on one line in the order it
+happened.
+
+- **A day / A week** — switch between one day at a time and the last seven.
+- **The arrows** move you back and forward through your history.
+- **Four numbers at the top**: spent, money in, days trained, tasks done — each
+  one taps through to the module behind it.
+- **Every row taps through** to whatever produced it. A shopping trip goes to
+  your list, a workout to Workout, an expense to Money.
+
+Shopping is grouped into trips rather than listed item by item, so a fifteen-item
+shop is one line and doesn't bury your workout.
+
+### What the week showed
+
+Once a week, the app looks at everything above together and tells you one or two
+things you probably haven't noticed — the kind of thing that needs two sections
+at once to see. *"Your takeaway spend doubles in the weeks you train less than
+twice."*
+
+It's honest rather than encouraging. If the week was unremarkable it says so
+rather than manufacturing something.
+
+Sometimes it'll offer **one button** — "add milk to the list", say. Nothing
+happens until you tap it. That's a deliberate limit: the app notices and
+suggests, it doesn't act on its own. You can change that under **Settings → AI &
+cost** once that screen lands.
+
+This costs about **2 to 3 cents a month** — one look per week, and it's stored,
+so opening the Timeline ten times doesn't cost ten times. (It needs the Gemini
+key, like everything else AI.)
+
+---
+
+## Journal and Vinyl are gone
+
+You asked for them removed, so they are — no more empty pages advertising things
+that don't exist. Nothing else was affected.
+
+The (empty) database tables were left in place rather than deleted, in case you
+ever want them back. If you're sure you never will, say so and I'll drop them.
+
+---
+
+## Two things that used to be fixed, and no longer are
+
+Groundwork for the Settings screens coming next — the values behave exactly as
+they did, but they're now things that *can* be changed rather than numbers baked
+into the code:
+
+- **How long before a staple comes back.** It was 14 days for everything — milk
+  and washing-up liquid on the same timer. The app now also records every
+  purchase, so once you've bought something a few times it can work out your own
+  rate instead of guessing.
+- **Your timezone.** The app assumed Winnipeg everywhere. It'll follow your
+  profile now, which matters when you travel. One rule worth knowing: your
+  repeating reminders stay anchored to where you *live*, not where you are — so
+  flying to India won't drag every reminder five and a half hours.

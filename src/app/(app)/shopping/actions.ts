@@ -3,6 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { resolvePreferences } from "@/lib/preferences";
+import { normalizeItemName } from "@/lib/shopping/purchases";
+import { todayInAppTimezone } from "@/lib/time";
 import { getBudgets } from "@/app/(app)/money/actions";
 import type {
   ShoppingCategoryItem,
@@ -11,7 +14,24 @@ import type {
   ShoppingUnit,
 } from "@/lib/shopping/types";
 
-const STAPLE_RESURFACE_DAYS = 14;
+// How long before a staple comes back onto the list.
+//
+// This was a hardcoded 14 days for everything — milk and washing-up liquid on
+// the same timer. It's a setting now (Settings → Shopping), and the default
+// lives in lib/preferences.ts so nothing moved for anyone who never changes it.
+// Once an item has enough purchase history behind it (shopping_purchases,
+// migration 0028) the interval is learned from that instead.
+async function stapleDaysFor(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<number> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("preferences")
+    .eq("id", userId)
+    .maybeSingle();
+  return resolvePreferences(data?.preferences).stapleResurfaceDays;
+}
 
 // Shopping <-> Finance hook (SPEC.md Part B4): "remaining budget for the
 // relevant category visible while adding/checking off items" — the
@@ -92,7 +112,8 @@ export async function getShoppingItems(): Promise<ShoppingItem[]> {
 
 export async function getStapleSuggestions(): Promise<ShoppingItem[]> {
   const { supabase, user } = await requireUser();
-  const cutoff = new Date(Date.now() - STAPLE_RESURFACE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const days = await stapleDaysFor(supabase, user.id);
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const { data } = await supabase
     .from("shopping_items")
     .select("*")
@@ -181,15 +202,33 @@ export async function finishTrip(): Promise<{ staples: number; oneOff: number }>
 
   const { data: checkedItems } = await supabase
     .from("shopping_items")
-    .select("id, is_staple")
+    .select("id, name, is_staple")
     .eq("user_id", user.id)
     .eq("on_list", true)
     .eq("checked", true);
 
   if (!checkedItems || checkedItems.length === 0) return { staples: 0, oneOff: 0 };
 
-  const stapleIds = checkedItems.filter((i) => i.is_staple).map((i) => i.id);
-  const nonStapleIds = checkedItems.filter((i) => !i.is_staple).map((i) => i.id);
+  const items = checkedItems as { id: string; name: string; is_staple: boolean }[];
+  const stapleIds = items.filter((i) => i.is_staple).map((i) => i.id);
+  const nonStapleIds = items.filter((i) => !i.is_staple).map((i) => i.id);
+
+  // Every finished trip is now recorded, item by item, BEFORE the one-off items
+  // are deleted below — they're real purchases and their history is what makes
+  // a re-added item's consumption rate correct rather than starting from
+  // scratch. No price: a hand-ticked trip doesn't know one. Receipts do, and
+  // fill it in separately (money/receipt-actions.ts).
+  const purchasedOn = todayInAppTimezone();
+  await supabase.from("shopping_purchases").insert(
+    items.map((item) => ({
+      user_id: user.id,
+      item_name: item.name,
+      normalized_name: normalizeItemName(item.name),
+      shopping_item_id: item.id,
+      purchased_on: purchasedOn,
+      source: "trip",
+    }))
+  );
 
   if (stapleIds.length > 0) {
     await supabase

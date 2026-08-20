@@ -11,7 +11,7 @@ import type { ModuleAccess } from "@/lib/permissions";
 /**
  * The desktop rail. Two changes beyond the styling:
  *
- *   - It now shows the "More" modules (Calendar, Journal, Vinyl, Settings) as a
+ *   - It now shows the "More" destinations (Assistant, Settings) as a
  *     second ruled group instead of a single "More" link that bounced you to a
  *     phone-shaped menu page. On a 1440px screen there was never a reason to
  *     hide them behind a tap.
@@ -21,7 +21,7 @@ import type { ModuleAccess } from "@/lib/permissions";
 export function SidebarNav({ moduleAccess }: { moduleAccess: ModuleAccess }) {
   const pathname = usePathname();
   const primary = getNavItems(moduleAccess).filter((i) => i.href !== "/more");
-  const secondary = getMoreLinks(moduleAccess);
+  const secondary = getMoreLinks();
 
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r-2 border-rule bg-surface md:flex">

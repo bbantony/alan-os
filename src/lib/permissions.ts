@@ -7,7 +7,11 @@
 // is a genuine anomaly, not "default to true" — resolveModuleAccess treats it
 // as false rather than guessing.
 
-export const MODULE_IDS = ["tasks", "shopping", "workout", "calendar", "money", "journal", "vinyl"] as const;
+// Journal and Vinyl were removed at Alan's request ("completely remove the
+// placeholders ... I don't want any of that"). Their empty tables from
+// migration 0024 are left in the database, unused, rather than dropped —
+// he said "for now", and dropping tables is not reversible.
+export const MODULE_IDS = ["tasks", "shopping", "workout", "calendar", "money"] as const;
 
 export type ModuleId = (typeof MODULE_IDS)[number];
 export type ModuleAccess = Record<ModuleId, boolean>;
@@ -18,8 +22,6 @@ export const MODULE_LABELS: Record<ModuleId, string> = {
   workout: "Workout",
   calendar: "Calendar & Reminders",
   money: "Money",
-  journal: "Journal",
-  vinyl: "Vinyl",
 };
 
 export const ALL_MODULES_ACCESS: ModuleAccess = {
@@ -28,8 +30,6 @@ export const ALL_MODULES_ACCESS: ModuleAccess = {
   workout: true,
   calendar: true,
   money: true,
-  journal: true,
-  vinyl: true,
 };
 
 export const NO_MODULES_ACCESS: ModuleAccess = {
@@ -38,8 +38,6 @@ export const NO_MODULES_ACCESS: ModuleAccess = {
   workout: false,
   calendar: false,
   money: false,
-  journal: false,
-  vinyl: false,
 };
 
 export interface PermissionProfile {

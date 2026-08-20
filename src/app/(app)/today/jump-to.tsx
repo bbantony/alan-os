@@ -3,10 +3,9 @@ import {
   ShoppingCart,
   Wallet,
   Dumbbell,
-  BookImage,
-  Disc3,
   Settings,
   Sparkles,
+  Activity,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,7 +18,7 @@ import type { ModuleAccess } from "@/lib/permissions";
  *
  * This replaces the four "coming soon" placeholder cards that used to take up
  * half the dashboard (AI briefing, weather, world news, local news) plus the
- * Journal and Vinyl stubs. Six dashboard-sized tiles advertising things that
+ * now-removed Journal and Vinyl stubs. Six dashboard-sized tiles advertising things that
  * don't exist yet is most of why the old Today screen felt cluttered — they're
  * now one muted line at the bottom, which is all an unbuilt feature has earned.
  */
@@ -37,8 +36,6 @@ const DESTINATIONS: Destination[] = [
   { key: "money", label: "Money", hint: "Budgets, spending, goals", href: "/money", icon: Wallet },
   { key: "shopping", label: "Shopping", hint: "The list and your staples", href: "/shopping", icon: ShoppingCart },
   { key: "workout", label: "Workout", hint: "Sessions, crew, streaks", href: "/workout", icon: Dumbbell },
-  { key: "journal", label: "Journal", hint: "Photo a day", href: "/journal", icon: BookImage },
-  { key: "vinyl", label: "Vinyl", hint: "The shelf", href: "/vinyl", icon: Disc3 },
 ];
 
 export function JumpTo({ moduleAccess }: { moduleAccess: ModuleAccess }) {
@@ -63,6 +60,16 @@ export function JumpTo({ moduleAccess }: { moduleAccess: ModuleAccess }) {
         );
       })}
 
+      <PanelRow href="/timeline">
+        <span className="flex items-center gap-3">
+          <Activity className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold">Timeline</span>
+            <Micro className="block truncate">Everything you did, in one line</Micro>
+          </span>
+        </span>
+      </PanelRow>
+
       <PanelRow href="/assistant">
         <span className="flex items-center gap-3">
           <Sparkles className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />
@@ -85,8 +92,7 @@ export function JumpTo({ moduleAccess }: { moduleAccess: ModuleAccess }) {
 
       <p className="hatch border-t-2 border-rule px-3 py-2.5">
         <Micro>
-          Coming later — journal &amp; vinyl (phase 6) · morning briefing, weather
-          &amp; news (phase 7)
+          Coming later — morning briefing, weather &amp; news (phase 7)
         </Micro>
       </p>
     </Panel>

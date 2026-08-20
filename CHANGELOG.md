@@ -2417,3 +2417,145 @@ join finds its sets with the session date attached.
 locked it, and come back. The database round trip proves the draft survives a write and a read;
 it cannot prove the browser hands it back after being evicted. Also unverified on a phone: the
 whole new layout, the week strip, and the chart.
+
+---
+
+## 34. The Life Ledger — one timeline across every module (Round 1 of 3)
+
+Alan asked for "super innovative ways to interconnect these different sections", named
+Shopping ↔ Money as the obvious one, and asked how AI could "work wonders". Four options were
+put to him in plan mode; he chose **the Life Ledger + weekly patterns** first, queued
+**bills before they bite**, **goals that become habits** and **receipt does everything**, asked
+to **completely remove the Journal and Vinyl placeholders**, chose **"notice and suggest"** for
+how bold the AI may be, and asked for **all eight Settings groups** plus a real timezone
+("I travel").
+
+This is Round 1: the removals, the foundations, and the ledger. Rounds 2 (Settings) and 3 (the
+queued connections) build on it.
+
+### Three findings that shaped the design
+
+- **Receipts already store every line item's price.** `receipts.line_items` has carried
+  `price_cents` per item since Phase 5, kept after approval, and nothing has ever read it.
+  A personal price book, sitting unused.
+- **`profiles.timezone` has existed since migration 0001** and was never read — `lib/time.ts`
+  hardcoded `APP_TIMEZONE` in every function.
+- **There was no purchase history at all.** `finishTrip` overwrote a single
+  `last_purchased_at` per item and recorded nothing else, so "you buy milk every nine days" was
+  unknowable and every staple resurfaced on one hardcoded 14-day timer whether it was milk or
+  washing-up liquid.
+
+### Journal and Vinyl are gone
+
+Both routes, `ModulePlaceholder` (its only users), both module ids from `MODULE_IDS` /
+`MODULE_LABELS` / the access grids, the nav entries, the Today "jump to" rows, and the "coming
+later" line. `getMoreLinks()` no longer takes module access at all — those two were the only
+gated entries behind More.
+
+**Migration 0024's empty tables are deliberately left in place.** Alan said "for now"; the
+tables hold nothing, nothing queries them, and dropping tables is not reversible.
+
+### Migration 0028
+
+**`profiles.preferences jsonb`** — one column, not thirty, following the `theme_settings`
+precedent. Added to the 0005 column-level update grant so it's self-editable while `role` and
+`module_access` still aren't.
+
+**`shopping_purchases`** — the missing history. Written by `finishTrip` (no price — a
+hand-ticked trip doesn't know one) and by `approveReceipt` (price *and* merchant, from line
+items it already had). `item_name` is denormalised and `shopping_item_id` is
+`ON DELETE SET NULL` on purpose: deleting an item off your list is not a claim that you never
+bought it. One table, three payoffs — ledger events, learned staple intervals, the price book.
+
+**`insights`** — the cached weekly pattern, unique on `(user_id, period_start)` so a second
+call for the same week is *impossible* rather than merely unlikely.
+
+### Preferences — `src/lib/preferences.ts`
+
+Every value that used to be a constant: `STAPLE_RESURFACE_DAYS`, `MONTHLY_BUDGET_MICROS`, the
+8/18 work window and the 8pm evening hour, Monday week-start. Each default is exactly the
+behaviour the app already had, so switching this on changed nothing for anyone.
+
+Read only through `resolvePreferences`, never directly, because stored JSON is always partial
+— the same normalise-don't-merge rule as `resolveModuleAccess` and `normalizeThemeSettings`.
+It **clamps as well as defaults**: these numbers drive real behaviour, and an evening hour of
+30 would mean evening never arrives.
+
+`isQuietHour` handles the wrap past midnight, which is the *normal* case — a naive
+`start <= h && h < end` on 22:00→07:00 is false all night and true all day, i.e. exactly
+backwards.
+
+### Timezone made real
+
+The four functions that hardcoded Winnipeg (`todayInAppTimezone`, `formatInAppTimezone`,
+`isOutsideWorkHours`, `isEveningPlanningTime`) now take one, defaulting to the constant so
+untouched callers behave identically. `getCurrentProfile` returns `timezone` and resolved
+`preferences` alongside module access.
+
+**The rule, written into `lib/time.ts`:** recurrences anchor to the *profile's* timezone, not
+the device's. "Daily at 9am" means 9am where you say you live, so flying to India doesn't drag
+every reminder five and a half hours. Changing the setting moves future occurrences only.
+
+### The Life Ledger — `src/lib/ledger.ts`
+
+A typed union of six RLS-scoped queries: transactions, workouts (with runs and PRs), completed
+tasks, routine completions, shopping purchases, reconciliations.
+
+**Not a Postgres view**, which is the textbook answer and the wrong one here: every query
+inherits RLS automatically by going through the user's own client, where a view needs its own
+security-invoker care to avoid becoming a hole; it needs no migration as modules change shape;
+and at this data size the performance difference is unmeasurable. If it ever gets slow, *that*
+is the moment to make it a view.
+
+Details worth keeping: shopping is collapsed into one trip per date-and-merchant, because
+fifteen "bought milk" lines would drown every other event on the day. A row that only knows a
+date lands exactly on midnight UTC and renders no time rather than inventing "12:00 AM". Ties
+break by kind so two things logged in the same second don't swap places on refresh. Day totals
+are CAD-only, for the same reason every total in this app is.
+
+`/timeline` gives it a day view, a week view, date navigation and a totals strip, reachable
+from More and from Today's "jump to". Every row links back to the module that produced it.
+
+### Weekly patterns — `src/lib/ai/insights.ts`
+
+One model call a week over a *summary* of the ledger (twenty compressed facts, not four hundred
+rows — that compression is where the cost of the feature is actually decided), asking for
+observations that cross modules. `ensureWeeklyInsight` returns the stored row when one exists,
+so callers can invoke it on every page load and only the first in a week costs anything. It
+reads the week that has actually *finished* — reading patterns out of a Tuesday is reading
+noise. Fewer than five events in the week and it writes nothing rather than burning the call
+producing "you did nothing". About **2-3 cents a month**, metered like everything else.
+
+The prompt is instructed to be honest rather than encouraging, to never invent a figure, and
+never to moralise — report the pattern, don't tell them what kind of person it makes them.
+
+**"Notice and suggest" is enforced structurally, not by prompt.** An insight may carry one
+`suggested_action` naming a tool from the existing registry (`lib/ai/tools.ts`). Storing the
+intent is all it does. `runSuggestedAction` is the only thing that executes it, only from a
+tap, only for a tool this account's module access allows, under the person's own client — so
+it can never reach past what the assistant could already do, and the write tools there are
+deliberately narrow.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit`, `eslint` clean; `/timeline` compiles and the build's route
+list contains no `/journal` or `/vinyl`.
+
+**51 checks against the shipped code** (compiled from the real files): partial, null, garbage,
+out-of-range and unknown-key preference objects all resolving whole and clamped; quiet hours
+across the midnight wrap; name normalisation; a learned 7-day milk rate that a three-month gap
+in the middle doesn't drag; same-day repeats not becoming a one-day rate; the fallback when
+history is too thin; median pricing that one dear corner-shop purchase doesn't move; a 30% rise
+flagged and a 5% wobble not; work hours and the evening ritual answering differently in
+Winnipeg and Kolkata *for the same instant*; and both week-start settings.
+
+Against the **live database**, rolled back: all three schema changes with RLS and policies;
+`preferences` self-updatable while `role` still isn't; a partial preferences object storing as
+written; three purchases recorded with the receipt one carrying price and merchant; deleting the
+shopping item keeping its history; and a duplicate insight for one week being rejected by the
+database.
+
+**Not verified:** the weekly insight has never run — `GEMINI_API_KEY` is still empty, so no
+model call has been made. `/journal` and `/vinyl` were confirmed absent from the build's route
+list rather than observed 404ing, because the auth guard redirects a signed-out request before
+routing gets that far. And nothing here has been used on a phone.
