@@ -13,6 +13,12 @@ import { Micro } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 import { listItemVariants, LIST_ITEM_TRANSITION } from "@/lib/motion";
 import { EmptyState } from "@/components/empty-state";
+import { normalizeItemName } from "@/lib/shopping/purchases";
+import {
+  getSmartStapleSuggestions,
+  type ItemPrice,
+  type StapleSuggestion,
+} from "./price-actions";
 import { ShoppingIllustration } from "@/components/illustrations";
 import { getShoppingIcon } from "@/lib/shopping/icon-registry";
 import { formatCents } from "@/lib/finance/money";
@@ -27,7 +33,6 @@ import {
 import { buildKnownItemsMap, guessCategoryId } from "@/lib/shopping/category-guess";
 import {
   getShoppingItems,
-  getStapleSuggestions,
   getKnownItems,
   addShoppingItem,
   setChecked,
@@ -66,13 +71,15 @@ async function runOnlineFirst(mutation: OutboxMutation, action: () => Promise<un
 export function ShoppingList({
   initialItems,
   initialSuggestions,
+  priceBook,
   categories,
   initialKnownItems,
   groceryBudget,
   autoFocusNew = false,
 }: {
   initialItems: ShoppingItem[];
-  initialSuggestions: ShoppingItem[];
+  initialSuggestions: StapleSuggestion[];
+  priceBook: Record<string, ItemPrice>;
   categories: ShoppingCategoryRow[];
   initialKnownItems: ShoppingCategoryItem[];
   groceryBudget: { remainingCents: number; amountCents: number; spentCents: number } | null;
@@ -86,7 +93,7 @@ export function ShoppingList({
     if (autoFocusNew) nameRef.current?.focus();
   }, [autoFocusNew]);
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
-  const [suggestions, setSuggestions] = useState<ShoppingItem[]>(initialSuggestions);
+  const [suggestions, setSuggestions] = useState<StapleSuggestion[]>(initialSuggestions);
   const [knownItems, setKnownItems] = useState<ShoppingCategoryItem[]>(initialKnownItems);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine
@@ -107,7 +114,7 @@ export function ShoppingList({
     try {
       const [freshItems, freshSuggestions, freshKnown] = await Promise.all([
         getShoppingItems(),
-        getStapleSuggestions(),
+        getSmartStapleSuggestions(),
         getKnownItems(),
       ]);
       setItems(freshItems);
@@ -322,6 +329,26 @@ export function ShoppingList({
 
   const checkedItems = items.filter((i) => i.checked);
 
+  // Computed on the client on purpose: the whole price book already arrived
+  // with the page, and this has to keep up with every tick of a checkbox while
+  // you're walking round a shop — a server round trip per tick would be
+  // useless on shop wifi.
+  const basket = useMemo(() => {
+    let estimatedCents = 0;
+    let known = 0;
+    let unknown = 0;
+    for (const item of checkedItems) {
+      const entry = priceBook[normalizeItemName(item.name)];
+      if (entry && entry.typicalCents > 0) {
+        estimatedCents += entry.typicalCents;
+        known += 1;
+      } else {
+        unknown += 1;
+      }
+    }
+    return { estimatedCents, known, unknown };
+  }, [checkedItems, priceBook]);
+
   const uncheckedCount = items.filter((i) => !i.checked).length;
   const budgetProgress =
     groceryBudget && groceryBudget.amountCents > 0
@@ -364,6 +391,33 @@ export function ShoppingList({
         {/* The Shopping↔Money hook, as a real gauge rather than a caption.
             This is the number that changes what goes in the basket, so it
             gets the meter treatment and links straight into Money. */}
+        {/* What's in the basket, before the till. Estimated from what these
+            items have cost you before (shopping_purchases), so it needs no
+            network round trip while you're standing in a shop — and it's
+            labelled an estimate, because prices move. */}
+        {basket.known > 0 && (
+          <div
+            className={cn(
+              "border-2 px-3 py-2.5",
+              groceryBudget && basket.estimatedCents > groceryBudget.remainingCents
+                ? "border-warn bg-warn/10"
+                : "border-rule bg-surface"
+            )}
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="micro-sm text-muted-foreground">In the basket</span>
+              <span className="stat text-xl">~{formatCents(basket.estimatedCents)}</span>
+            </div>
+            <Micro className="mt-0.5 block">
+              estimated from what you usually pay
+              {basket.unknown > 0 && ` · ${basket.unknown} not priced yet`}
+              {groceryBudget && basket.estimatedCents > groceryBudget.remainingCents
+                ? " · over what's left in the budget"
+                : ""}
+            </Micro>
+          </div>
+        )}
+
         {groceryBudget && (
           <Link href="/money" className="tap-press block">
             <div className="border-2 border-rule bg-surface p-3 transition-colors hover:bg-muted">

@@ -10,6 +10,7 @@ import type {
   Account, Category, Debt, Receipt, RecurringTransaction, SavingsGoal, Transaction,
 } from "@/lib/finance/types";
 import type { BudgetWithProgress, MerchantMemory } from "./actions";
+import type { GoalPlan } from "./goal-actions";
 import { QuickLogForm } from "./quick-log-form";
 import { OverviewView } from "./overview-view";
 import { BudgetsView } from "./budgets-view";
@@ -39,6 +40,7 @@ export function MoneyShell({
   initialReceipts,
   initialRecurring,
   lastReconciled,
+  goalPlans,
   autoOpenQuickLog = false,
 }: {
   initialAccounts: Account[];
@@ -52,6 +54,7 @@ export function MoneyShell({
   initialReceipts: Receipt[];
   initialRecurring: RecurringTransaction[];
   lastReconciled: string | null;
+  goalPlans: GoalPlan[];
   /** Set by the `?new=1` link the app-wide quick-add sends here. */
   autoOpenQuickLog?: boolean;
 }) {
@@ -199,7 +202,15 @@ export function MoneyShell({
         {tab === "budgets" && (
           <BudgetsView budgets={budgets} categories={categories} onChanged={setBudgets} />
         )}
-        {tab === "goals" && <GoalsView goals={goals} onChanged={setGoals} />}
+        {tab === "goals" && (
+          <GoalsView
+            goals={goals}
+            onChanged={setGoals}
+            goalPlans={goalPlans}
+            accounts={accounts}
+            categories={categories}
+          />
+        )}
         {tab === "debts" && <DebtsView debts={debts} onChanged={setDebts} />}
         {tab === "reports" && <ReportsView />}
       </div>

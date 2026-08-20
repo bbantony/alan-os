@@ -2667,3 +2667,105 @@ accounts and categories intact.
 **Not verified:** no setting has been changed from a real phone, the avatar upload has never
 run against a real camera photo, and the dispatcher's new quiet-hours branch has not fired for
 real — that needs the cron pinger to hit it during a quiet window.
+
+---
+
+## 36. Bills, goals that keep themselves, and the price book (Round 3 of 3)
+
+The three connections Alan queued behind the Life Ledger. All three are things the app already
+had the data for and had never joined up.
+
+### Bills before they bite
+
+`recurring_transactions` has known rent is due on the 1st since entry 31. What it couldn't do
+was say so *beforehand* — the first you heard was the transaction appearing afterwards, with
+safe-to-spend already lower.
+
+A new **About to land** panel on Today lists what's due in the next week and, underneath,
+**what safe-to-spend becomes once they land**. That last line is the whole feature: a number
+saying $400 while $1,450 of rent goes out on Tuesday isn't wrong exactly, but it answers the
+wrong question — and it's the one people actually ask a budgeting app before buying something.
+Income is included and marked, because "£2,400 lands Friday" is exactly as relevant.
+
+The push comes **straight from the cron dispatcher**, reading `recurring_transactions`.
+Migration `0031` adds `last_notified_date` plus two security-definer RPCs (the 0012 pattern,
+because cron has no session).
+
+**Deliberately not a `reminders` row**, which is how every other notification here is queued.
+Migration 0022 established that a reminder attached to neither a task nor a routine is
+wreckage, with a partial index built to find exactly those. A bill reminder is attached to
+neither, so it would be swept up as an orphan or force a second exception into that rule.
+
+`last_notified_date` stores *which occurrence* was announced rather than a boolean, so a bill is
+mentioned once and mentioned again next month. The claim query asks for a 14-day window and
+each bill is then checked against its own owner's `billLeadDays` — one query serving accounts
+with different lead times. It respects quiet hours and the bills switch, and stamps whether or
+not a device took it: the alternative is retrying someone with no registered devices forever.
+
+### Goals that become habits
+
+A savings goal with a target and a deadline has always shown a progress ring and nothing else,
+so hitting it depended entirely on remembering to tap "Add" often enough. The arithmetic was
+always available and never done.
+
+`lib/finance/goal-pace.ts` works out what's needed per week; one tap sets up the repeating
+transfer and, optionally, a weekly routine to check it's actually going through. Both tables
+already existed.
+
+Three decisions in the maths: a goal **without** a deadline gets no pace at all rather than an
+invented horizon (leaving it open was a choice); the monthly figure uses **52/12 weeks, not 4**,
+because 4 understates it by about 8% — a month's worth of saving over a year; and it **rounds
+up**, because asking for $142.85 when $142.86 is needed lands short.
+
+`alreadySetUp` is matched by the transfer's name rather than a foreign key, on purpose: a
+transfer set up for a goal is an ordinary repeating payment afterwards — editable, pausable,
+outlivable — and a hard link would make the app police a relationship the person is entitled to
+break.
+
+### The price book
+
+`shopping_purchases` has been collecting a price and a merchant per receipt line since Round 1.
+This reads it back.
+
+- **Staples resurface on their own learned rate.** The old query was a single
+  `last_purchased_at < now() - 14 days` for everything; milk bought weekly and washing-up
+  liquid bought quarterly were treated identically. Now each item's median gap decides, falling
+  back to the setting when there's too little history — and the suggestion carries *why*
+  ("you buy this every 9 days").
+- **A running basket total** while you shop, against what's left in the Groceries budget.
+  Computed on the client from the price book that arrived with the page: this has to keep up
+  with every tick of a checkbox on shop wifi, so a server round trip per tick would be useless.
+  Items never seen with a price are counted separately rather than assumed free, which would
+  make the number quietly optimistic in exactly the situation where that matters.
+- **"Dearer than usual"** on receipt lines, from your own history. Debounced and re-run as items
+  are edited, because the AI's first guess at a name or price is often corrected before
+  approval. It stays silent below two observations and below a 15% rise — a warning on every
+  third item is a warning nobody reads.
+
+Medians throughout, not means: one bulk 4kg bag among a dozen 500g ones should not become the
+price you're compared against, and one three-month holiday shouldn't stop milk resurfacing.
+
+### Two things caught while building
+
+`getSmartStapleSuggestions` was returning rows cast `as ShoppingItem[]` with an extra field the
+type didn't have — replaced with a real `StapleSuggestion` interface. And `estimateBasket` was
+left exported as a Server Action after the client took over the calculation; an unused server
+action is dead code that also widens the surface, so it's gone.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit`, `eslint` clean.
+
+**19 checks against the shipped `goal-pace.ts`**: the no-deadline case, the 52/12 month, saved
+amounts subtracting, over-saving never going negative, a passed deadline clamping to one week
+instead of dividing by zero, and rounding up.
+
+Against the **live database**, rolled back: `last_notified_date` and both RPCs exist and the
+claim **rejects a wrong cron secret**; a bill due in two days is claimed at a 7-day window and
+*not* at a 1-day one; once announced it isn't announced again; a new occurrence announces
+afresh; a paused bill never is; the median of three purchases is 499 where the mean would be
+549; and a goal habit writes the transfer, the routine and its step.
+
+**Not verified:** no bill notification has been pushed for real (that needs the cron pinger to
+run while a bill is inside the window), and the price book has no real data yet — it starts
+filling from the first receipt approved after this deploy.

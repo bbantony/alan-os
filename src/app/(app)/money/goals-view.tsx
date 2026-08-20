@@ -16,6 +16,9 @@ import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
 import type { SavingsGoal } from "@/lib/finance/types";
 import { addToGoal, createSavingsGoal, deleteSavingsGoal } from "./actions";
+import { GoalHabitPanel } from "./goal-habit-panel";
+import type { GoalPlan } from "./goal-actions";
+import type { Account, Category } from "@/lib/finance/types";
 
 /**
  * A squared progress dial.
@@ -43,10 +46,17 @@ function ProgressBlocks({ percent }: { percent: number }) {
 export function GoalsView({
   goals,
   onChanged,
+  goalPlans,
+  accounts,
+  categories,
 }: {
   goals: SavingsGoal[];
   onChanged: (updater: (prev: SavingsGoal[]) => SavingsGoal[]) => void;
+  goalPlans: GoalPlan[];
+  accounts: Account[];
+  categories: Category[];
 }) {
+  const [plans, setPlans] = useState(goalPlans);
   const [showForm, setShowForm] = useState(false);
   const [addingTo, setAddingTo] = useState<SavingsGoal | null>(null);
   const [addAmount, setAddAmount] = useState("");
@@ -120,6 +130,17 @@ export function GoalsView({
 
   return (
     <div className="flex flex-col gap-4">
+      <GoalHabitPanel
+        plans={plans}
+        accounts={accounts}
+        categories={categories}
+        onSetUp={(goalId) =>
+          setPlans((prev) =>
+            prev.map((p) => (p.goalId === goalId ? { ...p, alreadySetUp: true } : p))
+          )
+        }
+      />
+
       {goals.length === 0 ? (
         <EmptyState
           title="No savings goals yet"

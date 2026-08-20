@@ -251,3 +251,72 @@ export async function postDueRecurringTransactions(): Promise<PostedSummary> {
   // everything this posted.
   return summary;
 }
+
+// ---------------------------------------------------------------------------
+// What's about to land
+// ---------------------------------------------------------------------------
+
+export interface UpcomingBill {
+  id: string;
+  name: string;
+  amountCents: number;
+  currency: "CAD" | "INR";
+  dueDate: string;
+  daysAway: number;
+  isIncome: boolean;
+}
+
+/**
+ * Repeating payments due in the next `days`.
+ *
+ * The point is the gap between the app knowing and you knowing. It has always
+ * known rent is due on the 1st; the first you'd hear of it was the transaction
+ * appearing afterwards, with safe-to-spend already lower.
+ *
+ * Income is included and marked, because "£2,400 lands on Friday" is exactly as
+ * useful as "rent goes on Tuesday" when you're deciding whether to buy
+ * something today.
+ */
+export async function getUpcomingBills(days = 7): Promise<UpcomingBill[]> {
+  const { supabase, user } = await requireUser();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("timezone")
+    .eq("id", user.id)
+    .maybeSingle();
+  const today = todayInAppTimezone((profile?.timezone as string) || undefined);
+
+  const horizon = new Date(`${today}T00:00:00Z`);
+  horizon.setUTCDate(horizon.getUTCDate() + days);
+  const horizonIso = horizon.toISOString().slice(0, 10);
+
+  const { data } = await supabase
+    .from("recurring_transactions")
+    .select("id, name, amount_cents, currency, next_date, category_id, categories(kind)")
+    .eq("user_id", user.id)
+    .eq("active", true)
+    .gte("next_date", today)
+    .lte("next_date", horizonIso)
+    .order("next_date", { ascending: true });
+
+  return ((data as unknown as {
+    id: string;
+    name: string;
+    amount_cents: number;
+    currency: "CAD" | "INR";
+    next_date: string;
+    categories: { kind: string } | null;
+  }[]) ?? []).map((r) => ({
+    id: r.id,
+    name: r.name,
+    amountCents: r.amount_cents,
+    currency: r.currency,
+    dueDate: r.next_date,
+    daysAway: Math.round(
+      (new Date(`${r.next_date}T00:00:00Z`).getTime() - new Date(`${today}T00:00:00Z`).getTime()) /
+        86400000
+    ),
+    isIncome: r.categories?.kind === "income",
+  }));
+}

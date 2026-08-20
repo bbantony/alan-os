@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ImageOff, Plus, Trash2 } from "lucide-react";
+import { ImageOff, Plus, Trash2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import type { Account, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
 import { approveReceipt, discardReceipt, getReceiptPhotoUrl } from "./receipt-actions";
+import { flagDearItems, type PriceFlag } from "@/app/(app)/shopping/price-actions";
 
 export function ReceiptReviewDialog({
   receipt,
@@ -43,6 +44,36 @@ export function ReceiptReviewDialog({
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoState, setPhotoState] = useState<"loading" | "ready" | "failed">("loading");
   const [photoExpanded, setPhotoExpanded] = useState(false);
+  const [priceFlags, setPriceFlags] = useState<PriceFlag[]>([]);
+
+  // "That's dearer than you usually pay", from your own purchase history.
+  // Debounced and re-run as items change, because the AI's first guess at a
+  // name or price is often edited before approval and the flag should follow.
+  useEffect(() => {
+    const named = items
+      .map((it, index) => ({ index, name: it.clean_name || it.raw_name, priceCents: it.price_cents }))
+      .filter((it) => it.name.trim() && it.priceCents > 0);
+    let cancelled = false;
+    // Everything goes through the timer, including the empty case — setting
+    // state synchronously in an effect body causes a cascading render, and the
+    // linter is right to object.
+    const timer = setTimeout(() => {
+      if (named.length === 0) {
+        setPriceFlags([]);
+        return;
+      }
+      flagDearItems({ items: named }).then((flags) => {
+        if (cancelled) return;
+        // flagDearItems indexes into the filtered list, so map back to the
+        // real row indices before rendering.
+        setPriceFlags(flags.map((f) => ({ ...f, index: named[f.index].index })));
+      });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [items]);
 
   // The bucket is private, so the photo needs a signed link fetched on open.
   useEffect(() => {
@@ -195,6 +226,16 @@ export function ReceiptReviewDialog({
                     <Trash2 className="size-3.5" />
                   </button>
                 </div>
+                {priceFlags.find((f) => f.index === i) && (
+                  <p className="mb-2 flex items-center gap-1.5 border-2 border-warn px-2 py-1">
+                    <TrendingUp className="size-3 shrink-0 text-warn" strokeWidth={2.5} />
+                    <span className="micro-sm">
+                      {priceFlags.find((f) => f.index === i)!.percent}% more than usual — you
+                      normally pay{" "}
+                      {formatCents(priceFlags.find((f) => f.index === i)!.typicalCents)}
+                    </span>
+                  </p>
+                )}
                 <Select
                   value={item.category_id ?? ""}
                   onChange={(e) => updateItem(i, { category_id: e.target.value || null })}

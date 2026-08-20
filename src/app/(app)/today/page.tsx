@@ -3,7 +3,7 @@ import { getTasks } from "@/app/(app)/tasks/actions";
 import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
 import { getWorkoutDashboardSummary } from "@/app/(app)/workout/actions";
 import { getFinanceDashboardSummary } from "@/app/(app)/money/actions";
-import { postDueRecurringTransactions } from "@/app/(app)/money/recurring-actions";
+import { getUpcomingBills, postDueRecurringTransactions } from "@/app/(app)/money/recurring-actions";
 import {
   getCalendarDashboardSummary,
   getTodayFocus,
@@ -27,6 +27,7 @@ import { TodayConsole } from "./today-console";
 import { FocusPanel } from "./focus-panel";
 import { JumpTo } from "./jump-to";
 import { TodaySoFar } from "./today-so-far";
+import { UpcomingBills } from "./upcoming-bills";
 import { DashboardGrid, Reveal } from "./dashboard-grid";
 
 /**
@@ -114,6 +115,9 @@ export default async function TodayPage() {
   const ledgerToday = prefs.todayPanels.includes("timeline")
     ? await getLedger(today, today)
     : [];
+
+  const upcomingBills =
+    access.money && prefs.todayPanels.includes("bills") ? await getUpcomingBills(7) : [];
 
   const overdueTasks = tasks.filter((t) => t.due_at && new Date(t.due_at) < todayStartUtc);
   const overdueIds = new Set(overdueTasks.map((t) => t.id));
@@ -230,6 +234,15 @@ export default async function TodayPage() {
                   nextEventTitle={calendar.nextEventTitle}
                   nextEventTime={calendar.nextEventTime}
                   nowMinutes={nowMinutes}
+                />
+              );
+            }
+            if (panel === "bills" && access.money) {
+              return (
+                <UpcomingBills
+                  key={panel}
+                  bills={upcomingBills}
+                  safeToSpendCents={money.safeToSpendCents}
                 />
               );
             }

@@ -1332,3 +1332,57 @@ hand, and a monthly nudge to check your accounts against the bank.
 - **Clear one section** and start it over, leaving everything else alone. It
   makes you type "clear" first, because this is not something to do by accident.
   Take the download first.
+
+---
+
+## About to land — bills before they surprise you
+
+New panel on Today. It lists any repeating payment due in the next week, and
+underneath, **what your safe-to-spend becomes once they've gone out**.
+
+That bottom line is the point. "$400 safe to spend" is misleading if $1,450 of
+rent leaves on Tuesday, and that's exactly the moment you're deciding whether to
+buy something.
+
+You'll also get a notification a couple of days before each one. Change how far
+ahead (or turn it off) under **Settings → Notifications**.
+
+---
+
+## Goals that save themselves
+
+Give a savings goal a **deadline** and the Goals tab works out what you'd need
+to put aside each week, then offers to set it up for you:
+
+1. Go to **Money → Goals**. Any goal with a deadline appears under **Make it
+   happen on its own**.
+2. Tap **Set it up**, choose weekly or monthly, which account it comes out of,
+   and what to file it under.
+3. Leave **Weekly check** on and it also adds a routine to your Plan, so a
+   bounced transfer doesn't go unnoticed for a month.
+
+It becomes an ordinary repeating payment afterwards — pause it, change it or
+delete it like any other. It isn't chained to the goal.
+
+---
+
+## Your price book
+
+Every receipt you approve records what each item cost and where. Once there's a
+bit of history, three things start working:
+
+**Staples come back on their own schedule.** Instead of everything reappearing
+after the same 14 days, the app works out how often you actually buy each thing
+— and tells you why: *"you buy this every 9 days."* Needs three purchases before
+it learns; until then it uses the number in **Settings → Shopping**.
+
+**A running basket total.** As you tick things off in the shop, the top of your
+list shows roughly what you're at, based on what those items usually cost you.
+It goes amber if you're over what's left in your Groceries budget. It's an
+estimate — prices move — and anything it hasn't seen a price for is counted
+separately rather than pretended to be free.
+
+**"That's dearer than usual."** When you're reviewing a receipt, anything more
+than 15% above what you normally pay gets flagged, with your usual price. It
+stays quiet below that, and quiet until it's seen an item at least twice — a
+warning on every third line is a warning you'd stop reading.

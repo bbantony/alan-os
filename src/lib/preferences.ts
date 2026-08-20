@@ -18,11 +18,12 @@ export type PlanView = "list" | "calendar" | "agenda";
 export type ShoppingSort = "category" | "alphabetical" | "recent";
 
 /** Panels on the Today console, in the order they can be arranged. */
-export const TODAY_PANEL_IDS = ["vitals", "timeline", "console", "focus", "jump"] as const;
+export const TODAY_PANEL_IDS = ["vitals", "bills", "timeline", "console", "focus", "jump"] as const;
 export type TodayPanelId = (typeof TODAY_PANEL_IDS)[number];
 
 export const TODAY_PANEL_LABELS: Record<TodayPanelId, string> = {
   vitals: "The numbers strip",
+  bills: "About to land",
   timeline: "Today so far",
   console: "What's on today",
   focus: "Focus & evening ritual",

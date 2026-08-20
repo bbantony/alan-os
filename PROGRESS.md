@@ -671,9 +671,23 @@ Settings groups plus a real timezone.
       reconsidered on every tick forever. Don't "simplify" these into one branch.
 - [x] **Export and wipe** — there was previously no way to get data out at all.
 
-### Still to do
-- **Round 3** — bills before they bite, goals that become habits, and the price
-  book (`shopping_purchases` now has the data it needs).
+### Round 3 — the remaining connections (done, CHANGELOG.md entry 36)
+- [x] **Bills before they bite.** An "About to land" panel on Today showing
+      what's due and **what safe-to-spend becomes after it lands**, plus a push
+      the configured days ahead. Migration `0031`. Sent straight from the
+      dispatcher, **deliberately not via a `reminders` row** — that would break
+      0022's orphan invariant. `last_notified_date` stores which occurrence was
+      announced, so a bill is mentioned once per occurrence.
+- [x] **Goals that become habits.** A deadline gives a per-week figure; one tap
+      creates the repeating transfer and a weekly check routine. The monthly
+      figure uses 52/12 weeks, not 4, and rounds up.
+- [x] **The price book.** Staples resurface on their own learned median rate,
+      a running basket estimate against the Groceries budget (computed
+      client-side, because it must keep up on shop wifi), and "dearer than
+      usual" on receipt lines. Medians everywhere, not means.
+
+**All three rounds of the interconnection plan are done.** The plan file is at
+`.claude/plans/effervescent-yawning-waffle.md`.
 
 The full plan is at `.claude/plans/effervescent-yawning-waffle.md`.
 
@@ -681,8 +695,8 @@ The full plan is at `.claude/plans/effervescent-yawning-waffle.md`.
 
 Next session (written 2026-08-19).
 
-**In flight: one finished round, uncommitted** — Settings, Round 2 (entry 35).
-Round 1 (entry 34) was committed in `b3c43ce`. The Workout rebuild (entry 33) was committed in `30ecf69`. The reconciliation work (entry 32) was committed in `fc5ef35`. Build/lint/typecheck clean and verified against the live database.
+**In flight: one finished round, uncommitted** — Round 3 (entry 36).
+Rounds 1 and 2 were committed in `b3c43ce` and `2716608`. The Workout rebuild (entry 33) was committed in `30ecf69`. The reconciliation work (entry 32) was committed in `fc5ef35`. Build/lint/typecheck clean and verified against the live database.
 Migration `0026_reconciliation.sql` is already applied to production.
 
 Entries 30 and 31 (the Money bug fixes, and gallery receipts + recurring money +

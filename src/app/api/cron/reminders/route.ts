@@ -4,7 +4,15 @@ import { nextOccurrenceUtc } from "@/lib/reminders/rrule";
 import { sendPush, type PushSubscriptionRow } from "@/lib/push/send";
 import { createActionToken } from "@/lib/reminders/action-token";
 import { isQuietHour, resolvePreferences } from "@/lib/preferences";
-import { APP_TIMEZONE, hourInTimezone } from "@/lib/time";
+import { APP_TIMEZONE, hourInTimezone, todayInAppTimezone } from "@/lib/time";
+
+interface BillRow {
+  id: string;
+  user_id: string;
+  name: string;
+  amount_cents: number;
+  next_date: string;
+}
 
 // Hit by an external cron pinger (cron-job.org), not Vercel Cron — Vercel's
 // Hobby plan caps native cron at once/day, too infrequent for reminders.
@@ -131,10 +139,72 @@ export async function GET(request: Request) {
     });
   }
 
+  // ---------------------------------------------------------------------
+  // Bills about to land
+  // ---------------------------------------------------------------------
+  //
+  // Read straight from `recurring_transactions` rather than queued as a
+  // reminder row — see migration 0031 for why (0022's orphan invariant).
+  // `last_notified_date` stores which occurrence was mentioned, so a bill is
+  // announced once and announced again next month.
+  //
+  // The lead time is per-account, but the claim query needs one number, so it
+  // asks for the widest window anyone could want and each bill is then checked
+  // against its own owner's setting.
+  let billsPushed = 0;
+  const { data: upcomingBills } = await supabase.rpc("claim_bills_to_notify", {
+    secret,
+    lead_days: 14,
+  });
+
+  for (const bill of (upcomingBills as BillRow[]) ?? []) {
+    const { prefs, timezone } = await prefsFor(bill.user_id);
+    const notifications = prefs.notifications;
+    if (!notifications.billsDue) continue;
+    if (isQuietHour(hourInTimezone(new Date(), timezone), notifications)) continue;
+
+    const daysAway = Math.round(
+      (new Date(`${bill.next_date}T00:00:00Z`).getTime() -
+        new Date(`${todayInAppTimezone(timezone)}T00:00:00Z`).getTime()) /
+        86400000
+    );
+    // Not yet inside this person's chosen warning window.
+    if (daysAway > notifications.billLeadDays) continue;
+
+    const { data: subs } = await supabase.rpc("get_push_subscriptions_for_user", {
+      secret,
+      target_user: bill.user_id,
+    });
+
+    const when = daysAway <= 0 ? "today" : daysAway === 1 ? "tomorrow" : `in ${daysAway} days`;
+    const amount = (bill.amount_cents / 100).toFixed(2);
+    const result = await sendPush(
+      (subs as PushSubscriptionRow[]) ?? [],
+      {
+        title: `${bill.name} — ${when}`,
+        body: `$${amount} is due to come out. Tap to see what that leaves you.`,
+        url: "/money",
+      },
+      async (subscriptionId) => {
+        await supabase.rpc("delete_push_subscription_admin", { secret, subscription_id: subscriptionId });
+      }
+    );
+    billsPushed += result.sent;
+
+    // Stamped whether or not a device took it: the alternative is retrying a
+    // person with no registered devices on every tick, forever.
+    await supabase.rpc("mark_bill_notified", {
+      secret,
+      bill_id: bill.id,
+      occurrence: bill.next_date,
+    });
+  }
+
   return NextResponse.json({
     claimed: dueReminders?.length ?? 0,
     pushed,
     heldForQuietHours,
     suppressed,
+    billsPushed,
   });
 }
