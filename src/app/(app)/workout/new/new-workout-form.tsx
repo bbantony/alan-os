@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -10,13 +10,12 @@ import {
   ChevronRight,
   List,
   Plus,
-  RotateCcw,
   Save,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
-import { Panel, PanelHead } from "@/components/ui/panel";
+import { Panel } from "@/components/ui/panel";
 import { PageHeader, HeaderFact } from "@/components/ui/page-header";
 import { DateField } from "@/components/ui/date-field";
 import { Tag } from "@/components/ui/tag";
@@ -34,11 +33,12 @@ import {
   type DraftSet,
   type Exercise,
   type ExerciseHistoryEntry,
+  type MuscleGroup,
   type WeightUnit,
-  type WorkoutTemplate,
   type WorkoutType,
 } from "@/lib/workout/types";
 import { getExerciseHistory, logRun, logWorkout, saveTemplate, setWeightUnit } from "../actions";
+import { saveDraft, type WorkoutDraft } from "../personal-actions";
 import { ExercisePanel } from "./exercise-panel";
 import { ExercisePicker } from "./exercise-picker";
 
@@ -53,34 +53,75 @@ function suggestionFor(history: ExerciseHistoryEntry[], unit: WeightUnit): Draft
     : { reps: 8, weightKg: 0 };
 }
 
+/** How long to wait after the last change before writing the draft. */
+const AUTOSAVE_DELAY_MS = 1500;
+
 export function NewWorkoutForm({
   exercises,
   recentExerciseIds,
-  templates,
   weightUnit: initialWeightUnit,
   todayDate,
-  lastSession,
+  initialDraft,
+  startExerciseIds,
+  startMuscle,
 }: {
   exercises: Exercise[];
   recentExerciseIds: string[];
-  templates: WorkoutTemplate[];
   weightUnit: WeightUnit;
   todayDate: string;
-  lastSession: { workoutDate: string; exerciseIds: string[] } | null;
+  /** An unfinished session to pick back up, if there is one. */
+  initialDraft: WorkoutDraft | null;
+  /** Pre-loaded exercises, from "repeat last session" or a template. */
+  startExerciseIds: string[];
+  /** From the "next up" suggestion — floats that body part up the picker. */
+  startMuscle: MuscleGroup | null;
 }) {
   const router = useRouter();
-  const [type, setType] = useState<WorkoutType>("resistance");
-  const [workoutDate, setWorkoutDate] = useState(todayDate);
-  const [notes, setNotes] = useState("");
+
+  // Everything below is seeded from the draft when one exists, rather than
+  // being restored by an effect after the first render — an effect would flash
+  // an empty session and then fill it in, which mid-workout reads as "it lost
+  // my sets" for a beat.
+  const draftPayload = initialDraft?.payload;
+  const restored = (draftPayload?.exercises ?? []).map((ex) => ({
+    exerciseId: ex.exerciseId,
+    exerciseName: ex.exerciseName,
+    equipment: ex.equipment,
+    sets: ex.sets,
+  })) as DraftExercise[];
+
+  // Exercises chosen before arriving (repeat last session, or a template) are
+  // resolved at render too, not in an effect — everything needed is already in
+  // props, and seeding state is what stops the screen rendering empty and then
+  // filling in.
+  const seeded = (
+    restored.length > 0
+      ? restored
+      : startExerciseIds
+          .map((id) => exercises.find((e) => e.id === id))
+          .filter((e): e is Exercise => !!e)
+          .map((e) => ({
+            exerciseId: e.id,
+            exerciseName: e.name,
+            equipment: e.equipment,
+            sets: [] as DraftSet[],
+          }))
+  ) as DraftExercise[];
+
+  const [type, setType] = useState<WorkoutType>(draftPayload?.type ?? "resistance");
+  const [workoutDate, setWorkoutDate] = useState(draftPayload?.workoutDate ?? todayDate);
+  const [notes, setNotes] = useState(draftPayload?.notes ?? "");
   const [unit, setUnit] = useState<WeightUnit>(initialWeightUnit);
   const [knownExercises, setKnownExercises] = useState(exercises);
-  const [resistanceStarted, setResistanceStarted] = useState(false);
-  const [draftExercises, setDraftExercises] = useState<DraftExercise[]>([]);
+  const [draftExercises, setDraftExercises] = useState<DraftExercise[]>(seeded);
   const [activeIndex, setActiveIndex] = useState(0);
   const [historyByExercise, setHistoryByExercise] = useState<
     Record<string, ExerciseHistoryEntry[]>
   >({});
-  const [pickerOpen, setPickerOpen] = useState(false);
+  // Nothing to log and nothing pre-chosen means the only sensible next step
+  // is picking exercises, so the picker opens itself rather than showing an
+  // empty screen with a button on it.
+  const [pickerOpen, setPickerOpen] = useState(seeded.length === 0);
   const [showOverview, setShowOverview] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
@@ -100,6 +141,72 @@ export function NewWorkoutForm({
     () => draftExercises.reduce((n, ex) => n + ex.sets.length, 0),
     [draftExercises]
   );
+
+  // ---------------------------------------------------------------------
+  // Starting the session
+  // ---------------------------------------------------------------------
+
+  const startedRef = useRef(false);
+
+  useEffect(() => {
+    // Runs once, and only talks to the network — every piece of state this
+    // screen opens with was already seeded at render. Its job is to pull each
+    // exercise's history so "last time" has something to show, and to put an
+    // opening set on anything that arrived empty.
+    if (startedRef.current) return;
+    startedRef.current = true;
+    if (seeded.length === 0) return;
+
+    if (restored.length > 0) toast.success("Picked up where you left off");
+
+    for (const ex of seeded) {
+      getExerciseHistory(ex.exerciseId, 4).then((history) => {
+        setHistoryByExercise((prev) => ({ ...prev, [ex.exerciseId]: history }));
+        setDraftExercises((prev) =>
+          prev.map((d) =>
+            d.exerciseId === ex.exerciseId && d.sets.length === 0
+              ? { ...d, sets: [suggestionFor(history, unit)] }
+              : d
+          )
+        );
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------------------------------------------------------------------
+  // Autosave
+  // ---------------------------------------------------------------------
+
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    // THE POINT OF ALL OF THIS: before, `draftExercises` lived only in React
+    // state, so a locked phone or a browser evicting the tab took every set
+    // logged so far with it — silently, mid-gym. Debounced rather than saved on
+    // every keystroke, because a stepper tapped ten times in a row should cost
+    // one write, not ten.
+    if (isRunning || draftExercises.length === 0) return;
+
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      saveDraft({
+        type,
+        workoutDate,
+        notes,
+        exercises: draftExercises.map((ex) => ({
+          exerciseId: ex.exerciseId,
+          exerciseName: ex.exerciseName,
+          equipment: ex.equipment,
+          sets: ex.sets,
+        })),
+      });
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [draftExercises, type, workoutDate, notes, isRunning]);
 
   async function handleUnitChange(next: WeightUnit) {
     setUnit(next);
@@ -135,15 +242,6 @@ export function NewWorkoutForm({
         )
       );
     }
-  }
-
-  function startFromExerciseIds(ids: string[]) {
-    const chosen = ids
-      .map((id) => knownExercises.find((e) => e.id === id))
-      .filter((e): e is Exercise => !!e);
-    if (chosen.length === 0) return;
-    setResistanceStarted(true);
-    addExercisesToDraft(chosen);
   }
 
   function updateSet(exerciseId: string, index: number, set: DraftSet) {
@@ -198,6 +296,10 @@ export function NewWorkoutForm({
   async function handleSubmitLift() {
     if (draftExercises.length === 0 || submitting) return;
     setSubmitting(true);
+    // Stop any pending autosave from resurrecting the draft after the server
+    // has just deleted it as part of logging the workout.
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+
     const result = await logWorkout({
       workoutDate,
       notes: notes.trim() || null,
@@ -232,6 +334,7 @@ export function NewWorkoutForm({
   async function handleSubmitRun() {
     if (!runKm || totalRunSeconds <= 0 || submitting) return;
     setSubmitting(true);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
     await logRun({
       workoutDate,
       distanceKm: runKm,
@@ -246,7 +349,7 @@ export function NewWorkoutForm({
     <div>
       <PageHeader
         eyebrow="Workout"
-        title="New session"
+        title={initialDraft ? "Session in progress" : "New session"}
         backHref="/workout"
         meta={
           <>
@@ -255,6 +358,9 @@ export function NewWorkoutForm({
               <HeaderFact>
                 {draftExercises.length} exercises · {loggedSetCount} sets
               </HeaderFact>
+            )}
+            {!isRunning && draftExercises.length > 0 && (
+              <HeaderFact>Saved as you go</HeaderFact>
             )}
           </>
         }
@@ -370,78 +476,8 @@ export function NewWorkoutForm({
               />
             </div>
           </div>
-        ) : !resistanceStarted ? (
-          /* ================= START A SESSION ================= */
-          <div className="flex flex-col gap-4">
-            {lastSession && (
-              <Panel>
-                <PanelHead title="Pick up where you left off" />
-                <button
-                  type="button"
-                  onClick={() => startFromExerciseIds(lastSession.exerciseIds)}
-                  className="tap-press flex w-full items-center gap-3 px-3 py-3.5 text-left transition-colors hover:bg-muted"
-                >
-                  <span className="flex size-9 shrink-0 items-center justify-center border-2 border-rule">
-                    <RotateCcw className="size-4" strokeWidth={2.5} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-semibold">Repeat last session</span>
-                    <span className="micro-sm mt-0.5 block text-muted-foreground">
-                      {lastSession.exerciseIds.length} exercises · {lastSession.workoutDate}
-                    </span>
-                  </span>
-                  <ChevronRight
-                    className="size-4 shrink-0 text-muted-foreground"
-                    strokeWidth={2.5}
-                  />
-                </button>
-              </Panel>
-            )}
-
-            {templates.length > 0 && (
-              <Panel>
-                <PanelHead title="Your templates" count={templates.length} />
-                <ul>
-                  {templates.map((t, i) => (
-                    <li key={t.id} className={cn(i > 0 && "border-t border-hairline")}>
-                      <button
-                        type="button"
-                        onClick={() => startFromExerciseIds(t.exercise_ids)}
-                        className="tap-press flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-muted"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold">{t.name}</span>
-                          <span className="micro-sm mt-0.5 block text-muted-foreground">
-                            {t.exercise_ids.length} exercises
-                          </span>
-                        </span>
-                        <ChevronRight
-                          className="size-4 shrink-0 text-muted-foreground"
-                          strokeWidth={2.5}
-                        />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </Panel>
-            )}
-
-            <Button
-              type="button"
-              variant="outline"
-              block
-              size="lg"
-              onClick={() => {
-                setResistanceStarted(true);
-                setPickerOpen(true);
-              }}
-            >
-              <Plus className="size-4" strokeWidth={3} />
-              Start from scratch
-            </Button>
-          </div>
         ) : draftExercises.length === 0 ? (
-          /* ================= STARTED, NOTHING PICKED ================= */
+          /* ================= NOTHING PICKED YET ================= */
           <div className="hatch border-2 border-rule px-4 py-10 text-center">
             <p className="micro-sm text-muted-foreground">No exercises yet</p>
             <div className="mt-3 flex justify-center">
@@ -630,36 +666,32 @@ export function NewWorkoutForm({
         )}
 
         {/* ================= NOTES + SAVE ================= */}
-        {(isRunning || resistanceStarted) && (
-          <>
-            <div>
-              <label className="micro-sm mb-1.5 block text-muted-foreground">
-                Notes (optional)
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                className="w-full border-2 border-rule bg-surface px-3 py-2 text-sm outline-none focus-visible:border-primary"
-                placeholder="How'd it go?"
-              />
-            </div>
+        <div>
+          <label className="micro-sm mb-1.5 block text-muted-foreground">
+            Notes (optional)
+          </label>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            className="w-full border-2 border-rule bg-surface px-3 py-2 text-sm outline-none focus-visible:border-primary"
+            placeholder="How'd it go?"
+          />
+        </div>
 
-            <Button
-              block
-              size="lg"
-              variant="invert"
-              disabled={submitting || (isRunning ? false : loggedSetCount === 0)}
-              onClick={isRunning ? handleSubmitRun : handleSubmitLift}
-            >
-              {submitting
-                ? "Saving…"
-                : isRunning
-                  ? "Save run"
-                  : `Finish session · ${loggedSetCount} set${loggedSetCount === 1 ? "" : "s"}`}
-            </Button>
-          </>
-        )}
+        <Button
+          block
+          size="lg"
+          variant="invert"
+          disabled={submitting || (isRunning ? false : loggedSetCount === 0)}
+          onClick={isRunning ? handleSubmitRun : handleSubmitLift}
+        >
+          {submitting
+            ? "Saving…"
+            : isRunning
+              ? "Save run"
+              : `Finish session · ${loggedSetCount} set${loggedSetCount === 1 ? "" : "s"}`}
+        </Button>
       </div>
 
       <ExercisePicker
@@ -668,6 +700,7 @@ export function NewWorkoutForm({
         exercises={knownExercises}
         recentExerciseIds={recentExerciseIds}
         excludeIds={draftExercises.map((e) => e.exerciseId)}
+        priorityGroup={startMuscle}
         onSelect={addExercisesToDraft}
         onExerciseCreated={(exercise) => setKnownExercises((prev) => [...prev, exercise])}
       />

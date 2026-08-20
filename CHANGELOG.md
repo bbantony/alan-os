@@ -2298,3 +2298,122 @@ record of the check.
 
 **Not verified:** nobody has run this against a real bank CSV. The column guessing is the same
 code the existing CSV import uses, but no real statement file has been through this path.
+
+---
+
+## 33. Workout rebuilt around your own training
+
+Alan: *"I really don't like the way workouts is laid out — redesign the entire thing, UI wise
+and the way it works."* Planned first, in plan mode, with four options put to him; he picked
+**your training first**, **crew demoted to a tab**, **suggest don't dictate**, and — from a
+list of possible extras — **the session must survive your phone** and **exercise pages with
+charts**. He explicitly declined a rest timer, a plate calculator, and programme-driven
+training with automatic weight progression, so none of those were built.
+
+### What was actually wrong
+
+`/workout` opened on the **crew feed**. Your own sessions were one option in a four-way
+segmented control (Everyone / Mine / Others / Leaderboard), and the only thing on the screen
+about you was a streak number. The module recorded personal records in the `prs` table from
+Phase 2 onward and never showed them anywhere except the instant one was set, inside a feed
+card that scrolls away. There was no way, anywhere in the app, to answer "is my bench actually
+going up".
+
+Two things underneath that were worse than layout:
+
+- **A session in progress lived only in React state.** `draftExercises` was never persisted.
+  Lock the phone, switch apps, let the browser evict the tab — every set logged so far, gone,
+  silently, mid-gym. True since Phase 2.
+- **The streak was mislabelled.** `computeStreak` counts consecutive *calendar days*; the UI
+  rendered that number with `unit="wk"`. A 5-day streak read as "5 wk".
+
+### The new shape
+
+```
+/workout                 [ You | Crew ]   — You is the default
+/workout/new             logging, now resumable
+/workout/exercise/[id]   NEW
+```
+
+**The You tab**, in reading order: a session-in-progress banner (only when one exists, first on
+the screen because if you're standing in a gym with sets half-logged nothing else matters) →
+this week as seven Mon–Sun cells, filled for days trained and marked differently for runs →
+**Next up** → recent sessions → records → one quiet Crew row.
+
+**Next up** is the "suggest, don't dictate" part. It ranks muscle groups by how long since each
+was last trained and leads with the most neglected — *"Legs — 9 days since you trained this"* —
+with a Start button that opens the picker with leg exercises floated to the top. The three ways
+to begin a session (repeat last, a template, from scratch) moved here from inside `/workout/new`,
+so they're offered once rather than a screen deep.
+
+**The Crew tab** keeps everything: feed cards, reactions, realtime across five tables, confetti
+when someone else sets a record, the leaderboard. The four-way filter collapses to
+Feed / Leaderboard — "Mine" and "Others" stop earning their place the moment your own training
+has a tab of its own. Feed state lives in the shell rather than the tab so switching back and
+forth doesn't throw away what realtime already fetched.
+
+**Exercise pages** answer the question the module never could: heaviest ever, best estimated
+1RM, sessions, last done; a chart of heaviest set / estimated 1RM / volume over time; and every
+session's sets with a trophy on the ones that set a record. Same square-cornered, theme-aware
+chart language as Money's reports — no rounded line caps, no soft tooltip.
+
+### Session persistence
+
+New migration `0027`: `workout_drafts`, **one row per user** (the primary key enforces it, so
+saving is a plain upsert with nothing to reconcile), holding the draft as opaque `jsonb` plus
+`started_at` / `updated_at`.
+
+**Why not a `workouts` row with `status = 'in_progress'`.** It would have to be excluded from
+every query that already exists — the feed, the leaderboard, streaks,
+`getWorkoutDashboardSummary`, the Today dashboard — and the one that gets forgotten silently
+counts an abandoned half-session as a real workout, inflating a streak that is supposed to mean
+something. A separate table cannot leak into anything. That is the whole argument, and it's the
+same class of bug as the CAD and `recurring` filters from entries 30-32: the cheapest fix is
+not creating the risk.
+
+Autosave is debounced at 1.5s, so a stepper tapped ten times costs one write rather than ten.
+`logWorkout` and `logRun` delete the draft **in the same action** that saves the session, and
+both submit handlers cancel any pending autosave first — otherwise a timer firing after the
+server had cleared the draft would resurrect a session that's already saved, and logging it
+again would double it.
+
+Everything the logging screen opens with is now **seeded at render** rather than restored by an
+effect: a draft that arrives via `useEffect` flashes an empty session and then fills in, which
+mid-workout reads as "it lost my sets" for a beat. It also removed a real
+`react-hooks/set-state-in-effect` error the linter caught.
+
+### Files
+
+New: `supabase/migrations/0027_workout_drafts.sql`, `src/lib/workout/suggest.ts`,
+`workout/personal-actions.ts`, `workout/workout-shell.tsx`, `workout/you-view.tsx`,
+`workout/crew-view.tsx`, `workout/exercise/[id]/{page,exercise-detail}.tsx`.
+Deleted: `workout/workout-feed.tsx` (its feed became `crew-view.tsx`).
+Modified: `workout/{page,actions}.ts(x)`, `workout/new/{page,new-workout-form,exercise-picker}.tsx`.
+
+`personal-actions.ts` is deliberately separate from `actions.ts`: that file is the crew feed and
+the leaderboard, where queries are *meant* to reach other people's rows through the crew RLS
+policies. Everything in the new file is scoped to the signed-in user. Mixing the two in one
+600-line file is how a query ends up crew-scoped by accident.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit`, `eslint` all clean; all three routes compile and still sit
+behind the module guard (signed-out requests to `/workout` and `/workout/new` redirect to
+`/login`).
+
+**14 checks against the shipped `suggest.ts`** (compiled from the real file, not reimplemented):
+never-trained groups outrank any gap; among trained groups the oldest wins; days-since is
+counted correctly; never-trained groups keep a stable order so the suggestion doesn't flicker
+between page loads; an empty history returns `null` rather than inventing advice; and every
+phrasing branch reads as English.
+
+Against the **live database**, rolled back: the table exists with RLS and a policy; a draft with
+two exercises and three sets saves and reads back with every set intact and in order; saving
+again updates the payload while leaving `started_at` alone; there is only ever one row per
+person; deleting clears it; records collapse to one row per exercise; and the exercise-detail
+join finds its sets with the session date attached.
+
+**Not verified:** the thing that matters most — nobody has half-logged a real session on a phone,
+locked it, and come back. The database round trip proves the draft survives a write and a read;
+it cannot prove the browser hands it back after being evicted. Also unverified on a phone: the
+whole new layout, the week strip, and the chart.

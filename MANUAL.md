@@ -1118,4 +1118,72 @@ It'll tell you how many transactions it set aside.
 
 ---
 
+---
+
+## Workout — rebuilt around you
+
+The Workout screen used to open on what everyone else had been doing, with your
+own training tucked behind a filter. It's the other way round now.
+
+### The "You" tab (what you land on)
+
+Top to bottom:
+
+- **Session in progress** — only appears if you walked away mid-workout. Tap
+  **Continue** to pick up exactly where you were, or **Discard** to bin it (it
+  asks first, and tells you how many sets you'd lose).
+- **This week** — seven boxes, Monday to Sunday. A filled box is a day you
+  trained; runs are marked differently from lifting, so a week of running and a
+  week of weights don't look the same. It's a record, not a target — the app
+  isn't going to nag you about a number you never set.
+- **Next up** — the app's suggestion, based on whatever you've left longest.
+  *"Legs — 9 days since you trained this."* Tap **Start** and it opens the
+  exercise list with legs already at the top. Underneath it: **Repeat last
+  session**, any **templates** you've saved, and **Start from scratch**.
+- **Recent** — your last eight sessions.
+- **Records** — your best ever on each lift. Tap any one to see its full story.
+- **Crew** — one row, tapping through to the other tab.
+
+### The "Crew" tab
+
+Everything that used to be the front page is here, unchanged: what everyone's
+logged, reactions, the confetti when someone hits a personal best, and the
+leaderboard. Just two buttons now (Feed and Leaderboard) instead of four.
+
+### Exercise pages — new
+
+Tap any record, and you get that one exercise's whole history:
+
+- Your heaviest ever, your best estimated one-rep max, how many times you've
+  done it, and when you last did.
+- **A chart** showing whether it's actually going up. Switch between heaviest
+  set, estimated one-rep max, and total volume.
+- Every session you've ever logged it in, with a trophy on the ones that set a
+  record.
+
+This is the thing the app genuinely couldn't do before — you could see the last
+four times you'd benched while you were benching, and nothing else, ever.
+
+### Your session can't disappear any more
+
+**This is the important one.** Before, if your phone locked mid-workout, or you
+flipped to your music app and back, or your browser quietly dropped the page —
+everything you'd logged that session was gone. No warning, nothing to recover.
+
+Now it saves itself as you go. Close the app, come back tomorrow, and the
+Workout screen offers to continue exactly where you stopped, with every set
+still there. When you finish a session it clears itself, so it'll never offer
+you a workout you've already saved.
+
+You don't have to do anything for this — there's no save button. The header says
+"Saved as you go" while you're logging.
+
+### One number was wrong
+
+Your streak counts consecutive **days** you trained, and always has — but the
+screen was labelling it "wk". A 5-day streak was showing as "5 wk". It now says
+days, which is what it always meant.
+
+---
+
 *(Phase 6 section will be added here once its checklist is complete.)*

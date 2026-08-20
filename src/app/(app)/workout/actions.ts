@@ -343,6 +343,11 @@ export async function logWorkout(input: {
     }
   }
 
+  // The session is finished, so the in-progress draft must go with it in
+  // the same action — otherwise reopening the app offers to "continue" a
+  // workout that is already saved, and logging it again would double it.
+  await supabase.from("workout_drafts").delete().eq("user_id", user.id);
+
   return { workoutId, prs: allNewPrs };
 }
 
@@ -374,6 +379,11 @@ export async function logRun(input: {
 
   revalidatePath("/workout");
   revalidatePath("/today");
+
+  // The session is finished, so the in-progress draft must go with it in
+  // the same action — otherwise reopening the app offers to "continue" a
+  // workout that is already saved, and logging it again would double it.
+  await supabase.from("workout_drafts").delete().eq("user_id", user.id);
 
   return { workoutId };
 }

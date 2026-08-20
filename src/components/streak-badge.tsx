@@ -2,7 +2,7 @@ import { Flame } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // The Flame+number pairing Workout already used inline in two places
-// (workout-feed.tsx, leaderboard.tsx) — pulled out so Routines can be a
+// (the crew feed, leaderboard.tsx) — pulled out so Routines can be a
 // second real consumer instead of a third copy-paste.
 //
 // A live streak is now a filled block rather than a tinted icon: it's one of

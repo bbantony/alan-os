@@ -39,6 +39,7 @@ export function ExercisePicker({
   exercises,
   recentExerciseIds,
   excludeIds,
+  priorityGroup = null,
   onSelect,
   onExerciseCreated,
   open,
@@ -48,6 +49,14 @@ export function ExercisePicker({
   recentExerciseIds: string[];
   /** Already in the session — shown as locked-in rather than hidden. */
   excludeIds: string[];
+  /**
+   * Float one body part to the top of the list.
+   *
+   * Set when you arrive from the "next up" suggestion on the Workout screen —
+   * if the app just told you legs have gone nine days, the leg exercises should
+   * be the first thing under your thumb rather than four scrolls down.
+   */
+  priorityGroup?: MuscleGroup | null;
   /** Called once with everything ticked, in the order they were ticked. */
   onSelect: (exercises: Exercise[]) => void;
   onExerciseCreated: (exercise: Exercise) => void;
@@ -90,9 +99,15 @@ export function ExercisePicker({
         items: exercises
           .filter((e) => e.muscle_group === group && matches(e) && !recentIds.has(e.id))
           .sort((a, b) => a.name.localeCompare(b.name)),
-      })).filter((g) => g.items.length > 0),
+      }))
+        .filter((g) => g.items.length > 0)
+        .sort((a, b) => {
+          if (a.group === priorityGroup) return -1;
+          if (b.group === priorityGroup) return 1;
+          return 0;
+        }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [exercises, key, recentIds]
+    [exercises, key, recentIds, priorityGroup]
   );
 
   const totalMatches = recent.length + groups.reduce((n, g) => n + g.items.length, 0);

@@ -584,10 +584,48 @@ last two weeks of spending as a "gap".
 
 ---
 
+## Workout, rebuilt around your own training (owner-requested, 2026-08-19)
+
+"I really don't like the way workouts is laid out — redesign the entire thing, UI
+wise and the way it works." Planned in plan mode with four directions put to
+Alan. CHANGELOG.md entry 33.
+
+**His choices:** your training first; crew demoted to a tab; suggest, don't
+dictate; and of the optional extras, session persistence and exercise pages with
+charts. He declined a rest timer, a plate calculator, and programme-driven
+training with automatic weight progression — so none were built. Don't add them
+back without asking.
+
+- [x] `/workout` is now **[ You | Crew ]**, You by default: in-progress banner,
+      a Mon-Sun week strip, "Next up", recent sessions, records, one Crew row.
+- [x] **Next up** ranks muscle groups by neglect and names the most neglected,
+      with a Start that floats that body part to the top of the picker. The
+      three ways to begin a session moved here out of `/workout/new`.
+- [x] **Crew tab** keeps the feed, reactions, realtime, PR confetti and the
+      leaderboard; its filter drops from four options to Feed / Leaderboard.
+- [x] **`/workout/exercise/[id]`** — heaviest ever, best est. 1RM, a chart over
+      time, and every session with records marked. The `prs` table has existed
+      since Phase 2 and was never visible outside the moment a record was set.
+- [x] **A session survives the phone** (migration `0027`, `workout_drafts`).
+      Autosaved debounced at 1.5s, restored on open, cleared by finishing.
+      Deliberately its own table, not a `workouts` row with a status — see the
+      migration's comment for why.
+- [x] Fixed: the streak was labelled "wk" while counting consecutive **days**.
+- [x] Verified: build/typecheck/lint clean; 14 checks against the shipped
+      `suggest.ts`; a rolled-back live-database round trip covering the draft
+      save/restore/clear, one-row-per-user, records collapsing per exercise and
+      the exercise-detail join.
+
+**Not verified, and it's the one that matters:** nobody has half-logged a real
+session on a phone, locked it, and come back. The database proves the draft
+survives a write and a read; it can't prove the browser hands it back.
+
+---
+
 Next session (written 2026-08-19).
 
-**In flight: one finished round, uncommitted** — the reconciliation work above
-(entry 32). Build/lint/typecheck clean and verified against the live database.
+**In flight: one finished round, uncommitted** — the Workout rebuild above
+(entry 33). The reconciliation work (entry 32) was committed in `fc5ef35`. Build/lint/typecheck clean and verified against the live database.
 Migration `0026_reconciliation.sql` is already applied to production.
 
 Entries 30 and 31 (the Money bug fixes, and gallery receipts + recurring money +
