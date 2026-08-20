@@ -1,5 +1,6 @@
 import "server-only";
 import { callGeminiJson, isAiConfigured } from "./gemini";
+import { aiFeatureEnabled } from "./feature-flags";
 
 export interface ReceiptExtractionLineItem {
   raw_name: string;
@@ -37,7 +38,10 @@ Rules:
 - If a field genuinely can't be read from the image, use null rather than guessing wildly.`;
 
 export async function extractReceiptData(imageBase64: string, mimeType: string): Promise<ReceiptExtraction | null> {
-  if (!isAiConfigured()) return null;
+  // Settings → AI & cost can switch this off, in which case the review
+  // screen opens blank for manual entry — the same graceful path as having
+  // no key at all (SPEC.md Part F), not an error.
+  if (!isAiConfigured() || !(await aiFeatureEnabled("aiReceipts"))) return null;
 
   const result = await callGeminiJson({
     feature: "receipt",

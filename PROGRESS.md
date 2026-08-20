@@ -654,12 +654,24 @@ Settings groups plus a real timezone.
       insight stores an *intent*; `runSuggestedAction` is the only executor, only
       from a tap, only for tools the account already has.
 
+### Round 2 — Settings (done, CHANGELOG.md entry 35)
+- [x] **13 settings pages.** New: account (with the **avatar upload**
+      `profiles.avatar_url` never had a UI for, migration `0029`),
+      notifications, today, plan, data. Extended: money, shopping, ai.
+- [x] **Everything saves on change** — no Save button anywhere. `updatePreferences`
+      merges against what's *stored*, not the defaults, so one page can't reset
+      another's setting.
+- [x] **The settings are true**, not just stored: Today's panel order and
+      timezone, Plan's default view, receipt auto-tick, recurring auto-post, and
+      each AI feature checking its own switch at its own entry point.
+- [x] **The dispatcher honours quiet hours and the type switches** (migration
+      `0030`, a security-definer RPC because cron has no session). Two rules,
+      deliberately different: **quiet hours HOLD** a reminder so it fires once the
+      window ends; a **switched-off type ADVANCES** it, or it would be
+      reconsidered on every tick forever. Don't "simplify" these into one branch.
+- [x] **Export and wipe** — there was previously no way to get data out at all.
+
 ### Still to do
-- **Round 2 — Settings**, all eight groups: `/settings/account` (incl. the
-  avatar upload `profiles.avatar_url` has never had a UI for),
-  `/settings/notifications`, `/settings/today`, `/settings/plan`,
-  `/settings/data` (export/wipe), plus extending money/shopping/ai. The
-  preferences plumbing is done; these pages are the UI on top of it.
 - **Round 3** — bills before they bite, goals that become habits, and the price
   book (`shopping_purchases` now has the data it needs).
 
@@ -669,8 +681,8 @@ The full plan is at `.claude/plans/effervescent-yawning-waffle.md`.
 
 Next session (written 2026-08-19).
 
-**In flight: one finished round, uncommitted** — interconnection Round 1 above
-(entry 34). The Workout rebuild (entry 33) was committed in `30ecf69`. The reconciliation work (entry 32) was committed in `fc5ef35`. Build/lint/typecheck clean and verified against the live database.
+**In flight: one finished round, uncommitted** — Settings, Round 2 (entry 35).
+Round 1 (entry 34) was committed in `b3c43ce`. The Workout rebuild (entry 33) was committed in `30ecf69`. The reconciliation work (entry 32) was committed in `fc5ef35`. Build/lint/typecheck clean and verified against the live database.
 Migration `0026_reconciliation.sql` is already applied to production.
 
 Entries 30 and 31 (the Money bug fixes, and gallery receipts + recurring money +

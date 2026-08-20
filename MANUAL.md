@@ -1252,3 +1252,83 @@ into the code:
   profile now, which matters when you travel. One rule worth knowing: your
   repeating reminders stay anchored to where you *live*, not where you are — so
   flying to India won't drag every reminder five and a half hours.
+
+---
+
+## Settings — everything you can now change
+
+Settings used to be four screens. It's thirteen. **More → Settings.**
+
+Nothing has a Save button — every switch and dropdown takes effect the moment
+you touch it.
+
+### Account
+
+Your name, a **profile photo** (new — the app has never had a way to set one,
+which is why your crew has only ever seen your initial), your email, your
+timezone and which day your week starts on.
+
+**Timezone matters if you travel.** Your repeating reminders stay anchored to
+where you say you live, not where your phone is — so a trip to India won't drag
+every reminder five and a half hours. Change it here when you actually move.
+
+### Notifications
+
+- **Quiet hours** — nothing is sent between the hours you set (10pm to 7am by
+  default). Anything that came due during the quiet window arrives once it's
+  over. It isn't lost.
+- **A switch per type** — task nudges, routine reminders, crew personal bests,
+  bills about to land, and the weekly pattern. Turn off what you don't want.
+- **Your devices** — every phone, tablet or browser you've allowed notifications
+  on gets a copy of everything. This is the first time you can see that list and
+  remove an old one.
+
+### Today
+
+Choose which panels appear on your Today screen and put them in the order you
+want, with the up/down arrows. Hide anything you never look at. There's a new
+one available too: **Today so far**, a short version of the Timeline showing
+what's already happened today.
+
+### Plan
+
+- **Working hours** — the app folds work tasks away outside these. It was fixed
+  at 8am–6pm, weekdays.
+- **When evening planning starts** — Today swaps from "what's on now" to "plan
+  tomorrow" after this. Was fixed at 8pm.
+- **What new tasks default to** for their reminder, and which of the three Plan
+  views opens first.
+
+### Money
+
+Your default account for quick logging, your payday (so new budgets anchor
+correctly), whether repeating payments post themselves or wait to be added by
+hand, and a monthly nudge to check your accounts against the bank.
+
+### Shopping
+
+- **Learn each item's own rate** — instead of bringing every staple back after
+  the same 14 days, work out how often you actually buy each thing from your
+  history. Needs three purchases before it kicks in; until then it uses the
+  fallback below.
+- **The fallback**, for anything it hasn't seen you buy enough times.
+- Whether receipts tick things off your list, and how the list sorts.
+
+### AI & cost
+
+- **Your monthly spending limit** — was fixed at $5, now anything from $1 to $50.
+  It's a hard stop, not a target.
+- **How bold it can be** — just tell me / offer a button / do small things. It
+  can never delete anything or move money whatever you pick.
+- **A switch per feature** — receipts, bank imports, the assistant, weekly
+  patterns. Turn one off and that part goes back to fully manual. It still
+  works; you just do the typing.
+
+### Data — new
+
+- **Download everything** you've ever logged as a single file. Money, training,
+  tasks, shopping, the lot. You've never been able to get your data out of this
+  app before, which is worth fixing for something holding your bank balances.
+- **Clear one section** and start it over, leaving everything else alone. It
+  makes you type "clear" first, because this is not something to do by accident.
+  Take the download first.

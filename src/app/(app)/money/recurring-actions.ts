@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { resolvePreferences } from "@/lib/preferences";
 import { todayInAppTimezone } from "@/lib/time";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import {
@@ -146,8 +147,19 @@ export interface PostedSummary {
  */
 export async function postDueRecurringTransactions(): Promise<PostedSummary> {
   const { supabase, user } = await requireUser();
-  const today = todayInAppTimezone();
   const summary: PostedSummary = { posted: 0, totalExpenseCents: 0, totalIncomeCents: 0 };
+
+  // Settings → Money can turn automatic posting off, in which case repeating
+  // items still show as upcoming but wait to be added by hand.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("preferences, timezone")
+    .eq("id", user.id)
+    .maybeSingle();
+  const prefs = resolvePreferences(profile?.preferences);
+  if (!prefs.recurringAutoPost) return summary;
+
+  const today = todayInAppTimezone((profile?.timezone as string) || undefined);
 
   const { data: dueRows } = await supabase
     .from("recurring_transactions")

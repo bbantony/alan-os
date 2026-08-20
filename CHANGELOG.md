@@ -2559,3 +2559,111 @@ database.
 model call has been made. `/journal` and `/vinyl` were confirmed absent from the build's route
 list rather than observed 404ing, because the auth guard redirects a signed-out request before
 routing gets that far. And nothing here has been used on a phone.
+
+---
+
+## 35. Settings, properly (Round 2 of 3)
+
+Alan: *"plan comprehensive settings since it's still very basic. I would want to change things
+up from settings in a very comprehensive way so help me get every option I can."* He then
+picked **all eight groups** put to him, plus **"I travel — make it real"** on the timezone.
+
+Settings was four pages: Appearance, Password, and per-module category management for Shopping,
+Workout, Calendar and Money. Everything about how the app *behaved* was a constant in a file.
+
+### The plumbing
+
+`updatePreferences(patch)` in `settings/preferences-actions.ts` is the only writer. It merges
+against **what's stored**, not against the defaults — otherwise saving one toggle on the
+Shopping page would silently reset something the Notifications page set five minutes earlier.
+`notifications` is merged one level deeper because it's the only nested object; a shallow
+spread would wipe every sibling switch whenever one moved.
+
+It stores the *resolved* object rather than the raw patch, so an out-of-range value can't sit
+in the database being clamped on every read while looking like a setting that is honoured.
+
+`components/settings/setting-controls.tsx` is the shared vocabulary — `SettingsGroup`,
+`SettingRow`, `PreferenceSwitch`, `PreferenceChoice`, `PreferenceNumber`. Eight pages of
+toggles is exactly where each screen otherwise grows its own row height and label size.
+
+**Nothing has a Save button.** Every control saves on change, optimistically, and reverts with
+a message if the write fails. A settings screen full of switches with a Save at the bottom is
+one you can leave without your change taking effect, and people do. The one exception is the
+number field, which commits on blur — typing "14" over "7" passes through "1" on the way, and
+saving that would briefly set real behaviour to a value nobody chose.
+
+### The pages
+
+**`/settings/account`** — name, email, timezone, week start, and an **avatar upload**.
+`profiles.avatar_url` has existed since migration 0001 with no way to set it; the crew feed has
+been drawing initials this whole time because there was nothing else to draw. Migration `0029`
+adds the bucket — **public**, unlike receipts and journal, because an avatar is shown to your
+crew on every feed card and a private bucket would mean signing a URL per member per card on
+every render. Writes are still per-user-folder, the pattern 0017 established. The photo is
+downscaled to 512px in the browser first (`lib/images.ts`, written for receipts) and the
+previous file is deleted *after* the new URL saves, so a failed upload leaves the old one
+intact. The timezone list is thirteen plausible zones rather than all ~600 IANA names — a
+searchable list of every zone is the "complete" answer and a worse one on a phone.
+
+**`/settings/notifications`** — quiet hours, a switch per type, and the device list.
+
+**`/settings/today`** — which panels appear and in what order. Up/down buttons, not
+drag-and-drop: dragging is worse on a phone, needs a dependency, and needs a keyboard story to
+be accessible at all. Five items don't need a drag library.
+
+**`/settings/plan`** — work hours, evening-ritual time, default nudge, default view.
+
+**`/settings/data`** — download everything as JSON, and clear one module. There has been **no
+way to get data out of this app at all**, which matters for something holding bank balances and
+a training history. The wipe asks you to type "clear": every other destructive action here
+deletes one thing, this deletes a year of it, and a tap you can make by accident isn't enough.
+Accounts and categories survive a Money wipe — they're setup, not history — and the dialog says
+so rather than guessing silently.
+
+Extended: **Money** (default account, payday anchor, auto-post, reconcile reminder),
+**Shopping** (learned staple rates, fallback interval, receipt auto-tick, sort), **AI** (monthly
+cap, per-feature switches, and the boldness choice).
+
+### Making them true
+
+A setting that stores a value and changes nothing is worse than not offering it, so:
+
+- **Today** reads the account's timezone and evening hour, and its panels are rendered from
+  the saved order — the fixed two-column grid became a list. The "today so far" panel is new,
+  a compact read of the Life Ledger, and its six queries only run when the panel is visible.
+- **Plan** opens on your chosen view (a `?view=` in the URL still wins — that's someone
+  deliberately linking).
+- **Receipts** only auto-tick the shopping list when you want them to. The purchase record is
+  written either way: what you bought and for how much is worth keeping regardless.
+- **Repeating money** only posts itself when auto-post is on, and uses your timezone for
+  "today".
+- **Each AI feature** checks its own switch at its own entry point, not inside the shared
+  client — a switched-off feature should take its manual path (a blank receipt form,
+  heuristic-only CSV sorting, an assistant that says it's off), not fail deep in a helper.
+- **The dispatcher honours quiet hours and the type switches.** It has no session, so migration
+  `0030` adds a security-definer RPC taking the cron secret, the same pattern as 0012.
+
+The two suppression rules are deliberately different, and this is the part worth remembering:
+**quiet hours HOLD** a reminder — it isn't advanced, so the first tick after the window ends
+sends it, because "quiet hours" must not mean "silently discarded overnight". A **switched-off
+type ADVANCES** — it moves to its next occurrence, or it would sit at the front of the queue
+being reconsidered on every tick forever.
+
+Also fixed: Today's workout stat still said `unit="wk"` while showing a count of days. The
+Workout module's copy of that bug was fixed in entry 33; this one survived.
+
+### Verified
+
+`npm run build`, `npx tsc --noEmit`, `eslint` clean; all **13** settings pages compile and every
+new one sits behind the auth guard.
+
+Against the **live database**, rolled back: the avatars bucket is public with read open and all
+three write policies per-user; `get_notification_prefs_for_user` exists and **rejects a wrong
+cron secret**; a partial preference write keeps sibling switches, keeps a nested value set
+earlier, applies the new one and doesn't touch unrelated top-level keys; all 28 tables the
+export names actually exist; and wiping Money clears its transactions while leaving tasks,
+accounts and categories intact.
+
+**Not verified:** no setting has been changed from a real phone, the avatar upload has never
+run against a real camera photo, and the dispatcher's new quiet-hours branch has not fired for
+real — that needs the cron pinger to hit it during a quiet window.

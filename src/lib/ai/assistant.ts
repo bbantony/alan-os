@@ -5,6 +5,7 @@ import type { ModuleAccess } from "@/lib/permissions";
 import { callGeminiWithTools, isAiConfigured, type GeminiContent, type GeminiPart } from "./gemini";
 import { declarationsFor, toolsFor, type AiTool, type ToolContext } from "./tools";
 import { getUsageSummary } from "./usage";
+import { aiFeatureEnabled } from "./feature-flags";
 
 /**
  * The assistant loop.
@@ -107,6 +108,15 @@ export async function askAssistant(input: {
       actions: [],
       unavailable:
         "The assistant needs a Google AI key before it can do anything. It's free — see the Manual's Phase 5 section for the five steps.",
+    };
+  }
+
+  if (!(await aiFeatureEnabled("aiAssistant"))) {
+    return {
+      text: "",
+      actions: [],
+      unavailable:
+        "The assistant is switched off in Settings → AI & cost. Turn it back on there whenever you want it.",
     };
   }
 

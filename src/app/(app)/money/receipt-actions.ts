@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { extractReceiptData } from "@/lib/ai/receipt-vision";
 import { findBestMatch } from "@/lib/finance/fuzzy-match";
 import { normalizeItemName } from "@/lib/shopping/purchases";
+import { resolvePreferences } from "@/lib/preferences";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import type { AccountType, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
 
@@ -177,6 +178,16 @@ async function applyShoppingCrossCheck(
   const candidates = (shoppingItems as { id: string; name: string; is_staple: boolean }[]) ?? [];
   const now = new Date().toISOString();
 
+  // Settings → Shopping can turn the auto-tick off. The purchase record is
+  // written either way: knowing what you bought and for how much is worth
+  // keeping whether or not you want your list touched.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("preferences")
+    .eq("id", userId)
+    .maybeSingle();
+  const autoTick = resolvePreferences(profile?.preferences).receiptAutoTick;
+
   // A receipt is the only place the app ever learns what something COST. Every
   // line item becomes a purchase record whether or not it matched something on
   // the list — the price book wants the lot, and an item bought without being
@@ -199,7 +210,7 @@ async function applyShoppingCrossCheck(
       receipt_id: context.receiptId,
     });
 
-    if (!match) continue;
+    if (!match || !autoTick) continue;
     await supabase
       .from("shopping_items")
       .update({

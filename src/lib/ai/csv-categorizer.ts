@@ -1,5 +1,6 @@
 import "server-only";
 import { callGeminiJson, isAiConfigured } from "./gemini";
+import { aiFeatureEnabled } from "./feature-flags";
 
 export interface CsvCategorizationRow {
   merchant: string;
@@ -15,6 +16,7 @@ export async function categorizeCsvRows(
   categoryNames: string[]
 ): Promise<(string | null)[] | null> {
   if (!isAiConfigured() || rows.length === 0) return null;
+  if (!(await aiFeatureEnabled("aiCsvImport"))) return null;
 
   const systemPrompt = `You categorize bank transactions. Given a JSON array of
 {merchant, amountCents} objects, respond ONLY with a JSON array of category

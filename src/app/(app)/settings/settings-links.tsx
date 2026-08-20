@@ -1,4 +1,19 @@
-import { Palette, KeyRound, ShoppingCart, Dumbbell, CalendarClock, Wallet, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
+import {
+  Palette,
+  KeyRound,
+  ShoppingCart,
+  Dumbbell,
+  CalendarClock,
+  Wallet,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  Bell,
+  Sun,
+  ListChecks,
+  Database,
+  type LucideIcon,
+} from "lucide-react";
 import type { CurrentProfile } from "@/lib/supabase/profile";
 import type { ModuleId } from "@/lib/permissions";
 
@@ -11,11 +26,15 @@ interface RawLink {
   icon: LucideIcon;
 }
 
+// Not gated on any module — these apply to the whole app whatever an account
+// can open.
 const ACCOUNT_LINKS: RawLink[] = [
+  { label: "Account", href: "/settings/account", icon: UserRound },
   { label: "Appearance", href: "/settings/appearance", icon: Palette },
-  // Not gated on a module: the assistant is available to every account, and
-  // this page is where what it has cost is visible.
+  { label: "Notifications", href: "/settings/notifications", icon: Bell },
+  { label: "Today", href: "/settings/today", icon: Sun },
   { label: "AI & cost", href: "/settings/ai", icon: Sparkles },
+  { label: "Data", href: "/settings/data", icon: Database },
   { label: "Password", href: "/settings/password", icon: KeyRound },
 ];
 
@@ -24,6 +43,7 @@ const ACCOUNT_LINKS: RawLink[] = [
 // Visibility follows the same per-user module_access grid as the rest of
 // the app (src/lib/permissions.ts), not a hardcoded ownerOnly flag.
 const MODULE_LINKS: (RawLink & { moduleId: ModuleId })[] = [
+  { label: "Plan", href: "/settings/plan", icon: ListChecks, moduleId: "tasks" },
   { label: "Shopping", href: "/settings/shopping", icon: ShoppingCart, moduleId: "shopping" },
   { label: "Workout", href: "/settings/workout", icon: Dumbbell, moduleId: "workout" },
   { label: "Calendar & Reminders", href: "/settings/calendar", icon: CalendarClock, moduleId: "calendar" },

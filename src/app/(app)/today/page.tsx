@@ -12,6 +12,7 @@ import {
 import { getRoutinesDueToday } from "@/app/(app)/routines/actions";
 import { formatCents } from "@/lib/finance/money";
 import {
+  APP_TIMEZONE,
   isEveningPlanningTime,
   todayInAppTimezone,
   utcToZonedParts,
@@ -20,9 +21,12 @@ import {
 import { PageHeader, HeaderFact } from "@/components/ui/page-header";
 import { Stat, StatStrip } from "@/components/ui/stat";
 import { NO_MODULES_ACCESS } from "@/lib/permissions";
+import { DEFAULT_PREFERENCES } from "@/lib/preferences";
+import { getLedger } from "@/lib/ledger";
 import { TodayConsole } from "./today-console";
 import { FocusPanel } from "./focus-panel";
 import { JumpTo } from "./jump-to";
+import { TodaySoFar } from "./today-so-far";
 import { DashboardGrid, Reveal } from "./dashboard-grid";
 
 /**
@@ -93,13 +97,23 @@ export default async function TodayPage() {
 
   const name = profile?.displayName?.split(" ")[0] ?? null;
   const uncheckedShopping = shoppingItems.filter((i) => !i.checked).length;
-  const isEvening = isEveningPlanningTime();
+  // Both from preferences now: the hour used to be a hardcoded 8pm and the
+  // timezone a hardcoded Winnipeg.
+  const prefs = profile?.preferences ?? DEFAULT_PREFERENCES;
+  const timezone = profile?.timezone ?? APP_TIMEZONE;
+  const isEvening = isEveningPlanningTime(new Date(), prefs.eveningRitualHour, timezone);
 
-  const today = todayInAppTimezone();
+  const today = todayInAppTimezone(timezone);
   const [y, m, d] = today.split("-").map(Number);
   const todayStartUtc = zonedTimeToUtc({
     year: y, month: m, day: d, hour: 0, minute: 0, second: 0,
   });
+
+  // Only fetched when the panel is actually on screen — a hidden panel should
+  // not cost six queries on every dashboard load.
+  const ledgerToday = prefs.todayPanels.includes("timeline")
+    ? await getLedger(today, today)
+    : [];
 
   const overdueTasks = tasks.filter((t) => t.due_at && new Date(t.due_at) < todayStartUtc);
   const overdueIds = new Set(overdueTasks.map((t) => t.id));
@@ -110,7 +124,7 @@ export default async function TodayPage() {
   // The clock the whole dashboard reasons about comes from the app's timezone,
   // not the device's — so "is this already past?" stays correct if Alan opens
   // the app from another time zone.
-  const nowParts = utcToZonedParts(new Date());
+  const nowParts = utcToZonedParts(new Date(), timezone);
   const nowMinutes = nowParts.hour * 60 + nowParts.minute;
   const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   const dateLine = `${weekday} ${d} ${MONTHS[m - 1]}`;
@@ -119,6 +133,11 @@ export default async function TodayPage() {
     nowParts.hour < 12 ? "Good morning" : nowParts.hour < 17 ? "Good afternoon" : "Good evening";
 
   const dueCount = dueTodayTasks.length + routinesDueToday.filter((r) => !r.completedToday).length;
+
+  // The order (and what's shown at all) comes from Settings → Today. The old
+  // layout was a fixed two-column grid; this is a straight list so a person can
+  // put what they actually look at first.
+  const panels = prefs.todayPanels.filter((p) => p !== "vitals");
 
   return (
     <div>
@@ -143,8 +162,9 @@ export default async function TodayPage() {
         <DashboardGrid>
           {/* VITALS. Every figure here is a link into the module that produced
               it — seeing a number and acting on it should never be more than
-              one tap apart. */}
-          <Reveal>
+              one tap apart. It's a panel like the others now: Settings → Today
+              can move it or hide it. */}
+          <Reveal className={prefs.todayPanels.includes("vitals") ? undefined : "hidden"}>
             <StatStrip columns={4}>
               {access.tasks && (
               <Stat
@@ -178,7 +198,7 @@ export default async function TodayPage() {
               <Stat
                 label="Streak"
                 value={workout.currentStreak}
-                unit="wk"
+                unit="days"
                 href="/workout"
                 tone={workout.loggedToday ? "ok" : "default"}
                 sub={workout.loggedToday ? "Logged today" : "Not logged yet"}
@@ -199,32 +219,40 @@ export default async function TodayPage() {
             </StatStrip>
           </Reveal>
 
-          {(access.tasks || access.calendar) && (
-            <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr] lg:items-start">
-              <TodayConsole
-                dueTodayTasks={dueTodayTasks}
-                overdueTasks={overdueTasks}
-                routinesDueToday={routinesDueToday}
-                nextEventTitle={calendar.nextEventTitle}
-                nextEventTime={calendar.nextEventTime}
-                nowMinutes={nowMinutes}
-              />
+          {panels.map((panel) => {
+            if (panel === "console" && (access.tasks || access.calendar)) {
+              return (
+                <TodayConsole
+                  key={panel}
+                  dueTodayTasks={dueTodayTasks}
+                  overdueTasks={overdueTasks}
+                  routinesDueToday={routinesDueToday}
+                  nextEventTitle={calendar.nextEventTitle}
+                  nextEventTime={calendar.nextEventTime}
+                  nowMinutes={nowMinutes}
+                />
+              );
+            }
+            if (panel === "timeline") {
+              return <TodaySoFar key={panel} events={ledgerToday} />;
+            }
+            if (panel === "focus" && access.calendar) {
+              return (
+                <FocusPanel
+                  key={panel}
+                  isEvening={isEvening}
+                  focus={focus}
+                  yesterdayReflection={yesterdayReflection}
+                  openTasks={tasks}
+                />
+              );
+            }
+            if (panel === "jump") {
+              return <JumpTo key={panel} moduleAccess={access} />;
+            }
+            return null;
+          })}
 
-              <div className="flex flex-col gap-4">
-                {access.calendar && (
-                  <FocusPanel
-                    isEvening={isEvening}
-                    focus={focus}
-                    yesterdayReflection={yesterdayReflection}
-                    openTasks={tasks}
-                  />
-                )}
-                <JumpTo moduleAccess={access} />
-              </div>
-            </div>
-          )}
-
-          {!access.tasks && !access.calendar && <JumpTo moduleAccess={access} />}
         </DashboardGrid>
       </div>
     </div>

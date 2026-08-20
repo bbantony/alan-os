@@ -9,6 +9,7 @@ import { PageHeader, HeaderFact } from "@/components/ui/page-header";
 import { todayInAppTimezone } from "@/lib/time";
 import { addMonths, parseDateString, toDateString } from "@/lib/calendar";
 import { getPlanRange } from "./actions";
+import { getPreferences } from "@/app/(app)/settings/preferences-actions";
 import { PlanShell } from "./plan-shell";
 
 /**
@@ -41,6 +42,7 @@ export default async function PlanPage({
     doneTodayByHorizon,
     planItems,
     gcalStatus,
+    preferences,
   ] = await Promise.all([
     getTasks(),
     getWeeklyDoneCount(),
@@ -49,14 +51,19 @@ export default async function PlanPage({
     getTodayCompletionCountsByHorizon(),
     getPlanRange(rangeStart, rangeEnd),
     getGcalStatus(),
+    getPreferences(),
   ]);
 
   const openCount = tasks.filter((t) => !t.parent_task_id).length;
   const activeRoutines = routines.filter((r) => r.active).length;
   const dueToday = planItems.filter((i) => i.dateIso === todayIso && !i.done).length;
 
+  // A ?view= in the URL wins (that's someone deliberately linking to a view);
+  // otherwise it's whichever one you set in Settings → Plan.
   const view =
-    params.view === "calendar" || params.view === "agenda" ? params.view : "list";
+    params.view === "calendar" || params.view === "agenda" || params.view === "list"
+      ? params.view
+      : preferences.defaultPlanView;
 
   return (
     <div>

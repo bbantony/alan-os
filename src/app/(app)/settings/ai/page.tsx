@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import { getUsageByFeature, getUsageSummary } from "@/lib/ai/usage";
 import { isAiConfigured } from "@/lib/ai/gemini";
 import { MODELS, formatMicros } from "@/lib/ai/models";
+import { getPreferences } from "../preferences-actions";
+import { AiPreferences } from "./ai-preferences";
 
 /**
  * What the AI has actually cost, this month, by feature.
@@ -28,7 +30,11 @@ const FEATURE_LABELS: Record<string, string> = {
 };
 
 export default async function AiSettingsPage() {
-  const [usage, byFeature] = await Promise.all([getUsageSummary(), getUsageByFeature()]);
+  const [usage, byFeature, preferences] = await Promise.all([
+    getUsageSummary(),
+    getUsageByFeature(),
+    getPreferences(),
+  ]);
   const configured = isAiConfigured();
 
   return (
@@ -48,6 +54,8 @@ export default async function AiSettingsPage() {
           </div>
         </Panel>
       )}
+
+      <AiPreferences initial={preferences} />
 
       <StatStrip columns={2}>
         <Stat
