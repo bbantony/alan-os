@@ -741,3 +741,43 @@ carries two marks. He was shown four options and said keep the current logo.
 vinyl log with iTunes art, `/frame` wall display) — it depends on neither
 owner action. Phase 7 is the one Alan actually wants, and needs the Gemini key
 first. As always, a new request from Alan takes priority over both.
+
+---
+
+## Decisions log
+
+Standing decisions that outlive any one phase. Newest at the bottom.
+
+### 22 Aug 2026 — subagent workflow installed
+Alan asked for a permanent three-agent workflow, committed to the repo. Added
+`codebase-scout` (read-only, maps a unit and its existing patterns, hard 300-word
+cap), `test-runner` (runs lint/build/test only, reports failures verbatim or the
+single line `ALL CHECKS PASS`) and `unit-reviewer` (read-only skeptic, PASS/FAIL
+checklist against CLAUDE.md's hard constraints, fixes nothing). The standing orders
+that bind them live in CLAUDE.md's new **Session protocol** section: scout before
+building, all checks through test-runner, nothing marked complete in this file until
+both test-runner and unit-reviewer report clean, stop after two failed attempts at
+the same review item, and delegate anything that produces bulk output.
+
+**Two parts of Alan's brief did not match this repo and were adapted rather than
+copied.** They were written for a different codebase — a sales/CRM-shaped one — and
+naming things that do not exist here would have produced an agent that always passes:
+
+- `BUILD_INSTRUCTIONS.md` does not exist. The reviewer reads the newest `CHANGELOG.md`
+  entry, the in-flight part of this file, and any `.claude/plans/` file instead, and
+  will prefer `BUILD_INSTRUCTIONS.md` if one is ever added.
+- The domain rules he listed (a client `raw_text` field, interactions needing a next
+  step and due date, cost/GP figures hidden by a presentation mode, a rules engine)
+  have no counterpart in Alan OS. The two that *do* apply were kept verbatim — secrets
+  never reaching the browser, and AI output never writing to the database without a
+  confirm step — and the rest were replaced with this project's real invariants: RLS
+  before feature code, integer-cent money, UTC storage with profile-timezone display,
+  imported source data never rewritten in place, the documented invariants in
+  migrations 0022/0030/0031 and the price book's medians, every model call metered
+  through the one door including thinking tokens, numbered raw-SQL migrations, module
+  access enforced in data and not only in navigation, and a CHANGELOG entry present.
+
+**There are no tests and no `test` script** in `package.json` as of this date, so
+`npm test` errors with "Missing script: test". `test-runner` is told to report that as
+a known state rather than a failure. `npm run build` typechecks via Next.js, so type
+errors are still caught. If tests are ever added, the agent runs them normally.

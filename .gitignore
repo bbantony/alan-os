@@ -37,8 +37,11 @@ yarn-error.log*
 # vercel
 .vercel
 
-# claude code local settings
-.claude/
+# claude code: local settings stay out, the shared agent definitions go in
+.claude/*
+!.claude/agents/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # typescript
 *.tsbuildinfo

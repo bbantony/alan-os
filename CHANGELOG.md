@@ -2769,3 +2769,85 @@ afresh; a paused bill never is; the median of three purchases is 499 where the m
 **Not verified:** no bill notification has been pushed for real (that needs the cron pinger to
 run while a bill is inside the window), and the price book has no real data yet — it starts
 filling from the first receipt approved after this deploy.
+
+---
+
+## 37. The Gemini key, and a permanent subagent workflow
+
+Two requests in one session. Alan supplied the Gemini API key that had been blocking every AI
+feature since Phase 5, and asked for it to be tested and genuinely wired in — then, before that
+work continued, asked for a three-agent workflow installed permanently in the repo.
+
+### What the key test found (before any code changed)
+
+The key itself is fine: it authenticates and answers. But it is a **new** key, and new keys are
+cut off from the Gemini 2.5 family. All three models this app is pinned to —
+`gemini-2.5-flash-lite`, `gemini-2.5-flash`, `gemini-2.5-pro` in `src/lib/ai/models.ts` — return
+`404: no longer available to new users`. Since `rawCall` in `src/lib/ai/gemini.ts` returns `null`
+on any non-OK response, and every feature treats `null` as "let the person do it by hand", the
+app would have gone on behaving exactly as it did with no key at all: silently manual, no error
+anywhere. Pasting the key in and calling it done would have shipped a lie.
+
+Verified working against the live API with the key in hand: `gemini-3.6-flash`, `gemini-3.7-flash`
+and `gemini-3.1-flash-lite` all respond; forced-JSON output (`responseMimeType`) works; function
+calling works and returns a `functionCall` part in the shape `assistant.ts` already expects.
+
+**The thinking-token trap, which matters more than the model rename.** Gemini 3.x models emit
+private reasoning tokens that are billed at the output rate but are reported separately, in
+`usageMetadata.thoughtsTokenCount`, and are *not* included in `candidatesTokenCount`. Extracting
+a task from "dentist next tuesday at 3pm" — an 18-token answer — burned **982 thinking tokens**.
+Two consequences, both bad: the meter in `usage.ts` reads only `candidatesTokenCount`, so it
+would have reported roughly 2% of the real bill and the spending ceiling would never have
+tripped; and thinking is drawn from the same `maxOutputTokens` allowance as the answer, so
+`ensureWeeklyInsight`'s 700-token cap would be exhausted before the model wrote a word, yielding
+empty text, a failed JSON parse, and a permanently silent feature.
+
+`generationConfig.thinkingConfig.thinkingLevel` controls it. Measured on the same prompt:
+default 982 thought tokens, `high` 55, `medium` 63, `low` 256, `minimal` 0 — all four returning
+the correct answer. (`thinkingBudget`, the 2.5-era parameter, is rejected outright.) The fix,
+next session: repoint `models.ts`, add thinking tokens to the metered output count, and pick a
+thinking level per tier rather than globally — minimal for mechanical extraction, low for the
+Today-page suggestions, more only for the monthly review.
+
+`.env.local` now carries the key. It is gitignored (`.env*`) and was never committed.
+
+### The subagent workflow
+
+Three new project-scoped agents in `.claude/agents/`, committed:
+
+- **`codebase-scout.md`** — read-only (Read/Glob/Grep only, so it *cannot* edit). Answers three
+  questions about a work unit: what it touches, what pattern the neighbouring files already use,
+  and what will bite. Hard 300-word cap, stated as a cap and not a target, because its purpose is
+  to save context.
+- **`test-runner.md`** — Bash only. Runs `npm run lint`, `npm run build`, `npm test`, nothing
+  else. Reports failures verbatim with file and line, or the single line `ALL CHECKS PASS`, with
+  all build noise stripped. Told explicitly that this repo has no `test` script and that "Missing
+  script: test" is a known state, not a failure — otherwise it would report a failure forever.
+- **`unit-reviewer.md`** — read-only skeptic, allowed `git diff`/`log`/`show` to see the work.
+  Re-reads `CLAUDE.md` first, then walks thirteen hard constraints and reports PASS/FAIL/N-A per
+  line in plain English, writing no fixes.
+
+`CLAUDE.md` gained a **Session protocol** section (scout before building; all checks through
+test-runner; nothing marked complete in `PROGRESS.md` until both test-runner and unit-reviewer
+report clean; stop after two failed attempts at the same review item; delegate anything that
+produces bulk output), a **Maintaining this file** section dated today, and an updated sub-agent
+list — now seven, not four.
+
+### Where Alan's brief was adapted rather than copied
+
+Two parts of the instructions were written against a different, sales/CRM-shaped codebase.
+`BUILD_INSTRUCTIONS.md` does not exist here, so the reviewer reads the newest CHANGELOG entry,
+the in-flight part of PROGRESS.md and any `.claude/plans/` file — and will prefer
+`BUILD_INSTRUCTIONS.md` if one ever appears. The listed domain rules (a client `raw_text` field,
+interactions requiring a next step and due date, cost/GP figures hidden behind a presentation
+mode, rules-engine coverage) have no counterpart in Alan OS; naming them would have produced a
+reviewer that always passes. The two that genuinely apply were kept word for word — secrets never
+reaching the browser, and AI output never writing to the database without a confirm step — and
+the remainder were replaced with this project's real invariants, listed in full in the decisions
+log now at the bottom of `PROGRESS.md`.
+
+**One thing had to be fixed to honour "committed to git".** `.gitignore` ignored the whole
+`.claude/` directory, so the four existing agents had never actually been committed — CLAUDE.md
+has been describing agents that only existed on Alan's laptop. Changed to `.claude/*` with
+`!.claude/agents/`, keeping `settings.local.json` and `scheduled_tasks.lock` out. All seven agent
+definitions are now in the repository, so a fresh clone gets the workflow.

@@ -44,13 +44,49 @@ it as a short plain-language choice, not a technical tradeoff.
 
 ## Sub-agents for this project
 
-Four project-scoped agents live in `.claude/agents/`:
+Seven project-scoped agents live in `.claude/agents/`:
 
+- **codebase-scout** — read-only. Maps what a work unit will touch and the patterns
+  already in those files. Reports under 300 words. Goes first, always.
 - **frontend-dev** — Next.js/React/Tailwind/Framer Motion UI work.
 - **backend-dev** — Supabase schema, migrations, RLS, server actions.
-- **qa** — verifies a finished feature end-to-end (build/lint/typecheck, RLS under
-  real auth, walking the actual flow) and reports findings as a structured list.
+- **test-runner** — runs `npm run lint`, `npm run build`, `npm test` and nothing else.
+  Reports only failures, or the single line `ALL CHECKS PASS`.
+- **unit-reviewer** — read-only. Skeptical senior developer; re-reads this file and
+  checks the hard constraints against the diff. Reports a PASS/FAIL checklist and
+  fixes nothing.
+- **qa** — verifies a finished feature end-to-end (RLS under real auth, walking the
+  actual flow) and reports findings as a structured list.
 - **project-manager** — no code; turns finished technical work into the plain-English
   update described above and is who should phrase any question that needs to go to
   Alan. Default to this voice whenever talking to Alan directly, regardless of which
   agent(s) did the underlying work.
+
+## Session protocol — standing orders
+
+These are not suggestions. They hold for every session, every work unit.
+
+- **Scout before building.** At the start of any work unit or non-trivial task,
+  delegate exploration to **codebase-scout**, then present Alan a short plain-English
+  plan before writing any code.
+- **All checks go through test-runner.** Never run `npm run lint`, `npm run build` or
+  `npm test` directly in the main conversation. Bulk output belongs in a subagent.
+- **Nothing is complete until two reports say so.** Before marking anything complete
+  in `PROGRESS.md`, run **test-runner** AND **unit-reviewer** and show Alan both
+  reports. A unit with a FAIL on either report is not complete, no matter how finished
+  it looks and no matter what was promised.
+- **Two strikes, then stop.** If unit-reviewer fails the same item twice, do not
+  attempt a third fix. Stop and explain the problem to Alan in plain English so he can
+  decide.
+- **Keep the main conversation clean.** Anything that produces bulk output — test
+  logs, wide file dumps, documentation lookups, exhaustive searches — gets delegated
+  to a subagent rather than pasted into the conversation.
+
+## Maintaining this file
+
+When a convention changes, change it here in the same session — a stale rule in this
+file is worse than no rule, because it will be followed. Date anything that has a
+lifespan.
+
+- 22 Aug 2026 — subagent workflow installed (codebase-scout, test-runner,
+  unit-reviewer) and the Session protocol section above added.
