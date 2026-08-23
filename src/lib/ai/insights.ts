@@ -198,7 +198,27 @@ export async function ensureWeeklyInsight(): Promise<Insight | null> {
     tier: "standard",
     systemPrompt: SYSTEM_PROMPT,
     userText: JSON.stringify(summarise(events, periodStart, periodEnd)),
-    maxOutputTokens: 700,
+    // Cross-module pattern-spotting is the one job here that genuinely needs
+    // the model to reason, so this tier buys a little thinking — and the cap is
+    // sized to hold BOTH the thinking and the answer, because they share it.
+    //
+    // Measured on THIS prompt (22 Aug 2026), not on a toy one: a full week
+    // summary of the shape `summarise` produces — 4 spend categories, 2 big
+    // expenses, a training session and a previous-week comparison — cost 549
+    // input tokens and 93 output tokens, of which 0 were thinking, finishing
+    // STOP. 1400 is therefore roughly fifteen times the observed need, which is
+    // the margin you want on a once-a-week call where running out means the
+    // feature silently produces nothing. The old 700 predates thinking models.
+    //
+    // Zero thinking tokens at "low" looks like a contradiction against the ~256
+    // quoted in models.ts, and isn't: a thinking LEVEL is a ceiling and a
+    // disposition, not a quota. The model spends what the prompt seems to need,
+    // and this prompt hands it a pre-digested summary with the comparison
+    // already computed, so there is little left to work out. Do not read either
+    // number as what "low" always costs — that is exactly why the cap is
+    // generous rather than tuned to the measurement.
+    thinking: "low",
+    maxOutputTokens: 1400,
   });
 
   const parsed = result as { body?: unknown; suggested_action?: unknown } | null;

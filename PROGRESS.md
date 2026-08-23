@@ -109,11 +109,11 @@ See `SPEC.md` for the full specification.
 - [x] CSV import w/ categorization (column-mapping UI for any bank export
       format, duplicate detection by date+amount+merchant, heuristic
       recent-merchant categorization with AI as an optional second pass)
-- [ ] **Owner action**: get a free Google AI Studio (Gemini) API key and
-      paste it into Vercel + `.env.local` as `GEMINI_API_KEY` — see
-      MANUAL.md's Phase 5 section. Until then, receipt scanning and CSV
-      categorization both fall back to fully manual entry (by design, not
-      a bug) — everything else in this phase already works without it.
+- [x] **Owner action DONE (22 Aug 2026)**: Alan supplied a Gemini key; it is in
+      `.env.local` and both receipt scanning and CSV categorisation are verified
+      working against the live API (CHANGELOG.md entry 37). Note the key is on
+      Google's **free** tier. Still outstanding: the same key has to be pasted
+      into **Vercel** before any of this works on the deployed phone app.
 
 ## Phase 6 — Journal & Vinyl
 - [ ] Photo-a-day + reminder + gallery
@@ -702,10 +702,21 @@ Migration `0026_reconciliation.sql` is already applied to production.
 Entries 30 and 31 (the Money bug fixes, and gallery receipts + recurring money +
 the AI framework) were committed and pushed in `9b08ce8`.
 
-**The one thing blocking everything AI:** `GEMINI_API_KEY` is still empty. No AI
-call has ever been made from this codebase — the assistant, the tool loop and
-the meter have never run against the real API, and it can't be tested without
-the key.
+**The AI key is in, and all four features are verified against the live API**
+(22 Aug 2026, CHANGELOG.md entry 37). `GEMINI_API_KEY` is set in `.env.local`.
+Receipt vision, CSV categorisation, weekly patterns and the assistant's tool
+loop were each exercised end to end with their real system prompts — the
+receipt test rendered an actual receipt image and got merchant, date, all five
+line items and the $38.60 total exactly right.
+
+Two things had to change first, and both matter more than the key itself. The
+key is **new**, and new keys are refused by the entire Gemini 2.5 family, so
+all three models the app was pinned to returned 404; because `rawCall` returns
+null on any non-OK response and every feature reads null as "fall back to
+manual", the app would have carried on behaving exactly as it did with no key
+at all. And Gemini 3.x bills **thinking tokens** at the output rate while
+reporting them separately, so the meter under-counted by up to 50x and small
+output caps were being eaten before the answer began. See the decisions log.
 
 **Also never exercised for real:** no bank CSV has been through the reconcile
 flow, and nobody has used any of the recent work on a phone.
@@ -715,12 +726,16 @@ logging rebuild, the reminder-ownership bug, the due/nudge model, the calendar +
 clock pickers, and the Tasks/Calendar merge into `/plan`.
 
 **Owner actions outstanding:**
-- **Gemini API key** (Phase 5). Free from Google AI Studio, pasted into Vercel
-  and `.env.local` as `GEMINI_API_KEY`. Currently blocks two things: receipt
-  scanning / CSV categorisation falling back to manual (Phase 5, by design),
-  and *everything* in Phase 7. Alan has said his real goal is typing a
-  sentence and having it become a task with a date and a reminder — that is
-  Phase 7 quick-capture and it cannot be built without this key.
+- **Paste the Gemini key into Vercel.** Done locally (`.env.local`), NOT yet in
+  Vercel, so every AI feature still falls back to manual on the deployed phone
+  app. Settings → Environment Variables, name `GEMINI_API_KEY`, then redeploy.
+  Until then the AI works only when the app is run on this laptop.
+- **Know that the key is on Google's FREE tier.** No bill is possible on it,
+  but it carries per-minute and per-day request limits, and Pro models are
+  refused outright (429) — which is why the `deep` tier is a flash model that
+  thinks hard rather than a Pro model. Free-tier prompts may also be used by
+  Google to improve their models; upgrading to a paid key stops that and lifts
+  the limits. Alan's call, not an engineering one.
 - **Onboard the 3 friends** to Workout (Phase 2) — send them the invite link
   from Settings → Admin.
 

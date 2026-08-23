@@ -145,6 +145,9 @@ export async function askAssistant(input: {
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const reply = await callGeminiWithTools({
+      // Choosing between tools and reading back their results is reasoning, not
+      // transcription — worth the ~256 thinking tokens "low" costs per turn.
+      thinking: "low",
       feature: "assistant",
       tier: "standard",
       systemPrompt: systemPrompt(input.displayName, input.moduleAccess),

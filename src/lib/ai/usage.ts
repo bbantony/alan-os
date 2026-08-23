@@ -14,11 +14,30 @@ import { costMicros, formatMicros, type ModelTier } from "./models";
 /**
  * The default monthly ceiling, in micro-dollars. $5 USD.
  *
- * Roughly ten times a realistic month (see MANUAL.md's cost section), so it
- * never gets in the way of normal use while making a runaway bug cost the price
- * of a coffee rather than the price of a phone. Every AI feature checks the
- * ceiling before calling anything; over the line, features fall back to their
- * manual paths rather than failing.
+ * Recalculated 22 Aug 2026 against the current prices and measured token
+ * counts, because the old "roughly ten times a realistic month" stopped being
+ * true when the models changed.
+ *
+ * Measured: an assistant question costs ~$0.0019 answered and ~$0.0038 acted on
+ * in two turns. But the upper bound must come from `MAX_STEPS` in assistant.ts,
+ * not from the two-turn case — the loop allows FOUR turns, each resending the
+ * system prompt and the whole thirteen-tool schema with the accumulated tool
+ * results on top, so a four-step question lands near $0.0085. Thirty of those a
+ * day for a month is about $7.40, which is ALREADY OVER this $5 default.
+ *
+ * So: a normal month is about $1, a heavy month about $3.50, and a pathological
+ * month of nothing but four-step questions exceeds the ceiling and switches the
+ * AI off. That is the brake working as intended, but it is a real ceiling now,
+ * not a theoretical one, and raising MAX_STEPS would move it closer.
+ *
+ * TWO DATED CONSEQUENCES. The promotional pricing behind those figures ends
+ * 31 Dec 2026 and doubles; a heavy month then exceeds $5 in ordinary use and
+ * this default must go up with it. And on a FREE-tier key nothing is billed at
+ * all, so this ceiling can stop the AI while Google has charged nothing —
+ * MANUAL.md explains that to Alan in plain English.
+ *
+ * Every AI feature checks the ceiling before calling anything; over the line,
+ * features fall back to their manual paths rather than failing.
  *
  * This is now only the default — the live value comes from the account's
  * preferences (Settings → AI & cost), resolved per request below.

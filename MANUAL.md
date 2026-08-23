@@ -977,44 +977,96 @@ else in the app works without it.
 
 ## What the AI costs
 
-Short answer: **about $1 to $3 US a month**, and there's a hard ceiling of $5
-that nothing can spend past. On Google's free tier it's **$0**.
+**Right now, on the key that's in the app, the answer is zero.** It's a Google
+*free tier* key: Google doesn't bill it at all. The figures below are what it
+*would* cost if you ever switched to a paid key — worth knowing, but not a bill
+you're currently getting.
 
-### Where that comes from
+### The one confusing thing about this
 
-Every question you ask the assistant costs roughly **a quarter of a cent**.
-Reading a receipt costs about **a fifth of a cent**. Sorting a whole bank
-statement import costs less than a tenth of a cent.
+The app still counts what your usage *would* have cost, and still stops at the
+$5 ceiling. So it is possible — if you used the AI extremely heavily — for the
+app to announce **"this month's AI budget is used up"** while Google has charged
+you absolutely nothing. That's not a bug and you haven't been billed. If it ever
+happens, raise the ceiling in Settings → AI & cost and carry on.
 
-So:
+The free tier has its own limits instead: a cap on how many requests you can
+make per minute and per day. If you hit those, AI features quietly fall back to
+manual for a while and then start working again. Also worth knowing: Google may
+use free-tier requests to improve their own models. Moving to a paid key stops
+that and lifts the limits — your call, and there's no rush.
+
+### What it would cost on a paid key
+
+Measured against the real API on 22 August 2026, not estimated:
+
+Two kinds of question cost different amounts, so both are listed. A question
+the assistant just *answers* is one exchange. A question that makes it **do**
+something — add a task, log an expense, add to the shopping list — takes two:
+one to decide what to do, one to tell you it's done. That second kind is the
+one you actually wanted, and it costs about double.
 
 | What you do | How often | Cost per month |
 |---|---|---|
-| Ask the assistant 10 times a day | 300 questions | about $0.71 |
-| Ask it 30 times a day | 900 questions | about $2.13 |
-| Scan 30 receipts | 30 | about $0.06 |
+| Ask it something, 10 times a day | 300 | about $0.56 |
+| Ask it something, 30 times a day | 900 | about $1.69 |
+| Make it *do* something, 10 times a day | 300 | about $1.15 |
+| Make it *do* something, 30 times a day | 900 | about $3.45 |
+| Scan 30 receipts | 30 | about $0.19 |
 | Import your bank statement weekly | 4 | under $0.01 |
+| Weekly patterns write-up | automatic, weekly | under $0.01 |
 
-Even asking it thirty times a day, every day, you're at roughly the price of a
-coffee for the whole month.
+A question costs about **a fifth of a cent** answered and **four tenths of a
+cent** acted on. A receipt is about **six tenths of a cent** — measured on a
+full 22-item grocery shop, so a corner-shop receipt costs less — and a whole
+90-line bank statement about **a tenth of a cent**. Realistically you'll mix the
+two kinds of question, so a normal month is around **$1**, and a very heavy one
+around **$3.50**.
+
+**These numbers went up in August 2026** and it's worth knowing why. The newer
+Gemini models think privately before answering, and that thinking is charged at
+the same rate as the answer. The app now counts it; the earlier figures in this
+manual didn't count it at all, which is the bigger part of the change. The
+prices themselves also roughly doubled when the app moved to the newer models.
+
+The app keeps that thinking dialled right down to compensate: on the mechanical
+jobs — reading receipts, sorting bank imports — it's switched off entirely, and
+it's only turned up where the answer genuinely needs reasoning.
+
+One dated warning: the current promotional pricing runs to **31 December 2026**
+and doubles on 1 January 2027. If you're on a paid key by then, everything above
+doubles too.
 
 ### The safety net
 
 Tap **More → Settings → AI & cost**. It shows exactly what's been spent this
 month, broken down by what spent it, against the $5 ceiling. If the ceiling is
 ever reached, the AI features simply stop and everything else in the app keeps
-working normally until the 1st. It's not possible for a bug to run up a bill.
+working normally until the 1st.
+
+So a runaway bug can't run up a real bill — it gets stopped at $5 on a paid key,
+and on the free key you're on now it can't cost anything in the first place. What
+it *can* do is trip the ceiling and switch the AI off for the rest of the month.
+That's the failure to expect, and raising the ceiling on that screen undoes it.
+
+One honest caveat about that $5. It's comfortable for a normal month and fine
+for a heavy one, but it is not unreachable: if you asked the assistant thirty
+complicated questions a day, every day — the kind where it has to look several
+things up before answering — you'd go past it. If that ever becomes how you use
+it, raise the ceiling rather than living with the AI switching itself off.
 
 ### Free or paid — your call
 
-Google's free tier allows far more than you'd ever use here (over a thousand
-requests a day), so realistically you'd pay nothing. The one thing to know: on
-the free tier Google may use what you send to improve their products. On the
-paid one they don't.
+Google's free tier allows far more than you'd ever use here, so realistically
+you'd pay nothing — and the key in the app right now is a free one. Two things
+to know about it: there's a cap on requests per minute and per day, so a burst
+of heavy use can make AI features fall back to manual for a while; and on the
+free tier Google may use what you send to improve their products. On the paid
+one they don't.
 
 For a personal finance app that's worth thinking about for a second. If you'd
-rather it stay private, turning on billing costs you the $1-3 above and nothing
-more.
+rather it stay private, turning on billing costs you the $1-3.50 above and
+nothing more.
 
 ---
 

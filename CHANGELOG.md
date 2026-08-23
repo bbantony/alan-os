@@ -2804,10 +2804,141 @@ empty text, a failed JSON parse, and a permanently silent feature.
 
 `generationConfig.thinkingConfig.thinkingLevel` controls it. Measured on the same prompt:
 default 982 thought tokens, `high` 55, `medium` 63, `low` 256, `minimal` 0 — all four returning
-the correct answer. (`thinkingBudget`, the 2.5-era parameter, is rejected outright.) The fix,
-next session: repoint `models.ts`, add thinking tokens to the metered output count, and pick a
-thinking level per tier rather than globally — minimal for mechanical extraction, low for the
-Today-page suggestions, more only for the monthly review.
+the correct answer. (`thinkingBudget`, the 2.5-era parameter, is rejected outright.)
+
+### What was then changed, same session
+
+- **`src/lib/ai/models.ts` repointed**, and gained a `thinking: ThinkingLevel` field per tier so
+  the cost dial lives beside the price it moves. `cheap` → `gemini-3.1-flash-lite` ($0.25/$1.50,
+  minimal), `standard` → `gemini-3.6-flash` ($0.75/$3.75, minimal), `deep` → `gemini-3.7-flash`
+  ($0.75/$3.75, high). The **deep tier is deliberately not a Pro model**: this key is on the free
+  tier and every Pro model returns 429 quota-exceeded, so deep means "same flash, allowed to
+  think hard" — which is where the real cost difference sits anyway, and keeps the cost screen
+  honest without a fourth price row. Dated warning recorded in the file: the $0.75/$3.75
+  promotional pricing ends **31 Dec 2026** and doubles to $1.50/$7.50.
+- **`src/lib/ai/gemini.ts`**: `thinkingConfig` now goes on every request, defaulting to the
+  tier's level with a per-call override; `thoughtsTokenCount` is added to the metered output
+  count so `ai_usage` reflects what Google actually bills; non-OK responses are logged with
+  feature, model id, status and the first 300 characters of the reply instead of vanishing into
+  a `null`; a `MAX_TOKENS` finish is logged as its own distinct warning; and a **token accounting
+  cross-check** compares our counted total against the API's own `totalTokenCount` and logs any
+  drift — the check that would have caught this whole class of bug on day one rather than after
+  a 50x under-count.
+- **`src/lib/ai/insights.ts`**: `thinking: "low"`, cap raised 700 → 1400. The number is anchored
+  to a live run of *this* prompt on a realistic week (549 in, 93 out, 0 thinking, finish STOP),
+  not to the unrelated toy measurement above.
+- **`src/lib/ai/assistant.ts`**: `thinking: "low"` — choosing between tools and reading their
+  results back is reasoning, not transcription.
+- **`tierForModelId` deleted** from models.ts. It had no callers anywhere in the repo, and after
+  a model rename it would have returned null for every historical `ai_usage` row.
+- **`weekly-patterns` added to `FEATURE_LABELS`** in `src/app/(app)/settings/ai/page.tsx`.
+  Pre-existing gap, but harmless only while no AI call had ever succeeded; the first insight
+  would have shown Alan the raw slug on his own spend screen.
+- **`MANUAL.md`'s cost section rewritten.** It promised "a quarter of a cent" per question and
+  "$0.71 a month", figures that predate both the price rise and thinking tokens. Replaced with
+  measured numbers (~$0.90/month at ten questions a day, ~$2.70 at thirty), the 1 Jan 2027
+  doubling, and — the part that actually matters to Alan — a plain-English warning that the app
+  can announce "budget used up" while Google has charged **nothing**, because the key is free
+  tier. Free-tier rate limits and the fact that Google may train on free-tier prompts are
+  written down there too.
+- **`PROGRESS.md`**: Phase 5's owner action ticked, the "one thing blocking everything AI" note
+  replaced with what was actually found, and a new owner action added — **the key is not yet in
+  Vercel**, so none of this works on the deployed phone app until it is.
+
+**Verified against the live API**, each with its real system prompt and real tier/cap/thinking
+settings: CSV categorisation (5/5 rows, correctly returning `null` for an unreadable merchant
+rather than guessing), receipt vision (a rendered receipt image → merchant, date, all five line
+items and `total_cents: 3860`, exactly right), weekly patterns (a genuine cross-module
+observation tying a takeaway spike to a drop in training), and the assistant's tool loop
+("remind me to book the dentist on monday and stick oat milk on the shopping list" → correct
+`create_task` **and** `add_shopping_items` calls). `ai_usage` held **zero rows** before this
+work, confirming no AI call had ever been made from this codebase.
+
+### What the new review workflow caught, in two rounds
+
+Worth recording in full, because this was the first unit to go through the agents installed
+earlier in the same session, and it failed twice before it passed.
+
+**Round one — unit-reviewer FAILED the unit on three items.** (1) The price rise plus the newly
+counted thinking tokens made `MANUAL.md`'s cost section untrue, and the reviewer's framing was
+the right one: *the app's own promise to Alan had become the thing that was wrong.* (2) This
+entry still said "The fix, next session" while the code was already changed — a future session
+would have read the record and redone all of it. (3) Checks unconfirmed. It also flagged four
+smaller things, all fixed: `weekly-patterns` missing from `FEATURE_LABELS` (the first successful
+insight would have shown Alan a raw slug on his own spend screen), the 1400 cap justified from a
+toy prompt rather than the real one, the deep tier's `thinking: "high"` sitting on
+`callGeminiJson`'s 1024 default as a trap for whoever builds the monthly review, and the
+suggestion — implemented — to cross-check our token count against the API's own `totalTokenCount`.
+
+**Round two — FAILED again, on the same item 8**, and the second failure was self-inflicted.
+(The `~$0.90`/`~$2.70` figures written during this round were themselves superseded in round
+three — the current, measured numbers are the ones at the end of this entry and in MANUAL.md.)
+Fixing the cost table, this session wrote "daily outlook" into both the Manual's cost table and
+`models.ts`'s `note`, which is rendered verbatim on Settings → AI & cost — describing a feature
+that had not been built yet, under a heading claiming the figures were measured. The reviewer
+also caught that the quoted per-question cost was for a question the assistant *answers*, not one
+that *acts*, which is Alan's actual use; that `usage.ts`'s "roughly ten times a realistic month"
+justification for the $5 ceiling had survived the price change in a second file; that two Manual
+paragraphs four lines apart now contradicted each other about whether a bug could run up a bill;
+and that the new drift canary only watched one direction.
+
+**Two strikes on the same item, so per CLAUDE.md's Session protocol the work stopped and the
+decision went to Alan**, who chose to have the wording fixed and then continue. Fixed: the
+unbuilt feature is named nowhere; `usage.ts`'s ceiling comment is recalculated with two dated
+consequences (the Jan 2027 doubling pushes a heavy month past $5; a free-tier key can trip the
+ceiling having been billed nothing); the Manual's contradiction is resolved by distinguishing "a
+bug can't run up a bill" from "a bug can switch the AI off for the month"; and the canary now
+watches both directions, because over-counting would lock Alan out of every AI feature at a
+fraction of his real spend.
+
+**The assistant's real cost, measured rather than reasoned** — the reviewer's specific complaint
+was that the table asserted measurement while nothing in the repo recorded one. Against the live
+API with the real system prompt and the real 13-tool schema: a question the assistant answers
+costs 1,856 in / 131 out = **0.19 cents**; a question that acts ("remind me to book the dentist on
+monday") takes two turns — 1,858 in / 211 out to decide, then 2,115 in / 18 out to confirm —
+totalling **0.38 cents**. Ten acting questions a day is $1.15 a month, thirty is $3.45. The
+Manual now lists both shapes separately.
+
+**Round three — FAILED a third time on item 8, and found a real bug in the process.** The
+reviewer's complaint was that the receipt and bank-import rows sat under a heading claiming
+"measured, not estimated" when nothing in the repo recorded a measurement for them, and that its
+own floor arithmetic said the receipt figure had to be wrong. It was right on both counts.
+Measuring a realistic 22-item grocery shop: **1,397 in / 1,404 out, 0.63 cents a receipt** —
+nearly three times the 0.24 cents claimed, so thirty receipts is $0.19 rather than $0.07.
+
+**And that measurement surfaced a genuine defect nobody had noticed**: 1,404 output tokens
+against `receipt-vision.ts`'s `maxOutputTokens: 1536`. A shop two or three items larger would
+truncate the JSON mid-object, fail the parse, burn the one retry on a second charge, and drop
+Alan into a blank manual form — precisely on the big receipts nobody wants to type by hand. The
+cap is now **4096**, with the measurement recorded beside it. This is the clearest argument for
+the review workflow in the whole session: the bug was invisible to the build, invisible to the
+type checker, and would have looked like "the receipt scanner just doesn't work sometimes".
+
+Fix proven, not assumed: a rendered **42-item** receipt now returns **2,728 output tokens**,
+finish `STOP`, all 42 line items parsed and `total_cents: 45357` exactly right. Against the old
+1536 cap that same receipt truncates.
+
+Also fixed in round three: the `deep` tier's note still read "Monthly reviews only." and is
+rendered verbatim on Settings → AI & cost for all three tiers whether or not anything uses them —
+the same rule the `standard` note had just been fixed for, missed two entries down; it now reads
+"Not in use yet." And `usage.ts`'s ceiling reasoning was derived from the measured two-turn
+question when `assistant.ts` allows `MAX_STEPS = 4`; a four-step question costs about $0.0085, so
+thirty a day for a month is roughly **$7.40 — already over the $5 default today**, not only after
+the January 2027 doubling. That is now stated in both the code comment and, in plain English,
+in the Manual.
+
+**Measured figures of record** (22 Aug 2026, live API, real prompts, real tier settings):
+
+| Job | Tokens in / out | Cost each |
+|---|---|---|
+| Assistant question, answered | 1,856 / 131 | 0.19c |
+| Assistant question, acted on (2 turns) | 3,973 / 229 | 0.38c |
+| Receipt, 22-item shop | 1,397 / 1,404 | 0.63c |
+| Bank import, 90-row statement | 1,942 / 330 | 0.10c |
+| Weekly patterns | 549 / 93 | under 0.1c |
+
+test-runner returned `ALL CHECKS PASS` on each state it was run against, including the state
+carrying the round-three fixes.
 
 `.env.local` now carries the key. It is gitignored (`.env*`) and was never committed.
 

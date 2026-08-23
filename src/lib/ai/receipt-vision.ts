@@ -49,7 +49,15 @@ export async function extractReceiptData(imageBase64: string, mimeType: string):
     systemPrompt: SYSTEM_PROMPT,
     imageBase64,
     imageMimeType: mimeType,
-    maxOutputTokens: 1536,
+    // MEASURED 22 Aug 2026, and the reason this is not 1536 any more: a normal
+    // full grocery shop — 22 line items — produced 1404 output tokens against
+    // the old 1536 cap. Two or three more items and the JSON is truncated
+    // mid-object, the parse fails, the one retry burns a second charge, and the
+    // scan silently falls back to a blank manual form. Big shops are exactly
+    // when nobody wants to type it in by hand. Thinking is "minimal" on this
+    // tier so essentially all of this allowance is answer, and the answer grows
+    // linearly with the number of items on the receipt.
+    maxOutputTokens: 4096,
   });
   if (!result || typeof result !== "object") return null;
 

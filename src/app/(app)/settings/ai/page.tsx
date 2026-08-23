@@ -27,6 +27,9 @@ const FEATURE_LABELS: Record<string, string> = {
   "csv-import": "Sorting bank imports",
   briefing: "Morning briefing",
   review: "Reviews",
+  // Every slug passed to callGeminiJson/callGeminiWithTools needs a line here,
+  // or the spend list shows Alan a raw slug like "weekly-patterns".
+  "weekly-patterns": "Weekly patterns",
 };
 
 export default async function AiSettingsPage() {
