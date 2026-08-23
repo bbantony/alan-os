@@ -11,8 +11,6 @@
  * something to claim — nothing in the UI edits a reminder directly any more.
  */
 
-export const NUDGE_NEVER = null;
-
 export interface NudgeOption {
   /** Minutes before due. `null` means don't notify. */
   minutes: number | null;

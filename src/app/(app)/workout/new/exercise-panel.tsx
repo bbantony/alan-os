@@ -3,6 +3,7 @@
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelHead } from "@/components/ui/panel";
+import { formatShortDate } from "@/lib/workout/format";
 import { Tag } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 import { formatWeight } from "@/lib/workout/units";
@@ -14,15 +15,6 @@ import {
   type WeightUnit,
 } from "@/lib/workout/types";
 import { SetRow } from "./set-row";
-
-function formatShortDate(dateStr: string): string {
-  if (!dateStr) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${dateStr}T00:00:00Z`));
-}
 
 // The single focused exercise being logged right now — history above, sets
 // below. Only one of these is on screen at a time (new-workout-form.tsx

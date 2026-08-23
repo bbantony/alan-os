@@ -1,5 +1,6 @@
 "use server";
 
+import { extForMimeType } from "@/lib/mime";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -17,12 +18,6 @@ async function requireUser() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   return { supabase, user };
-}
-
-function extForMimeType(mimeType: string): string {
-  if (mimeType === "image/png") return "png";
-  if (mimeType === "image/webp") return "webp";
-  return "jpg";
 }
 
 export async function getReceipt(id: string): Promise<Receipt | null> {
@@ -131,25 +126,6 @@ export async function uploadReceipt(formData: FormData): Promise<{ receiptId?: s
 
   revalidatePath("/money");
   return { receiptId: receipt.id as string };
-}
-
-export async function updateReceiptLineItems(input: {
-  id: string;
-  lineItems: ReceiptLineItem[];
-  merchant: string | null;
-  txnDate: string;
-}) {
-  const { supabase, user } = await requireUser();
-  await supabase
-    .from("receipts")
-    .update({
-      line_items: input.lineItems,
-      merchant_guess: input.merchant,
-      txn_date_guess: input.txnDate,
-    })
-    .eq("id", input.id)
-    .eq("user_id", user.id);
-  revalidatePath("/money");
 }
 
 export async function discardReceipt(input: { id: string }) {

@@ -111,8 +111,3 @@ export function describeGcalFailure(err: unknown): GcalFailure {
     raw,
   };
 }
-
-/** Back-compat single-string form, for callers that only store one column. */
-export function describeGcalError(err: unknown): string {
-  return describeGcalFailure(err).message;
-}

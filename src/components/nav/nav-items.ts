@@ -12,8 +12,6 @@ import {
 } from "lucide-react";
 import type { ModuleAccess, ModuleId } from "@/lib/permissions";
 
-export type Role = "owner" | "workout_member" | "full_user";
-
 export interface NavItem {
   label: string;
   href: string;

@@ -38,12 +38,3 @@ export const fadeInUpVariants: Variants = {
   hidden: { opacity: 0, y: 8 },
   visible: { opacity: 1, y: 0, transition: MECHANICAL },
 };
-
-// Dialogs drop in from slightly above and land on their hard shadow.
-export const popInVariants: Variants = {
-  hidden: { opacity: 0, y: -8 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.16, ease: [0.2, 0, 0, 1] } },
-  exit: { opacity: 0, y: -6, transition: { duration: 0.12 } },
-};
-
-export const PAGE_TRANSITION: Transition = { duration: 0.18, ease: [0.2, 0, 0, 1] };

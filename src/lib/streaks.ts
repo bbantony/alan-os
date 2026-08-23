@@ -1,12 +1,8 @@
+import { addDaysToDateString } from "@/lib/time";
+
 export interface StreakResult {
   current: number;
   longest: number;
-}
-
-function addDays(dateStr: string, delta: number): string {
-  const d = new Date(`${dateStr}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
 }
 
 // Streak = consecutive calendar days with >=1 completion, with one bonus rule
@@ -53,7 +49,7 @@ export function computeStreak(completedDates: string[], today: string): StreakRe
     }
 
     longest = Math.max(longest, current);
-    cursor = addDays(cursor, 1);
+    cursor = addDaysToDateString(cursor, 1);
   }
 
   return { current, longest };

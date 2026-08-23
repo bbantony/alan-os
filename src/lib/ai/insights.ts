@@ -140,22 +140,6 @@ export async function getInsightForWeek(periodStart: string): Promise<Insight | 
   return (data as Insight) ?? null;
 }
 
-export async function getRecentInsights(limit = 6): Promise<Insight[]> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [];
-
-  const { data } = await supabase
-    .from("insights")
-    .select("id, period_start, period_end, body, suggested_action, acted_at, dismissed_at")
-    .eq("user_id", user.id)
-    .order("period_start", { ascending: false })
-    .limit(limit);
-  return (data as Insight[]) ?? [];
-}
-
 /**
  * Writes this week's insight if there isn't one yet.
  *

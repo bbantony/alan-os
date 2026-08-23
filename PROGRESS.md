@@ -843,3 +843,31 @@ above), and the dead `"journal"`/`"vinyl"` keys in `profiles.module_access`, whi
 `resolveModuleAccess` never reads. Migration 0024 stays in the history as the record of
 what these modules were. **Do not rebuild either without asking Alan.**
 
+### 22 Aug 2026 — audit and cleanup, and what was deliberately NOT done
+533 lines net removed across 32 files (CHANGELOG.md entry 40), plus the `comments` table and
+`reminders.mirror_to_gcal`. Four things were found and left alone on purpose, so nobody has to
+rediscover them:
+
+1. **One local-time date helper, `addDays` in `lib/calendar.ts`** — NOT a bug, and the first
+   version of this note said otherwise. It parses to a local `Date`, uses `setDate` (which
+   normalises across DST) and formats back with local getters, so it is internally consistent; its
+   only two callers are in the same file, labelling "Tomorrow"/"Yesterday". The two other copies
+   this note originally accused, in `timeline-view.tsx` and `lib/streaks.ts`, were UTC and
+   identical to the canonical helper — they were consolidated rather than deferred. Left as a
+   smell, not a defect.
+2. **`requireUser()` is copy-pasted 18 times**, once per actions file — the biggest duplication in
+   the repo, ~150 lines. Mechanical, but it touches 18 files and deserves its own diff.
+3. **`SPEC.txt` and the three `Notes/*.txt` handoff files** are stale and contradict current
+   documents (they still carry the uncancelled Journal schema). They are Alan's own writing, so
+   deleting them is his call, not an agent's.
+
+4. **`approveReceipt` overwrites the AI's original extraction** (`money/receipt-actions.ts`) —
+   the human-corrected `line_items`, `merchant_guess` and `txn_date_guess` are written over the
+   receipt row, so what was actually read off the photo is gone once approved. This breaks the
+   "imported source data is never rewritten in place" rule. Found during the audit, out of scope
+   for a deletion pass. **This is ongoing data loss, not a latent risk** — every receipt approved
+   between now and the fix permanently loses what was actually read off the photo — so it should be
+   the NEXT money unit rather than an open item, and when it lands Alan needs telling plainly that
+   receipts approved before it cannot have their original extraction recovered.
+
+Also: `shadcn` is an unused dev dependency, kept because it is the tool for adding UI components.

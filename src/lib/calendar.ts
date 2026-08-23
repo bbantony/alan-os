@@ -35,10 +35,6 @@ export function toDateString(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export function toDateTimeString(d: Date): string {
-  return `${toDateString(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 /** Splits `YYYY-MM-DDTHH:mm` (or a bare date) into its two halves. */
 export function splitDateTime(value: string): { date: string; time: string } {
   const [date = "", time = ""] = value.split("T");

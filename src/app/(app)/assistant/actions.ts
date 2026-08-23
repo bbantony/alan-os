@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { askAssistant, type AssistantMessage, type AssistantReply } from "@/lib/ai/assistant";
 import { getUsageSummary, type UsageSummary } from "@/lib/ai/usage";
-import { isAiConfigured } from "@/lib/ai/gemini";
 
 export async function ask(input: {
   question: string;
@@ -41,11 +40,4 @@ export async function ask(input: {
   }
 
   return { ...reply, usage: await getUsageSummary() };
-}
-
-export async function getAssistantStatus(): Promise<{
-  configured: boolean;
-  usage: UsageSummary;
-}> {
-  return { configured: isAiConfigured(), usage: await getUsageSummary() };
 }

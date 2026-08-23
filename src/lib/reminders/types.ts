@@ -1,4 +1,15 @@
-export type ReminderStatus = "active" | "paused" | "done";
+// What survives of the reminders module's own types.
+//
+// The `Reminder`, `ReminderStatus` and `DayPlan` interfaces were removed on
+// 22 Aug 2026: nothing read them any more. A reminder stopped being a thing of
+// its own when the nudge model landed — it is a setting on a task or a routine,
+// created and edited by `tasks/actions.ts` and `routines/actions.ts` writing to
+// the table directly, and advanced by the `advance_reminder` RPC. `DayPlan` was
+// already unused, and `day_plans` rows are read column by column where needed.
+//
+// The recurrence vocabulary below is the live part, shared by tasks, routines
+// and repeating money — it is deliberately ONE vocabulary across all three, so
+// do not fork a second copy for a new module.
 
 export type RecurrencePreset =
   | "none"
@@ -19,34 +30,9 @@ export const RECURRENCE_PRESET_LABELS: Record<RecurrencePreset, string> = {
   custom: "Custom",
 };
 
-export interface Reminder {
-  id: string;
-  user_id: string;
-  title: string;
-  notes: string | null;
-  remind_at: string;
-  rrule: string | null;
-  status: ReminderStatus;
-  last_fired_at: string | null;
-  mirror_to_gcal: boolean;
-  gcal_event_id: string | null;
-  linked_task_id: string | null;
-  created_at: string;
-}
-
 // A goal can be tied to an existing task (taskId set) or a free-typed entry
 // (taskId null) — either way it's just a title string shown on the ritual.
 export interface TopGoal {
   taskId: string | null;
   title: string;
-}
-
-export interface DayPlan {
-  id: string;
-  user_id: string;
-  plan_date: string;
-  top_goals: TopGoal[];
-  ai_briefing: string | null;
-  evening_reflection: string | null;
-  created_at: string;
 }

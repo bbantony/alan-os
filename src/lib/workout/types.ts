@@ -22,7 +22,6 @@ export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
 };
 
 export const REACTION_EMOJIS = ["💪", "🔥", "👏", "😮"] as const;
-export type ReactionEmoji = (typeof REACTION_EMOJIS)[number];
 
 // Short tags shown next to an exercise's name — barbell entry mode ("Bar +
 // plate weight") only kicks in for "barbell"; dumbbell/kettlebell are purely

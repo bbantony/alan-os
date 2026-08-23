@@ -18,7 +18,7 @@ import { Stat, StatStrip } from "@/components/ui/stat";
 import { Micro } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
 import { CHART_CATEGORICAL_DARK, CHART_CATEGORICAL_LIGHT } from "@/lib/finance/chart-colors";
-import { useTheme } from "@/components/theme/theme-provider";
+import { useIsDark } from "@/components/theme/theme-provider";
 import { displayWeight, formatWeight } from "@/lib/workout/units";
 import type { WeightUnit } from "@/lib/workout/types";
 import type { ExerciseDetail } from "../../personal-actions";
@@ -42,15 +42,6 @@ const METRIC_LABELS: Record<Metric, string> = {
   e1rm: "Est. 1RM",
   volume: "Volume",
 };
-
-function useIsDark() {
-  const { theme } = useTheme();
-  // Matches reports-view: the explicit choice wins, "system" follows the OS.
-  if (typeof window === "undefined") return false;
-  if (theme.mode === "dark") return true;
-  if (theme.mode === "light") return false;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches;
-}
 
 function shortDate(iso: string): string {
   return new Intl.DateTimeFormat("en-CA", {

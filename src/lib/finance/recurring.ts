@@ -1,3 +1,4 @@
+import { daysInMonth } from "./period";
 import type { RecurrenceFrequency } from "./types";
 
 // Date maths for recurring money — rent, salary, subscriptions.
@@ -20,10 +21,6 @@ export const FREQUENCY_LABELS: Record<RecurrenceFrequency, string> = {
   monthly: "Every month",
   yearly: "Every year",
 };
-
-function daysInMonth(year: number, month1to12: number): number {
-  return new Date(Date.UTC(year, month1to12, 0)).getUTCDate();
-}
 
 function toIso(d: Date): string {
   return d.toISOString().slice(0, 10);

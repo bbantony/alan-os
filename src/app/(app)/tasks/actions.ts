@@ -420,15 +420,6 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
   return { nextTask: (created as Task) ?? undefined };
 }
 
-export async function moveTaskHorizon(input: { id: string; horizon: TaskHorizon }) {
-  const { supabase, user } = await requireUser();
-  await supabase
-    .from("tasks")
-    .update({ horizon: input.horizon })
-    .eq("id", input.id)
-    .eq("user_id", user.id);
-}
-
 export async function deleteTask(input: { id: string }) {
   const { supabase, user } = await requireUser();
   const { data: existing } = await supabase

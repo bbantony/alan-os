@@ -40,6 +40,20 @@ export function addDaysToDateString(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Whole days between two YYYY-MM-DD strings, UTC.
+ *
+ * There were two byte-identical private copies of this — one in
+ * lib/shopping/purchases.ts, one in lib/workout/suggest.ts — which is how a
+ * date helper quietly becomes three date helpers that disagree. It belongs
+ * here, beside `addDaysToDateString`, which is its inverse.
+ */
+export function daysBetweenDateStrings(from: string, to: string): number {
+  return Math.round(
+    (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
+  );
+}
+
 const WEEKEND_DAYS = new Set(["Sat", "Sun"]);
 
 export interface WorkHours {

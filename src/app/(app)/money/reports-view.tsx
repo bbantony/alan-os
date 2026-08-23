@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { EmptyState } from "@/components/empty-state";
 import { Panel, PanelHead } from "@/components/ui/panel";
-import { useTheme } from "@/components/theme/theme-provider";
+import { useIsDark } from "@/components/theme/theme-provider";
 import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/finance/money";
 import {
@@ -45,20 +45,6 @@ const TOOLTIP_STYLE = {
   color: "var(--foreground)",
   boxShadow: "var(--shadow-hard-sm)",
 } as const;
-
-function useIsDark() {
-  const { theme } = useTheme();
-  const [isDark, setIsDark] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const compute = () =>
-      setIsDark(theme.mode === "dark" || (theme.mode === "system" && media.matches));
-    compute();
-    media.addEventListener("change", compute);
-    return () => media.removeEventListener("change", compute);
-  }, [theme.mode]);
-  return isDark;
-}
 
 function monthLabel(offset: number): string {
   const d = new Date();

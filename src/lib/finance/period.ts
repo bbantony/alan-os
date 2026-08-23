@@ -1,6 +1,14 @@
 import type { BudgetPeriod } from "./types";
 
-function daysInMonth(year: number, month: number): number {
+/**
+ * Days in a given month, 1-indexed month, UTC.
+ *
+ * Exported because `recurring.ts` had a byte-identical private copy. Both use
+ * it for the same job — clamping an anchor day to a short month, so a rule
+ * anchored to the 31st still lands on the 30th in April and the 28th in
+ * February — and two copies of that is two chances to fix it in only one place.
+ */
+export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 

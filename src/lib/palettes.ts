@@ -318,10 +318,6 @@ export const PALETTES: Palette[] = [
 
 export const DEFAULT_PALETTE_ID: PaletteId = "ink";
 
-export function getPalette(id: string | null | undefined): Palette {
-  return PALETTES.find((p) => p.id === id) ?? PALETTES[0];
-}
-
 // Heading faces. The new language wants a grotesque with real weight at the
 // top end — Archivo is the default because its Black weight holds a tight
 // negative track without falling apart, which is what the display type needs.

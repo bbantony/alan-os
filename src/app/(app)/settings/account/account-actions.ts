@@ -1,5 +1,6 @@
 "use server";
 
+import { extForMimeType } from "@/lib/mime";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
@@ -11,12 +12,6 @@ async function requireUser() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   return { supabase, user };
-}
-
-function extForMimeType(mimeType: string): string {
-  if (mimeType === "image/png") return "png";
-  if (mimeType === "image/webp") return "webp";
-  return "jpg";
 }
 
 /**

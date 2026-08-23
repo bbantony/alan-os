@@ -1,3 +1,4 @@
+import { daysBetweenDateStrings } from "@/lib/time";
 import { MUSCLE_GROUP_LABELS, type MuscleGroup } from "./types";
 
 // "What should I train today?" — answered by neglect, not by a programme.
@@ -30,12 +31,6 @@ export interface Suggestion {
   daysSince: number | null;
 }
 
-function daysBetween(from: string, to: string): number {
-  return Math.round(
-    (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
-  );
-}
-
 /**
  * Ranks every muscle group by how long it's been neglected, longest first.
  *
@@ -55,7 +50,7 @@ export function rankByNeglect(
     return {
       group,
       lastTrained,
-      daysSince: lastTrained ? daysBetween(lastTrained, today) : null,
+      daysSince: lastTrained ? daysBetweenDateStrings(lastTrained, today) : null,
     };
   }).sort((a, b) => {
     if (a.daysSince === null && b.daysSince === null) {

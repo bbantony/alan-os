@@ -79,3 +79,37 @@ export function useTheme() {
   if (!ctx) throw new Error("useTheme must be used within a ThemeProvider");
   return ctx;
 }
+
+/**
+ * "Is the interface dark right now" — for the handful of places that have to
+ * pick a COLOUR IN JAVASCRIPT rather than in CSS, which today means chart
+ * series and tooltips. Anything expressible as a CSS variable should use one
+ * and never call this.
+ *
+ * There were two copies of this before, and they did not agree. The Money
+ * reports version subscribed to the media query; the workout exercise-detail
+ * version read `matchMedia` straight through during render, which meant two
+ * defects at once: a chart that stayed in light colours when the phone flipped
+ * to dark, and a value that differs between the server render (always false —
+ * no `window`) and the first client render, which is a hydration mismatch. Its
+ * comment claimed it matched the other one. It did the opposite.
+ *
+ * This version is the subscribing one. It starts false so server and client
+ * agree on the first paint, then corrects in an effect — an imperceptible
+ * flash on a chart colour is the right trade for never desynchronising.
+ */
+export function useIsDark(): boolean {
+  const { theme } = useTheme();
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const compute = () =>
+      setIsDark(theme.mode === "dark" || (theme.mode === "system" && media.matches));
+    compute();
+    media.addEventListener("change", compute);
+    return () => media.removeEventListener("change", compute);
+  }, [theme.mode]);
+
+  return isDark;
+}

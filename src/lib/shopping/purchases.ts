@@ -9,6 +9,8 @@
 // Pure functions only — no database — so the arithmetic that decides when
 // something comes back onto your list can be checked on its own.
 
+import { daysBetweenDateStrings } from "@/lib/time";
+
 export interface PurchaseRow {
   normalized_name: string;
   purchased_on: string;
@@ -41,12 +43,6 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
-function daysBetween(from: string, to: string): number {
-  return Math.round(
-    (new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime()) / 86400000
-  );
-}
-
 /** Below this many purchases, there isn't a rate — there's a coincidence. */
 export const MIN_PURCHASES_TO_LEARN = 3;
 
@@ -67,7 +63,7 @@ export function learnedIntervalDays(dates: string[]): number | null {
 
   const gaps: number[] = [];
   for (let i = 1; i < unique.length; i++) {
-    const gap = daysBetween(unique[i - 1], unique[i]);
+    const gap = daysBetweenDateStrings(unique[i - 1], unique[i]);
     // A same-day repeat is one shop split across two receipts, not a
     // one-day consumption rate.
     if (gap > 0) gaps.push(gap);
@@ -96,7 +92,7 @@ export function isDueToResurface(input: {
 
   const learned = input.learnFromHistory ? learnedIntervalDays(input.purchaseDates) : null;
   const interval = learned ?? input.fallbackDays;
-  return daysBetween(input.lastPurchasedOn, input.today) >= interval;
+  return daysBetweenDateStrings(input.lastPurchasedOn, input.today) >= interval;
 }
 
 export interface PriceSummary {

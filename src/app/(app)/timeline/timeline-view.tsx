@@ -1,5 +1,6 @@
 "use client";
 
+import { addDaysToDateString } from "@/lib/time";
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -74,12 +75,6 @@ function formatTime(at: string): string | null {
   );
 }
 
-function addDays(iso: string, delta: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
-
 type Range = "day" | "week";
 
 export function TimelineView({
@@ -113,13 +108,13 @@ export function TimelineView({
 
   function shift(direction: -1 | 1) {
     const step = range === "day" ? 1 : 7;
-    load(addDays(from, direction * step), addDays(to, direction * step));
+    load(addDaysToDateString(from, direction * step), addDaysToDateString(to, direction * step));
   }
 
   function changeRange(next: Range) {
     setRange(next);
     if (next === "day") load(today, today);
-    else load(addDays(today, -6), today);
+    else load(addDaysToDateString(today, -6), today);
   }
 
   async function handleAction() {

@@ -3178,3 +3178,127 @@ guard in the SQL — worth knowing it is a promise rather than a mechanism; and 
 `Notes/*.txt` handoff files still carry the uncancelled journal schema, but both are frozen
 artefacts (`SPEC.txt` has been touched once, in the initial scaffold) and CLAUDE.md names `SPEC.md`
 as the bible.
+
+---
+
+## 40. The audit: dead code, duplicated logic, and two real bugs
+
+Alan: "remove all unwanted functions and bloat from this app". A general-purpose agent audited the
+whole tree with instructions to verify rather than grep, because a false positive here costs real
+breakage. **533 lines net removed across 32 files** (203 insertions against 736 deletions), plus two
+database objects — and the audit turned up two genuine defects on the way, which were the most
+valuable part of it.
+
+### The two bugs
+
+**Dark mode didn't reach one screen.** There were two copies of "is the interface dark right now",
+used to pick chart colours in JavaScript. `money/reports-view.tsx` subscribed to the media query.
+`workout/exercise/[id]/exercise-detail.tsx` read `matchMedia` **straight through during render** —
+so its chart never repainted when the phone flipped to dark, and, worse, it returned a different
+value on the server (always false, no `window`) than on the first client render, which is a
+hydration mismatch. Its comment said *"Matches reports-view"*. It did the opposite. One
+`useIsDark` now lives in `theme-provider.tsx` beside `useTheme`, and it is the subscribing version.
+
+**Four ways to add days to a date — and the first version of this entry got the diagnosis wrong,
+which unit-reviewer caught and which is worth recording rather than quietly correcting.** It
+claimed the private copies in `timeline-view.tsx` and `lib/streaks.ts` used local time and could
+disagree with the canonical helper around midnight. They do not: both are
+``new Date(`${x}T00:00:00Z`)`` then `setUTCDate`, byte-for-byte the behaviour of
+`addDaysToDateString`. The wrong note was worse than no note — it would have sent a future session
+hunting a midnight bug in `streaks.ts` that does not exist.
+
+What is actually true: three of the four were UTC and identical, so the two private copies needed
+no judgement at all and were consolidated in this unit after all. The fourth, `addDays` in
+`lib/calendar.ts`, is genuinely local-time — but it parses to a local `Date`, calls `setDate`, and
+formats back with local getters, so it is internally consistent, and `setDate` normalises across
+DST. Its only two call sites are in the same file, producing the "Tomorrow"/"Yesterday" labels.
+**It is not a bug**, and it is left alone: one local-time date helper with two in-file callers is a
+smell, not a defect.
+
+### Dead code removed
+
+| What | Lines |
+|---|---|
+| Nine reminder server actions in `calendar/actions.ts` — get/create/update/pause/resume/complete/snooze/delete — orphaned when Calendar merged into Plan. Reminders are now written directly by `tasks/actions.ts` and `routines/actions.ts`, and advanced by the `advance_reminder` RPC | 192 |
+| `getAgenda` + `AgendaItem`, superseded by Plan's own `getPlanRange` | 64 |
+| `createCalendarEvent` and `NewEventForm`, its only caller — nothing rendered the form | 90 |
+| `src/components/ui/card.tsx` — the whole shadcn Card set, superseded by `Panel` | 133 |
+| `src/lib/money.ts` — a second, entirely dead money module. All 25 consumers import `lib/finance/money` | 28 |
+| `Reminder`, `ReminderStatus`, `DayPlan` interfaces | 25 |
+| Fifteen smaller declarations: `getAssistantStatus`, `getRecentInsights`, `moveTaskHorizon`, `updateReceiptLineItems`, `describeGcalError`, `getPalette`, `toDateTimeString`, `popInVariants`, `PAGE_TRANSITION`, `NUDGE_NEVER`, `Role`, `ReactionEmoji`, and three unused illustrations | 110 |
+| `Notes/Keys.txt` — an empty file, tracked in git, named to invite exactly the mistake it would be | 0 |
+
+`calendar/actions.ts` went from **521 lines to 238**, keeping all thirteen live exports. Seven
+imports it no longer needed went with them, and a `revalidatePath("/calendar")` that had been a
+no-op since `/calendar` became a redirect stub now points at `/plan`, which actually renders.
+
+### Duplicates consolidated
+
+`daysBetween` (two byte-identical private copies) is now `daysBetweenDateStrings` in `lib/time.ts`
+beside its inverse. `addDays` (two more byte-identical copies, in `timeline-view.tsx` and
+`lib/streaks.ts`) now calls `addDaysToDateString` from the same module. `daysInMonth` (two copies) is exported once from `finance/period.ts` — both
+copies existed to clamp an anchor day to a short month, and two copies of that is two places to fix
+it and one to forget. `formatShortDate` (a local copy of an exported one) now imports the shared.
+`extForMimeType` (two copies, both building **storage paths**) moved to a new `lib/mime.ts`; a
+five-line module is worth it when the alternative is a bucket where half the receipts are `.jpg`
+and half are `.jpeg`. Deliberately not in `lib/images.ts` — that module is browser-only and these
+are server actions.
+
+### Database — migration `0034_drop_dead_schema.sql`
+
+- **`public.comments`** — built by `0005` for the crew feed with three RLS policies and an index,
+  rebuilt again in `0018`, and never given a screen, a server action, or a single row. Nothing in
+  `src/` has ever named it.
+- **`reminders.mirror_to_gcal`** — created by `0011` when Google Calendar sync was a plan. When
+  sync was built, `gcal_event_id` became what decides whether a row is mirrored. Never read or
+  written since, by code or SQL. It survived because the TypeScript `Reminder` interface still
+  declared it, which made it look alive.
+
+**This migration refuses to run if either turns out to be in use**, rather than asserting in a
+comment that it was checked. That is the direct lesson from `0033`, where unit-reviewer pointed out
+that a "verified empty" header comment is a promise, not a mechanism — it cannot stop a replay
+against a database where the facts differ. Both counts are zero here, so the guard is invisible.
+
+### Raised with Alan rather than decided
+
+`SPEC.txt` and three `Notes/*.txt` handoff files are stale and could mislead a cold session, but
+they are his writing. The `shadcn` dev dependency is unused, but it is the tool for adding new UI
+components. The `requireUser()` helper is copy-pasted **18 times** across every actions file — the
+single biggest duplication in the repo, about 150 lines — but consolidating it touches 18 files at
+once and belongs in its own unit, not folded into a deletion pass.
+
+### One self-inflicted break, caught by test-runner
+
+Removing a now-unused `useState` import, this session grepped for `useState(` — and the file used
+`useState<Metric>("e1rm")`, with a generic, so the search missed the one real usage and the build
+broke. Caught in three minutes, fixed, and every touched file re-checked with a pattern that
+matches both call forms. Worth recording because the failure mode is generic: a grep for `name(`
+silently misses every generic call in a TypeScript codebase.
+
+### The review's other findings
+
+- **A dead import left behind by the pass whose entire job was removing dead code.**
+  `assistant/actions.ts` still imported `isAiConfigured` after `getAssistantStatus`, its only
+  consumer, was deleted. It survived because Next's `no-unused-vars` is a *warning*, so
+  `ALL CHECKS PASS` was true and wrong at the same time — worth knowing that green checks do not
+  prove there is no dead code. The reviewer ran a proper import-vs-body scan over every touched
+  file; this was the only instance.
+- **The migration guard was not replay-safe**, which undercut the exact point it was written to
+  make. `select count(*) from public.comments` raises `undefined_table` on any database where the
+  drops have already happened — a restored snapshot without its `_migrations` row, a branch
+  database, a partial dump — and would take every later migration in that run with it, while the
+  `drop ... if exists` statements below it were idempotent. Now guarded by `to_regclass` and an
+  `information_schema` lookup, so the guard is exactly as idempotent as what it protects. The file
+  therefore differs from what was executed; that is disclosed in its header, and the added checks
+  are a provable no-op on the database it ran against, where both objects existed.
+- **Two comments orphaned by these edits.** Inserting the new helper into `lib/time.ts` separated
+  the work-hours comment from `isOutsideWorkHours`, and removing `ReactionEmoji` left the
+  equipment-tags comment abutting `REACTION_EMOJIS`. Both fixed — and pointed out with the right
+  needle: this is the unit that argued a lying comment ("Matches reports-view") caused a real bug.
+- **Recorded, not fixed — receipt evidence is still overwritten in place.** `approveReceipt`
+  (`money/receipt-actions.ts`) writes the human-corrected `line_items`, `merchant_guess` and
+  `txn_date_guess` over the receipt row, so what the AI originally extracted is gone after
+  approval. That is the surviving instance of exactly what `updateReceiptLineItems` was deleted
+  for, and it is a genuine violation of "imported source data is never rewritten in place". It is
+  pre-existing and out of scope for a deletion pass, but it is a real finding and belongs in the
+  next money unit rather than in a footnote nobody reads.
