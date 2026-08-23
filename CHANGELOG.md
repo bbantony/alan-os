@@ -3098,3 +3098,83 @@ the live database as well as in the file.
 Confirmed against the live database before commit: `day_plans` held **no** outlook rows, so none of
 this session's testing wrote a row under the old remove-on-tap code. Nothing for Alan to work
 around; the first outlook he sees will be written by the fixed code.
+
+---
+
+## 39. Journal and Vinyl, removed completely
+
+Alan: "strip the journal and vinyl part completely for now". The app code went in entry 34; this
+finishes the job in the database and in every document that still described them as coming.
+
+### The database — migration `0033_remove_journal_vinyl.sql`
+
+Verified empty first, against the live database, because dropping a table is not reversible by
+saying sorry: `journal_entries` 0 rows, `vinyl_albums` 0 rows, 0 objects in the `journal` storage
+bucket, 0 reminders flagged as journal nudges. Nothing was destroyed except empty structure.
+
+Dropped: `journal_entries` (with its policy and index), the `journal_mood` enum, `vinyl_albums`
+(with its policy and index), the `journal_entry_exists` security-definer function and its grants,
+and the `journal_storage_own` storage policy.
+
+**The trap, which codebase-scout caught and which would have quietly broken something unrelated.**
+`reminders.is_journal_nudge` looks like a Journal column and mostly is — but 0024 also *rebuilt*
+0022's orphan-sweep index to exclude journal nudges, so the live index definition had
+`is_journal_nudge = false` baked into its predicate. Dropping the column without rebuilding the
+index would have taken migration 0022's orphan invariant down with it — "a reminder attached to
+neither a task nor a routine is wreckage", with that partial index being what makes finding the
+wreckage cheap. The migration therefore drops the index, recreates it at **exactly** its original
+0022 definition, and only then drops the column. Verified afterwards: the index is back to
+`where linked_task_id is null and linked_routine_id is null and status = 'active'`, which is now
+the correct definition again — the one legitimate exception to the rule stopped existing when
+Journal did.
+
+**What could not be done, and is not being pretended otherwise.** Supabase refuses bucket deletion
+over SQL ("Direct deletion from storage tables is not allowed. Use the Storage API instead."),
+which is asymmetric with 0024 having been allowed to `insert into storage.buckets` to create it.
+The Storage API needs a service-role key, and `SUPABASE_SERVICE_ROLE_KEY` is empty in this
+project — no app code uses one either, so there was nothing to borrow. **The empty `journal`
+bucket therefore still exists.** It is inert: empty, private, and with its policy dropped there is
+no longer anything granting access to it. Recorded in the migration, added to PROGRESS.md's owner
+actions, and explained to Alan in MANUAL.md with the four clicks that remove it.
+
+### The documents
+
+The real risk of a half-removed feature is a future session reading the spec and rebuilding it, so
+the point of these edits is to make that impossible rather than to tidy up.
+
+- **`SPEC.md`** — Part E6 now opens with a CANCELLED banner saying nothing in it was ever built
+  (including `/frame`, which never existed); the Phase 6 line says cancelled and skipped; the
+  schema block for `journal_entries`/`albums` is commented out with a note that 0024 created these
+  and 0033 dropped them, while `monthly_reviews` is explicitly excluded because it belongs to
+  Month in Review; and the incidental mentions are fixed — the product one-liner, the nav layout,
+  the workout_member restriction, the Journal ↔ Today interconnection, the Month in Review
+  contents and the morning-briefing inputs. The original hobbies brief is struck through rather
+  than deleted, so the record of what Alan first asked for survives.
+- **`MANUAL.md`** — four stale lists that told Alan his own nav contained Journal and Vinyl, and
+  the "Journal and Vinyl are gone" section updated: they are now gone completely, nothing was
+  lost, and here is how to delete the leftover folder if he wants to.
+- **`PROGRESS.md`** — Phase 6 marked cancelled; the two historical checklist lines annotated
+  rather than rewritten; and the "natural next build" paragraph replaced, because it was wrong
+  twice over — it recommended building Phase 6, and it said Phase 7 was blocked on the Gemini key.
+  What is actually left in Phase 7 is quick-capture and Month in Review.
+- **`LATER.md`** — the journal nudge removed from the morning-briefing idea and the widget list.
+
+**What unit-reviewer caught: the exact failure this unit existed to prevent.** All four
+documents were corrected and a *code comment* was missed — `src/lib/permissions.ts` still said
+"Their empty tables from migration 0024 are left in the database, unused, rather than dropped",
+which as of this unit is simply false, in the first file anyone opens when touching module access.
+Rewritten to say what 0033 actually did, and to explain why the two dead `module_access` keys were
+nonetheless left alone. Two lesser versions of the same defect fixed with it: `src/lib/images.ts`
+justified its own existence partly by pointing at SPEC Part E6, now stamped CANCELLED (reason 1,
+the 1 MB Server Action cap, stands on its own — and avatar uploads use the helper too); and a
+"see the decisions log" pointer this diff introduced led to a log with no such entry, so the entry
+is now written. MANUAL's leftover-bucket paragraph was reworded — saying the photo storage was
+dropped and then that the folder still exists reads as a contradiction before it reads as a
+distinction.
+
+Reviewer's judgement accepted on two residuals, both left alone deliberately: the pre-flight
+emptiness check is recorded in the migration header rather than enforced by a `raise exception`
+guard in the SQL — worth knowing it is a promise rather than a mechanism; and `SPEC.txt` plus the
+`Notes/*.txt` handoff files still carry the uncancelled journal schema, but both are frozen
+artefacts (`SPEC.txt` has been touched once, in the initial scaffold) and CLAUDE.md names `SPEC.md`
+as the bible.

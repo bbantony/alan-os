@@ -9,10 +9,11 @@
 //    Raising the limit instead would just move the problem: the same photo
 //    would then cost a multi-megabyte upload on shop wifi and burn the free
 //    Supabase Storage tier.
-// 2. SPEC.md Part E6 requires it outright for journal photos ("compressed
-//    client-side (~1600px max) to protect the 1GB free tier"), so this lives
-//    in lib/ rather than inside the money module — Phase 6 needs the same
-//    helper.
+// 2. It used to have a second reason — SPEC.md Part E6 required the same
+//    compression for journal photos — but Part E6 is CANCELLED and Journal is
+//    gone (migration 0033). Reason 1 carries this on its own; the file stays in
+//    lib/ rather than moving into the money module only because avatar uploads
+//    (0029) use it too. Don't go looking at Part E6 for a justification.
 //
 // Everything here runs in the browser: `document`, `Image` and canvas are not
 // available on the server, so only client components may call it.

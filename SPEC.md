@@ -33,7 +33,10 @@ Fitness: follows Push/Pull/Legs lifting split, runs every 2–3 days (treadmill 
 
 
 
-Hobbies to support: photo-a-day picture diary and a vinyl record listening log (new album every 1–2 weeks).
+Hobbies to support: ~~photo-a-day picture diary and a vinyl record listening log~~
+**[Superseded 22 Aug 2026: Alan asked for both to be dropped completely. See E6. This
+line is the original brief and is kept only so the record of what he first wanted stays
+intact.]**
 
 
 
@@ -41,7 +44,7 @@ Hard budget: total running cost must stay under $10–15 CAD/month.
 
 A2. Product Vision
 
-One installable web app (PWA) that runs on all his devices and is his single home for: money, tasks, calendar, reminders, daily planning, journaling, shopping, and workouts — with AI reducing friction everywhere (especially receipt scanning and natural-language quick capture). It must be beautiful enough that he wants to open it every morning.
+One installable web app (PWA) that runs on all his devices and is his single home for: money, tasks, calendar, reminders, daily planning, shopping, and workouts — with AI reducing friction everywhere (especially receipt scanning and natural-language quick capture). It must be beautiful enough that he wants to open it every morning.
 
 A3. Non-Negotiable Principles
 
@@ -275,7 +278,7 @@ owner (Alan): access to all modules; his private data.
 
 
 
-workout_member (the 3 friends, for now): can ONLY access the workout module. They see the shared crew feed, log their own workouts, react/comment. They must never see finance/journal/tasks/etc.
+workout_member (the 3 friends, for now): can ONLY access the workout module. They see the shared crew feed, log their own workouts, react/comment. They must never see finance/tasks/etc.
 
 
 
@@ -361,7 +364,7 @@ this up yet"):
   from the Calendar agenda view once Phase 3 exists, not force a second lookup.
 - Workout ↔ Today: streak flame and "logged today?" status feed the dashboard
   once Phase 2 exists.
-- Journal ↔ Today: "posted your photo today?" nudge feeds the dashboard once
+- ~~Journal ↔ Today: "posted your photo today?" nudge feeds the dashboard once~~ — cancelled with the module
   Phase 6 exists.
 
 When in doubt about whether a cross-module hook is worth building now vs.
@@ -424,7 +427,8 @@ C3. Navigation Shell
 
 
 
-Mobile: bottom tab bar — Today · Money · Tasks · Workout · More (More = Calendar, Journal, Vinyl, Shopping, Settings).
+Mobile: bottom tab bar — Today · Money · Tasks · Workout · More (More = Calendar, Shopping, Settings).
+**[Journal and Vinyl removed from More, 22 Aug 2026.]**
 
 
 
@@ -491,12 +495,15 @@ reactions: id, workout_id, user_id, emoji  (unique per user+workout+emoji)
 comments: id, workout_id, user_id, body, created_at
 -- streaks computed on read: consecutive calendar days with ≥1 workout, per user
 
--- JOURNAL & VINYL
-journal_entries: id, user_id, entry_date unique(user,date), photo_path, caption null,
-                 mood (1–5 or emoji set) null, story text null
-albums: id, user_id, artist, title, cover_url, listen_date,
-        rating numeric(3,1) CHECK 0.0–10.0 (one decimal, e.g. 8.7),
-        favorite_tracks jsonb, purchased_at (store/city) null, thoughts text
+-- JOURNAL & VINYL — CANCELLED 22 Aug 2026. These tables were built by migration
+-- 0024 and DROPPED by 0033. Do not recreate them. `monthly_reviews` below is the
+-- exception: it belongs to Month in Review (Phase 7), not to Journal, and was
+-- never built either way.
+-- journal_entries: id, user_id, entry_date unique(user,date), photo_path, caption null,
+--                  mood (1–5 or emoji set) null, story text null
+-- albums: id, user_id, artist, title, cover_url, listen_date,
+--         rating numeric(3,1) CHECK 0.0–10.0 (one decimal, e.g. 8.7),
+--         favorite_tracks jsonb, purchased_at (store/city) null, thoughts text
 monthly_reviews: id, user_id, month, ai_summary text, stats jsonb, created_at
 
 -- SHOPPING
@@ -738,7 +745,15 @@ Members
 
 Owner invites via invite-code signup link. Friends land ONLY in workout module. Unit preference lbs/kg per user (store kg).
 
-E6. Journal (photo-a-day) & Vinyl
+E6. Journal (photo-a-day) & Vinyl — **CANCELLED**
+
+**[CANCELLED 22 Aug 2026 — Journal and Vinyl were removed at Alan's request. Kept for the record only. Do not build.]**
+
+Both modules were stripped from the app (CHANGELOG.md entry 34) and their database
+objects dropped by migration `0033_remove_journal_vinyl.sql` (entry 39). Everything
+below this line describes what was *planned*, never what shipped — nothing in it was
+ever built. `/frame` in particular does not exist and never did.
+
 
 Photo-a-day
 
@@ -762,7 +777,7 @@ Photos stored in Supabase Storage, compressed client-side (~1600px max) to prote
 
 
 
-Fullscreen, no-chrome ambient page for cheap Android tablets in kiosk mode: rotating carousel of recent journal photos (Ken Burns slow zoom), overlaid clock + today's agenda + reminders due. Auto-refresh. Long-session token so it never logs out. Dark, gorgeous.
+[CANCELLED — never built, and there are no journal photos to display.] Fullscreen, no-chrome ambient page for cheap Android tablets in kiosk mode: rotating carousel of recent journal photos (Ken Burns slow zoom), overlaid clock + today's agenda + reminders due. Auto-refresh. Long-session token so it never logs out. Dark, gorgeous.
 
 Vinyl log
 
@@ -782,7 +797,7 @@ AI Month in Review
 
 
 
-Generated on the 1st for previous month: collage of 6–9 journal photos, albums listened with ratings, money summary (top categories, savings added), workout totals (sessions, volume, km run, streak), 1 paragraph AI narrative. Saved to monthly_reviews, viewable as a beautiful shareable page.
+Generated on the 1st for previous month: money summary (top categories, savings added), workout totals (sessions, volume, km run, streak), 1 paragraph AI narrative. Saved to monthly_reviews, viewable as a beautiful shareable page.
 
 E7. Shopping List
 
@@ -886,7 +901,9 @@ Phase 8.5 — Fridge/Pantry inventory (owner request, added after Phase 1): a
 
 
 
-Phase 6 — Journal & Vinyl: photo-a-day + reminder + gallery, vinyl log + iTunes art + shelf, /frame wall display route.
+Phase 6 — Journal & Vinyl: **CANCELLED 22 Aug 2026.** Never built; both modules removed
+from the app and the database. Phase 6 is skipped entirely — do not resurrect it without
+asking Alan.
 
 
 
@@ -895,7 +912,7 @@ Phase 7 — AI everywhere: quick-capture parser + confirm chips, morning briefin
   per owner request — see Part B4): weather widget (free API, e.g. Open-Meteo, no key needed),
   world news headlines widget, local news widget with a user-selectable region, and a single AI
   narrative summary that pulls signal from every module that exists by then (tasks due, budget
-  pulse, workout streak, reminders, calendar, journal nudge) into one morning briefing. Each
+  pulse, workout streak, reminders, calendar) into one morning briefing. Each
   dashboard widget should already be wired to real data from its own module the moment that
   module ships in an earlier phase — Phase 7's job is the AI narrative layer + weather/news on
   top, not building the widgets from scratch. Cap news/weather calls same as other AI features

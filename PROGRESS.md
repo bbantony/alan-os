@@ -27,6 +27,7 @@ See `SPEC.md` for the full specification.
 - [x] Tasks (horizons, subtasks, work-hours collapsible group, quick chips, archive)
 - [x] Today dashboard — full widget layout (real Tasks/Shopping widgets now;
       Money/Workout/Calendar/Journal/Weather/News widgets show styled
+      (Journal was later removed; this line records what Phase 0 shipped)
       "arrives in Phase N" placeholders until those modules ship)
 
 ## Phase 2 — Workout
@@ -188,7 +189,9 @@ SPEC.md phase — a cross-cutting initiative requested directly by the owner)
       assigns any user to — replacing the old "every authenticated user sees
       every workout" model with actual group boundaries.
 - [x] Per-user `module_access` grid (Tasks/Shopping/Workout/Calendar/Money/
-      Journal/Vinyl, each independently toggle-able) replacing the rigid
+      Journal/Vinyl, each independently toggle-able — the last two were
+      removed later, see "22 Aug 2026 — Journal and Vinyl removed from the
+      database" in the decisions log) replacing the rigid
       3-role gate — the owner decides exactly what each account can open.
 - [x] Owner always sees every crew's activity regardless of his own crew
       membership (`is_admin()` override), on top of normal same-crew
@@ -753,6 +756,12 @@ clock pickers, and the Tasks/Calendar merge into `/plan`.
   the limits. Alan's call, not an engineering one.
 - **Onboard the 3 friends** to Workout (Phase 2) — send them the invite link
   from Settings → Admin.
+- **Delete the empty `journal` storage bucket** (optional, cosmetic). Migration
+  `0033` removed every other Journal/Vinyl object, but Supabase refuses bucket
+  deletion over SQL ("Direct deletion from storage tables is not allowed") and
+  this project has no `SUPABASE_SERVICE_ROLE_KEY` set, so it could not be done
+  from a script either. It is empty, private, and has no access policy left, so
+  it is inert. Supabase dashboard → Storage → journal → Delete.
 
 **Not verified by any session so far:** nobody has walked the redesigned
 screens logged in on a phone. The redesign, the new Workout flow (full-screen
@@ -767,10 +776,15 @@ retired in the redesign; and `components/nav/wordmark.tsx` shows a
 circle/square/triangle while the home-screen icon is the chevron, so the app
 carries two marks. He was shown four options and said keep the current logo.
 
-**The natural next build** is Phase 6 (Journal & Vinyl: photo-a-day + gallery,
-vinyl log with iTunes art, `/frame` wall display) — it depends on neither
-owner action. Phase 7 is the one Alan actually wants, and needs the Gemini key
-first. As always, a new request from Alan takes priority over both.
+**The natural next build** — rewritten 22 Aug 2026, because what this used to
+say is now wrong twice over. It named Phase 6 (Journal & Vinyl), which has since
+been CANCELLED and removed from the database entirely; and it said Phase 7 needs
+the Gemini key first, which is now supplied and working.
+
+What is actually left in Phase 7: **quick-capture** (typing a sentence and having
+it become a task with a date and a reminder — the thing Alan has said he wants
+most, and the assistant's tool loop already proves the hard part works) and
+**Month in Review**. As always, a new request from Alan takes priority.
 
 ---
 
@@ -811,3 +825,21 @@ naming things that do not exist here would have produced an agent that always pa
 `npm test` errors with "Missing script: test". `test-runner` is told to report that as
 a known state rather than a failure. `npm run build` typechecks via Next.js, so type
 errors are still caught. If tests are ever added, the agent runs them normally.
+
+### 22 Aug 2026 — Journal and Vinyl removed from the database
+Alan asked for both modules "completely" gone. The app code went in entry 34; migration
+`0033_remove_journal_vinyl.sql` dropped `journal_entries`, `vinyl_albums`, the
+`journal_mood` enum, the `journal_entry_exists` function and the `journal_storage_own`
+storage policy, after verifying every one of them was empty against the live database.
+
+`reminders.is_journal_nudge` went too, but only after rebuilding
+`reminders_unattached_active_idx` at its original 0022 definition — 0024 had baked
+`is_journal_nudge = false` into that index's predicate, so dropping the column first
+would have destroyed 0022's orphan invariant.
+
+**Deliberately left**: the empty `journal` storage bucket (Supabase refuses bucket
+deletion over SQL and this project has no service-role key — it is an owner action
+above), and the dead `"journal"`/`"vinyl"` keys in `profiles.module_access`, which
+`resolveModuleAccess` never reads. Migration 0024 stays in the history as the record of
+what these modules were. **Do not rebuild either without asking Alan.**
+

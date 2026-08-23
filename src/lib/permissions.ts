@@ -8,9 +8,19 @@
 // as false rather than guessing.
 
 // Journal and Vinyl were removed at Alan's request ("completely remove the
-// placeholders ... I don't want any of that"). Their empty tables from
-// migration 0024 are left in the database, unused, rather than dropped —
-// he said "for now", and dropping tables is not reversible.
+// placeholders ... I don't want any of that"), and on 22 Aug 2026 he asked for
+// them gone "completely" — migration 0033 dropped every table, type, function
+// and policy they had, after verifying all of them were empty. Migration 0024
+// stays in the history as the record of what they were. Do not rebuild either
+// module without asking him first.
+//
+// Two dead keys survive that removal ON PURPOSE. `profiles.module_access` rows
+// may still carry "journal" and "vinyl" (0018's handle_new_user still stamps
+// them onto every new signup), and they are inert: `resolveModuleAccess` below
+// builds from NO_MODULES_ACCESS and only ever reads the MODULE_IDS whitelist,
+// so an unknown key grants nothing and is never read. Rewriting every profile's
+// JSON to tidy two ignored keys would be a data migration with real risk and no
+// behavioural gain.
 export const MODULE_IDS = ["tasks", "shopping", "workout", "calendar", "money"] as const;
 
 export type ModuleId = (typeof MODULE_IDS)[number];

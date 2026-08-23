@@ -46,7 +46,7 @@ they're just labeled placeholder pages so the navigation has somewhere to go.
   actually standing in a store.)
 - **On a computer:** the same links appear as a sidebar on the left.
 - **More** opens a list of everything that doesn't fit in the bottom bar:
-  Calendar, Journal, Vinyl, and Settings.
+  Calendar and Settings.
 - Only the modules a given account actually has access to show up in the
   tabs/More at all — see the **Admin — Users & Crews** section further down
   for how that's controlled.
@@ -205,7 +205,7 @@ confusing — this is the current version.
 The Today page now shows a full grid of cards:
 - **Tasks** and **Shopping** show real numbers pulled from your actual data
   — tap either to jump straight into that module.
-- Everything else (**Money, Workout, Calendar & Reminders, Journal,
+- Everything else (**Money, Workout, Calendar & Reminders,
   Weather, World news, Local news**) shows a dashed "Phase N" card — a
   placeholder for what's coming, not a bug. Each one lights up with real
   data the moment its phase is built.
@@ -689,7 +689,7 @@ forever.
 4. Under **Users**, tap anyone's name to expand their card. From there you can:
    - Move them into a different crew (or take them out of one entirely).
    - Tick or untick exactly which parts of the app they're allowed to open — Tasks,
-     Shopping, Workout, Calendar, Money, Journal, Vinyl — one by one. Unticking
+     Shopping, Workout, Calendar, Money — one by one. Unticking
      something takes effect immediately; if they're using the app right now and you
      turn off, say, Money, they'll be sent back to the Today page the next time they
      try to open it or tap anything inside it.
@@ -885,7 +885,7 @@ Each font option is shown in its own typeface so you can pick by looking.
   net — whichever tab you're on.
 - **The expense keypad has bigger keys** and shows the amount as a black block at
   the top that stays visible while you pick a category.
-- **On a computer**, the left sidebar now lists Calendar, Journal, Vinyl and
+- **On a computer**, the left sidebar now lists Calendar and
   Settings directly instead of hiding them behind "More".
 
 ### If something looks wrong
@@ -1286,8 +1286,24 @@ key, like everything else AI.)
 You asked for them removed, so they are — no more empty pages advertising things
 that don't exist. Nothing else was affected.
 
-The (empty) database tables were left in place rather than deleted, in case you
-ever want them back. If you're sure you never will, say so and I'll drop them.
+**Update, 22 August 2026 — now removed completely.** You said to strip them
+entirely, so the empty database tables have been dropped too. They were checked
+first and held nothing at all: no entries, no albums, no photos. So nothing was
+lost.
+
+One piece could not be removed from here, and it's worth being precise about
+what's left. The rules that would have let the app read or write journal photos
+are gone — but the **empty folder itself**, named "journal", is still sitting in
+your storage. It can't be deleted from the app's own tools —
+only from the Supabase website — and it's harmless where it is: empty, private,
+and nothing can read or write to it any more. If you'd like it gone, open your
+Supabase project, click **Storage** in the left menu, click the three dots next
+to **journal**, and choose Delete. Fifteen seconds. Or leave it; it costs
+nothing.
+
+If you ever change your mind about the modules themselves, the full original
+design is still written down — nothing needs to be reinvented, it would just
+need building.
 
 ---
 

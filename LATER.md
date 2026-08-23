@@ -45,11 +45,12 @@ Also now reflected in `SPEC.md` Part G's Phase 7 description and the new Part B4
 - **Full AI daily narrative.** One paragraph, generated like the existing
   morning-briefing plan (Part F), but pulling from *every* module that exists
   by Phase 7: tasks due, budget pulse, workout streak, reminders/calendar,
-  journal nudge, plus weather/news color. Cached once/day like the rest of
+  plus weather/news color (the journal nudge that was listed here is gone
+  with the module). Cached once/day like the rest of
   Part F's AI features — never regenerated on page load.
 - **General principle:** every dashboard widget should light up with real data
   the moment its own module ships (Phase 1 Tasks/Shopping widgets are real
-  from Phase 1; Money/Workout/Calendar/Journal widgets go live in their
+  from Phase 1; Money/Workout/Calendar widgets go live in their
   respective phases). Phase 7 adds the AI narrative + weather/news on top of
   widgets that already work — it isn't building the widgets from scratch.
 
