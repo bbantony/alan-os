@@ -18,10 +18,27 @@ export type PlanView = "list" | "calendar" | "agenda";
 export type ShoppingSort = "category" | "alphabetical" | "recent";
 
 /** Panels on the Today console, in the order they can be arranged. */
-export const TODAY_PANEL_IDS = ["vitals", "bills", "timeline", "console", "focus", "jump"] as const;
+export const TODAY_PANEL_IDS = [
+  "outlook", "vitals", "bills", "timeline", "console", "focus", "jump",
+] as const;
+
+/**
+ * Panels that existed before `todayPanelsKnown` was introduced (22 Aug 2026).
+ *
+ * A saved layout is a list of VISIBLE panels, so "not in the list" has always
+ * meant "hidden". That made a newly added panel indistinguishable from a
+ * deliberately hidden one, and a new panel would have stayed invisible to
+ * anyone who had ever opened Settings → Today — silently, forever. Stored
+ * preferences written before this date have no `todayPanelsKnown` key, so they
+ * are treated as having known exactly these six.
+ */
+const PANELS_KNOWN_BEFORE_OUTLOOK: readonly TodayPanelId[] = [
+  "vitals", "bills", "timeline", "console", "focus", "jump",
+];
 export type TodayPanelId = (typeof TODAY_PANEL_IDS)[number];
 
 export const TODAY_PANEL_LABELS: Record<TodayPanelId, string> = {
+  outlook: "Today's outlook",
   vitals: "The numbers strip",
   bills: "About to land",
   timeline: "Today so far",
@@ -74,9 +91,16 @@ export interface Preferences {
   aiCsvImport: boolean;
   aiAssistant: boolean;
   aiWeeklyPatterns: boolean;
+  aiDailyOutlook: boolean;
 
   notifications: NotificationPreferences;
   todayPanels: TodayPanelId[];
+  /**
+   * Every panel id this account's settings have ever been shown. Anything in
+   * TODAY_PANEL_IDS but not in here is NEW, and is made visible rather than
+   * treated as hidden. See PANELS_KNOWN_BEFORE_OUTLOOK.
+   */
+  todayPanelsKnown: TodayPanelId[];
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
@@ -111,6 +135,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   aiCsvImport: true,
   aiAssistant: true,
   aiWeeklyPatterns: true,
+  aiDailyOutlook: true,
 
   notifications: {
     quietHoursEnabled: true,
@@ -125,6 +150,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   },
 
   todayPanels: [...TODAY_PANEL_IDS],
+  todayPanelsKnown: [...TODAY_PANEL_IDS],
 };
 
 function num(value: unknown, fallback: number, min: number, max: number): number {
@@ -156,10 +182,25 @@ export function resolvePreferences(raw: unknown): Preferences {
   const n = (p.notifications ?? {}) as Record<string, unknown>;
   const d = DEFAULT_PREFERENCES;
 
-  const panels = Array.isArray(p.todayPanels)
-    ? (p.todayPanels.filter(
-        (id): id is TodayPanelId => typeof id === "string" && (TODAY_PANEL_IDS as readonly string[]).includes(id)
-      ) as TodayPanelId[])
+  const isPanelId = (id: unknown): id is TodayPanelId =>
+    typeof id === "string" && (TODAY_PANEL_IDS as readonly string[]).includes(id);
+
+  const savedPanels = Array.isArray(p.todayPanels)
+    ? (p.todayPanels.filter(isPanelId) as TodayPanelId[])
+    : null;
+
+  // Which ids this account's settings have already had the chance to hide.
+  // Absent key = preferences written before the concept existed.
+  const known = Array.isArray(p.todayPanelsKnown)
+    ? (p.todayPanelsKnown.filter(isPanelId) as TodayPanelId[])
+    : PANELS_KNOWN_BEFORE_OUTLOOK;
+
+  // A panel nobody has ever been offered cannot have been hidden on purpose, so
+  // it goes in — at the front, because a new panel that lands below the fold of
+  // an already-full dashboard may as well not exist. Anything missing that IS
+  // known stays missing: that is a deliberate hide and must be respected.
+  const panels = savedPanels
+    ? [...TODAY_PANEL_IDS.filter((id) => !known.includes(id) && !savedPanels.includes(id)), ...savedPanels]
     : d.todayPanels;
 
   return {
@@ -196,6 +237,7 @@ export function resolvePreferences(raw: unknown): Preferences {
     aiCsvImport: bool(p.aiCsvImport, d.aiCsvImport),
     aiAssistant: bool(p.aiAssistant, d.aiAssistant),
     aiWeeklyPatterns: bool(p.aiWeeklyPatterns, d.aiWeeklyPatterns),
+    aiDailyOutlook: bool(p.aiDailyOutlook, d.aiDailyOutlook),
 
     notifications: {
       quietHoursEnabled: bool(n.quietHoursEnabled, d.notifications.quietHoursEnabled),
@@ -212,6 +254,10 @@ export function resolvePreferences(raw: unknown): Preferences {
     // An empty saved list means "I hid everything", which is a legitimate if
     // odd choice; a *missing* list means never configured, and gets the lot.
     todayPanels: panels,
+    // Resolving is not saving: this reports every id that now exists, and the
+    // Today settings screen persists it on the next change. Until then a new
+    // panel keeps being treated as new, which only means it keeps being shown.
+    todayPanelsKnown: [...TODAY_PANEL_IDS],
   };
 }
 

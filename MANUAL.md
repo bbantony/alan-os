@@ -1015,6 +1015,7 @@ one you actually wanted, and it costs about double.
 | Scan 30 receipts | 30 | about $0.19 |
 | Import your bank statement weekly | 4 | under $0.01 |
 | Weekly patterns write-up | automatic, weekly | under $0.01 |
+| Today's outlook | automatic, daily | about $0.07 |
 
 A question costs about **a fifth of a cent** answered and **four tenths of a
 cent** acted on. A receipt is about **six tenths of a cent** — measured on a

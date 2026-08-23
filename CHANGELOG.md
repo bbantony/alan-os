@@ -2982,3 +2982,119 @@ log now at the bottom of `PROGRESS.md`.
 has been describing agents that only existed on Alan's laptop. Changed to `.claude/*` with
 `!.claude/agents/`, keeping `settings.local.json` and `scheduled_tasks.lock` out. All seven agent
 definitions are now in the repository, so a fresh clone gets the workflow.
+
+---
+
+## 38. Today's outlook — the AI reading of the day, with one-tap suggestions
+
+Alan asked for the AI to be "used extensively everywhere, especially in the Today page for smart
+suggestions and outlook". This is that, built as a new first panel on Today.
+
+### What it is
+
+Two or three sentences at the top of the dashboard saying what today actually looks like, plus up
+to three one-tap suggestions. The value is strictly in the joining-up — every individual number is
+already on the same screen. Measured against the live API on a loaded Tuesday, it produced:
+
+> "Car insurance is now overdue, and tomorrow's $1,450.00 rent payment will push your safe to
+> spend to -$1,269.56 six days before salary lands. You also have three tasks due today —
+> including emailing the landlord — and one budget currently over its limit."
+
+That sentence needs Money, Tasks and the recurring-payments engine at once, which is exactly why
+no existing panel could say it. On a quiet Sunday the same prompt produced two flat sentences and
+**no** suggestions, which is the behaviour that stops it becoming noise.
+
+### How it's built
+
+- **Migration `0032_daily_outlook.sql`.** No new table: `day_plans` has carried an unused
+  `ai_briefing text` since `0011`, and SPEC.md Part F names that exact column. It already has
+  `unique (user_id, plan_date)` — the anti-regeneration guard — and owner-only RLS. Added
+  `ai_suggestions jsonb` and `ai_generated_at timestamptz`, plus a partial index.
+  **Deliberately not the `insights` table**: its unique key is `(user_id, period_start)`, so a
+  daily row and a weekly row landing on the same Monday would collide and one would silently lose.
+- **`src/lib/ai/outlook.ts`.** Cache-first, exactly like `ensureWeeklyInsight`. The generated-at
+  stamp rather than the briefing text is what marks a day done, so a day the model looked at and
+  found unremarkable costs one call rather than one per page load.
+- **It takes its facts as an argument instead of fetching them.** Today is the highest-traffic
+  page and had already loaded every one of these numbers for its other panels. Re-querying would
+  have doubled the dashboard's database work on every load, including the cache hits.
+- **Module access is enforced by withholding facts, not by instructing the model.** A person
+  without Money cannot get a briefing mentioning money, because the money never enters the prompt.
+- **Suggestions are intents, never actions.** `runOutlookSuggestion` takes only an *index* into
+  the stored row and re-reads the suggestion from the database. A server action's argument is
+  whatever the browser sends, so accepting a `{tool, args}` from the client would have turned this
+  into a general-purpose write endpoint for anyone who could post to it.
+
+### The new-panel trap, fixed properly
+
+`resolvePreferences` filtered unknown panel ids out of a saved layout, and a saved layout is a
+list of *visible* panels — so "not in the list" meant "hidden". A newly added panel was therefore
+indistinguishable from a deliberately hidden one, and **would have been invisible forever to
+anyone who had ever opened Settings → Today**, silently. Added `todayPanelsKnown`: every id the
+account's settings have been shown. Anything in `TODAY_PANEL_IDS` but not in there is new and gets
+shown at the front; anything missing that *is* known stays hidden, because that was a choice. The
+Today settings screen writes the known list on every save. `PANELS_KNOWN_BEFORE_OUTLOOK` covers
+preferences written before the concept existed.
+
+### Also
+
+- New `aiDailyOutlook` switch in Settings → AI & cost, and `outlook` added to `FEATURE_LABELS` so
+  the spend list reads "Today's outlook" rather than a raw slug.
+- The `standard` tier's on-screen note now names the daily outlook — which it is finally allowed
+  to do, because the outlook now exists. Entry 37 removed that same phrase for the opposite reason.
+- The bills fetch on Today now runs when *either* the bills panel or the outlook wants it. Hiding
+  one panel must not silently degrade the other.
+- **Measured cost**: 673 in / 463 out on a loaded weekday, 546 / 410 on a quiet one — about
+  0.2 cents a day, **7 cents a month**. The settings hint and MANUAL.md both say 7 cents, from the
+  measurement rather than a guess.
+- `usage.ts`: `$7.40` corrected to `$7.65` ($0.0085 × 30 × 30), an arithmetic slip unit-reviewer
+  caught in passing on the previous unit.
+
+### What unit-reviewer caught, and it was worth catching
+
+Two blocking bugs, both real, both mine.
+
+**1. The prompt named task horizons that do not exist.** `outlook.ts`'s tool description offered
+`"now"|"today"|"week"|"later"`. The Postgres enum is `('now','today','this_week','this_month',
+'someday')` — so two of the four values were invalid, and `create_task` in `tools.ts` did not
+validate: `asString(args.horizon)` went straight into the insert. A suggestion following the
+prompt as written would throw, and `tools.ts` returns `error.message` verbatim to a toast, so Alan
+would have read **`invalid input value for enum task_horizon: "week"`** on his own dashboard.
+Fixed in both places: the prompt now lists the five real values, and `create_task` clamps *both*
+enum arguments (horizon and category) against the real lists before the insert. That second fix
+matters more than the first — the tool schema is a request, not a guarantee, and the outlook
+proved a second-hand prompt can get it wrong.
+
+**2. The server renumbered a list the browser was still counting on.** `runOutlookSuggestion`
+removed a taken suggestion from `ai_suggestions`, while the panel addressed suggestions by their
+position and sent that position back on the next tap. With `[A, B, C]`: tap A, the server stores
+`[B, C]`; before the revalidated props land, a tap on the button *labelled* B sends `index: 1`,
+and the server reads `[B, C][1]` and runs **C**. A button that performs a different action than
+its label, on the one panel whose entire safety story is "nothing happens until you tap it". Once
+the new props did land it failed the other way round — B rendered as "Done" having never run, and
+vanished.
+
+Fixed by marking rather than removing: suggestions carry an `actedAt` stamp and the array is never
+reordered or shortened, so an index means the same thing all day. The panel now reads the server's
+`actedAt` with its optimistic state layered on top, and `runOutlookSuggestion` rejects a second tap
+on an already-taken suggestion, so a double tap can't run a write twice.
+
+Also from the same report, non-blocking and accepted: "one call a day" is up to two, because
+`callGeminiJson` retries once on unparseable JSON and meters both attempts — true of the weekly
+insight too. And `day_plans_outlook_idx` will not in practice be used by the query its comment
+describes, since `getOutlookForDate` filters only on `user_id` and `plan_date` and the planner
+will prefer the existing unique index; harmless, left in place, comment noted here instead.
+
+**Two residuals from the passing review, closed before commit.** The outlook panel is now keyed by
+date rather than by panel id: a tab left open across midnight kept the same component instance and
+its optimistic "done" indices while being handed tomorrow's suggestions, so a previously tapped
+position could show Done against something new — the same class of bug as the renumbering race, one
+layer up. And the two places that stated the cost guarantee ("one call a day") now say what is
+actually true — one call, two on the days the first response doesn't parse — because a future
+session looks for that guarantee in the code, not in this file. The `0032` index comment and the
+`ai_suggestions` column comment were both corrected to describe what they really do, the latter in
+the live database as well as in the file.
+
+Confirmed against the live database before commit: `day_plans` held **no** outlook rows, so none of
+this session's testing wrote a row under the old remove-on-tap code. Nothing for Alan to work
+around; the first outlook he sees will be written by the fixed code.

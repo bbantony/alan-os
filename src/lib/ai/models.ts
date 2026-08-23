@@ -72,7 +72,8 @@ export const MODELS: Record<ModelTier, ModelSpec> = {
     thinking: "minimal",
     note: "Bulk sorting — CSV imports.",
   },
-  // The everyday model: the assistant, receipt reading, weekly patterns.
+  // The everyday model: the assistant, receipt reading, weekly patterns and the
+  // daily outlook.
   // Multimodal, supports function calling, and cheap enough that a heavy day
   // costs pennies.
   //
@@ -85,8 +86,9 @@ export const MODELS: Record<ModelTier, ModelSpec> = {
     outputMicrosPerMillion: 3_750_000, // $3.75
     thinking: "minimal",
     // Rendered verbatim on Settings → AI & cost, so it must name only jobs that
-    // actually exist. Add the daily outlook here when the daily outlook ships.
-    note: "The assistant, receipts, weekly patterns.",
+    // actually exist. The daily outlook was added here when it shipped, in the
+    // same session — keep that rule if anything else joins this tier.
+    note: "The assistant, receipts, weekly patterns, the daily outlook.",
   },
   // Reserved for long, once-a-month reasoning over a lot of context: the
   // month-in-review write-up. Same price per token as standard, but allowed to

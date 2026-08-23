@@ -6,6 +6,12 @@ import { balanceDeltaCents } from "@/lib/finance/balance";
 import { formatCents } from "@/lib/finance/money";
 import { currentPeriodBounds } from "@/lib/finance/period";
 import type { ModuleId, ModuleAccess } from "@/lib/permissions";
+import {
+  TASK_HORIZONS,
+  TASK_CATEGORY_LABELS,
+  type TaskCategory,
+  type TaskHorizon,
+} from "@/lib/tasks/types";
 import type { FunctionDeclaration, ToolParameterSchema } from "./gemini";
 
 /**
@@ -149,6 +155,22 @@ const createTask: AiTool = {
     const title = asString(args.title);
     if (!title) return { error: "A task needs a title." };
 
+    // Both of these are Postgres ENUMS, and an unknown value is not a soft
+    // failure — the insert throws, and `error.message` is returned straight to
+    // a screen Alan is looking at, so he'd read
+    // `invalid input value for enum task_horizon: "week"`. The tool schema
+    // above already lists the legal values, but a schema is a request, not a
+    // guarantee: any model that is told about this tool second-hand (the daily
+    // outlook builds its own prompt, and got this exactly wrong) can send
+    // something else. Clamp here, where the write actually happens.
+    const horizon = TASK_HORIZONS.includes(asString(args.horizon) as TaskHorizon)
+      ? (asString(args.horizon) as TaskHorizon)
+      : null;
+    const categories = Object.keys(TASK_CATEGORY_LABELS) as TaskCategory[];
+    const category = categories.includes(asString(args.category) as TaskCategory)
+      ? (asString(args.category) as TaskCategory)
+      : "personal";
+
     const dueDate = asString(args.due_date);
     const dueTime = asString(args.due_time) ?? "09:00";
     // Stored UTC, displayed in Winnipeg — the app's rule everywhere.
@@ -161,8 +183,8 @@ const createTask: AiTool = {
       .insert({
         user_id: ctx.userId,
         title,
-        horizon: asString(args.horizon) ?? (dueDate ? "today" : "this_week"),
-        category: asString(args.category) ?? "personal",
+        horizon: horizon ?? (dueDate ? "today" : "this_week"),
+        category,
         due_at: dueAt,
         notify_offset_minutes: asNumber(args.notify_minutes_before),
       })

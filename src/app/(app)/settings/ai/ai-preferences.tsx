@@ -124,6 +124,13 @@ export function AiPreferences({ initial }: { initial: Preferences }) {
           value={prefs.aiWeeklyPatterns}
           onSaved={setPrefs}
           patch={(v) => ({ aiWeeklyPatterns: v })}
+        />
+        <PreferenceSwitch
+          label="Today's outlook"
+          hint="A short read on the day at the top of Today, written once each morning. Costs about 7 cents a month."
+          value={prefs.aiDailyOutlook}
+          onSaved={setPrefs}
+          patch={(v) => ({ aiDailyOutlook: v })}
           last
         />
       </SettingsGroup>

@@ -35,7 +35,14 @@ export function TodaySettings({ initial }: { initial: Preferences }) {
     const previous = order;
     setOrder(next);
     setSaving(true);
-    const result = await updatePreferences({ todayPanels: next });
+    // `todayPanelsKnown` is written alongside the order every time, because
+    // this screen is the moment Alan is shown every panel that exists — after
+    // this, "missing from the list" genuinely means "hidden on purpose", and a
+    // later new panel can still be told apart from one he chose to drop.
+    const result = await updatePreferences({
+      todayPanels: next,
+      todayPanelsKnown: [...TODAY_PANEL_IDS],
+    });
     setSaving(false);
     if (result.error) {
       setOrder(previous);

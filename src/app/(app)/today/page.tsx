@@ -23,11 +23,13 @@ import { Stat, StatStrip } from "@/components/ui/stat";
 import { NO_MODULES_ACCESS } from "@/lib/permissions";
 import { DEFAULT_PREFERENCES } from "@/lib/preferences";
 import { getLedger } from "@/lib/ledger";
+import { ensureDailyOutlook } from "@/lib/ai/outlook";
 import { TodayConsole } from "./today-console";
 import { FocusPanel } from "./focus-panel";
 import { JumpTo } from "./jump-to";
 import { TodaySoFar } from "./today-so-far";
 import { UpcomingBills } from "./upcoming-bills";
+import { OutlookPanel } from "./outlook-panel";
 import { DashboardGrid, Reveal } from "./dashboard-grid";
 
 /**
@@ -116,8 +118,13 @@ export default async function TodayPage() {
     ? await getLedger(today, today)
     : [];
 
-  const upcomingBills =
-    access.money && prefs.todayPanels.includes("bills") ? await getUpcomingBills(7) : [];
+  // Fetched when EITHER panel needs them: "About to land" renders them, and the
+  // outlook's most useful sentence ("today's $180 is really −$1,270 once rent
+  // goes") is impossible without them. Hiding one panel must not silently
+  // degrade the other.
+  const wantsBills =
+    prefs.todayPanels.includes("bills") || prefs.todayPanels.includes("outlook");
+  const upcomingBills = access.money && wantsBills ? await getUpcomingBills(7) : [];
 
   const overdueTasks = tasks.filter((t) => t.due_at && new Date(t.due_at) < todayStartUtc);
   const overdueIds = new Set(overdueTasks.map((t) => t.id));
@@ -137,6 +144,37 @@ export default async function TodayPage() {
     nowParts.hour < 12 ? "Good morning" : nowParts.hour < 17 ? "Good afternoon" : "Good evening";
 
   const dueCount = dueTodayTasks.length + routinesDueToday.filter((r) => !r.completedToday).length;
+
+  // The outlook, built from facts this page has ALREADY loaded — no extra
+  // queries. Cache-first: one model call per person per day — two if the first
+  // response doesn't parse, because callGeminiJson retries once and both
+  // attempts are metered — guarded by day_plans' unique (user_id, plan_date).
+  // On every other load of the day this is a single indexed read.
+  const outlook = prefs.todayPanels.includes("outlook")
+    ? await ensureDailyOutlook({
+        date: today,
+        weekday,
+        nowMinutes,
+        access,
+        dueToday: dueTodayTasks.map((t) => t.title),
+        overdue: overdueTasks.map((t) => t.title),
+        routinesDue: routinesDueToday.filter((r) => !r.completedToday).map((r) => r.title),
+        nextEventTitle: calendar.nextEventTitle,
+        nextEventTime: calendar.nextEventTime,
+        safeToSpendCents: access.money ? money.safeToSpendCents : null,
+        budgetsOver: money.overCount,
+        bills: upcomingBills.map((b) => ({
+          name: b.name,
+          amountCents: b.amountCents,
+          daysAway: b.daysAway,
+          isIncome: b.isIncome,
+        })),
+        trainedToday: workout.loggedToday,
+        streak: workout.currentStreak,
+        shoppingUnchecked: uncheckedShopping,
+        staplesLow: suggestions.map((s) => s.name),
+      })
+    : null;
 
   // The order (and what's shown at all) comes from Settings → Today. The old
   // layout was a fixed two-column grid; this is a straight list so a person can
@@ -224,6 +262,20 @@ export default async function TodayPage() {
           </Reveal>
 
           {panels.map((panel) => {
+            if (panel === "outlook") {
+              return outlook ? (
+                // Keyed by DATE, not by panel id. A tab left open across
+                // midnight would otherwise keep the same component instance —
+                // and its optimistic "done" indices — while being handed
+                // tomorrow's suggestions, so a tapped position could show Done
+                // against something new. Changing the key remounts it instead.
+                <OutlookPanel
+                  key={`outlook-${today}`}
+                  briefing={outlook.briefing}
+                  suggestions={outlook.suggestions}
+                />
+              ) : null;
+            }
             if (panel === "console" && (access.tasks || access.calendar)) {
               return (
                 <TodayConsole

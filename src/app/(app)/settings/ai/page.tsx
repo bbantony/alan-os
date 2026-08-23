@@ -30,6 +30,7 @@ const FEATURE_LABELS: Record<string, string> = {
   // Every slug passed to callGeminiJson/callGeminiWithTools needs a line here,
   // or the spend list shows Alan a raw slug like "weekly-patterns".
   "weekly-patterns": "Weekly patterns",
+  outlook: "Today's outlook",
 };
 
 export default async function AiSettingsPage() {

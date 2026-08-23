@@ -115,16 +115,31 @@ See `SPEC.md` for the full specification.
       Google's **free** tier. Still outstanding: the same key has to be pasted
       into **Vercel** before any of this works on the deployed phone app.
 
-## Phase 6 — Journal & Vinyl
-- [ ] Photo-a-day + reminder + gallery
-- [ ] Vinyl log + iTunes art + shelf
-- [ ] `/frame` wall display route
+## Phase 6 — Journal & Vinyl — **CANCELLED at Alan's request**
+Both modules were stripped from the app in Round 1 of the interconnection work
+(entry 34) and Alan asked again on 22 Aug 2026 to remove them "completely for
+now". Do not rebuild either without asking him first.
+- [x] ~~Photo-a-day + reminder + gallery~~ — cancelled
+- [x] ~~Vinyl log + iTunes art + shelf~~ — cancelled
+- [x] ~~`/frame` wall display route~~ — cancelled
 
 ## Phase 7 — AI everywhere
 - [ ] Quick-capture parser + confirm chips
-- [ ] Morning briefing cron
-- [ ] Weekly reviews
-- [ ] Month in Review
+- [x] **Morning briefing — shipped as "Today's outlook"** (22 Aug 2026,
+      CHANGELOG.md entry 38). Written into `day_plans.ai_briefing`, the column
+      SPEC.md Part F always named for it, cached once a day by the table's
+      unique `(user_id, plan_date)`. Not a cron job: it is generated cache-first
+      on the first Today load of the day, from facts that page has already
+      fetched for its other panels. A cron would add a second code path and a
+      second failure mode for a feature whose whole cost guard is "at most one
+      call per person per day", which the unique constraint already enforces.
+      Carries up to three one-tap suggestions, stored as intents.
+- [x] **Weekly reviews** — shipped earlier as weekly patterns on the Timeline
+      (entry 34), verified working against the live API in entry 37.
+- [ ] Month in Review — the only untouched user of the `deep` tier. Whoever
+      builds it: read the TRAP comment on that tier in `src/lib/ai/models.ts`
+      first. It thinks hard, and `callGeminiJson` defaults to a 1024-token cap
+      that the thinking alone would eat.
 
 ## Phase 8 — Later/optional
 - [ ] Polar AccessLink + Fitbit API auto-sync for runs

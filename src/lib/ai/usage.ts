@@ -23,7 +23,7 @@ import { costMicros, formatMicros, type ModelTier } from "./models";
  * not from the two-turn case — the loop allows FOUR turns, each resending the
  * system prompt and the whole thirteen-tool schema with the accumulated tool
  * results on top, so a four-step question lands near $0.0085. Thirty of those a
- * day for a month is about $7.40, which is ALREADY OVER this $5 default.
+ * day for a month is about $7.65, which is ALREADY OVER this $5 default.
  *
  * So: a normal month is about $1, a heavy month about $3.50, and a pathological
  * month of nothing but four-step questions exceeds the ceiling and switches the
