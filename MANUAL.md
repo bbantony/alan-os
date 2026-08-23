@@ -1455,3 +1455,48 @@ separately rather than pretended to be free.
 than 15% above what you normally pay gets flagged, with your usual price. It
 stays quiet below that, and quiet until it's seen an item at least twice — a
 warning on every third line is a warning you'd stop reading.
+
+---
+
+## Today's outlook — the AI reading of your day
+
+There's a new panel at the very top of **Today**. Two or three sentences about
+today specifically, written once each morning the first time you open the app.
+
+It isn't a summary of the numbers below it — you can already see those. It's for
+the sentence that needs several of them at once. A real one, from testing:
+
+> *"Car insurance is now overdue, and tomorrow's $1,450.00 rent payment will push
+> your safe to spend to −$1,269.56 six days before salary lands. You also have
+> three tasks due today — including emailing the landlord — and one budget
+> currently over its limit."*
+
+Nothing on your dashboard could have told you that before. The overdue task lives
+in one place, the rent in another, the balance in a third.
+
+**Underneath it, up to three suggestions**, each one tap. Same rule as everywhere
+else in this app: **nothing happens to your data until you tap.** The AI writes
+down what it thinks you might want; your thumb decides. Tap one and it turns into
+"Done" and stays put.
+
+**On a quiet day it says less, or nothing at all.** Fed a Sunday with nothing due
+and a workout already logged, it wrote two flat sentences and offered no
+suggestions. That's deliberate — a panel that manufactures something profound
+every morning is one you'd learn to scroll past.
+
+**Tap Dismiss** and it goes for the rest of the day. It comes back tomorrow, and
+dismissing it costs nothing.
+
+### What it costs and how to turn it off
+
+About **7 cents a month** — one go per day, saved, so opening Today twenty times
+costs the same as opening it once. Currently $0, since your key is a free one.
+
+**Settings → AI & cost** has a switch for it, and **Settings → Today** can move
+it down the page or hide it entirely like any other panel.
+
+### It only sees what you've switched on
+
+If you turned Money off for an account, its outlook can't mention money — not
+because it's been told not to, but because the money is never handed to it in the
+first place. Same for tasks, calendar, workout and shopping.

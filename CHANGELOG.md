@@ -3302,3 +3302,10 @@ silently misses every generic call in a TypeScript codebase.
   for, and it is a genuine violation of "imported source data is never rewritten in place". It is
   pre-existing and out of scope for a deletion pass, but it is a real finding and belongs in the
   next money unit rather than in a footnote nobody reads.
+
+**MANUAL.md gap closed.** Entry 38 shipped the outlook without giving Alan a section explaining
+it — CLAUDE.md says the Manual grows after every completed piece of work, and a feature he cannot
+read about is a feature he will not use. Added: what the panel is and why it is not a summary of
+the numbers under it, a real example from the live test, the tap-to-act rule, why it says less on
+a quiet day, what Dismiss does, the 7c/month cost with the two switches that control it, and the
+fact that it can only mention modules the account has.
