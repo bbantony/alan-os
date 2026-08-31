@@ -50,7 +50,18 @@ export interface OutlookFacts {
 
   safeToSpendCents: number | null;
   budgetsOver: number;
-  bills: { name: string; amountCents: number; daysAway: number; isIncome: boolean }[];
+  /**
+    * `currency` is not decoration. `safe_to_spend_after_those_land` below nets
+    * these against a CAD figure, and without it the sum silently added rupees
+    * to dollars — the same bug the Today panel had.
+    */
+  bills: {
+    name: string;
+    amountCents: number;
+    currency: "CAD" | "INR";
+    daysAway: number;
+    isIncome: boolean;
+  }[];
 
   trainedToday: boolean;
   streak: number;
@@ -132,11 +143,16 @@ function summarise(f: OutlookFacts): Record<string, unknown> {
     if (f.bills.length > 0) {
       out.about_to_land = f.bills.slice(0, 6).map((b) => ({
         what: b.name,
-        amount: formatCents(b.amountCents),
+        amount: formatCents(b.amountCents, b.currency),
         direction: b.isIncome ? "in" : "out",
         days_away: b.daysAway,
       }));
-      const net = f.bills.reduce((n, b) => n + (b.isIncome ? b.amountCents : -b.amountCents), 0);
+      // CAD only — safeToSpendCents is CAD, so netting a rupee amount into it
+      // would hand the model a figure that is simply wrong, which it would
+      // then state confidently.
+      const net = f.bills
+        .filter((b) => b.currency === "CAD")
+        .reduce((n, b) => n + (b.isIncome ? b.amountCents : -b.amountCents), 0);
       if (f.safeToSpendCents !== null) {
         out.safe_to_spend_after_those_land = formatCents(f.safeToSpendCents + net);
       }

@@ -5,12 +5,39 @@ import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { toast } from "@/components/ui/toast";
+import { Micro } from "@/components/ui/tag";
+import { cn } from "@/lib/utils";
 import { formatCents } from "@/lib/finance/money";
-import { parseCsv, guessColumns, normalizeCsvDate, type ColumnGuess } from "@/lib/finance/csv-parser";
+import {
+  parseCsv,
+  guessColumns,
+  normalizeCsvDate,
+  readCsvAmount,
+  type AmountReading,
+  type ColumnGuess,
+} from "@/lib/finance/csv-parser";
 import type { Account, Category } from "@/lib/finance/types";
 import { buildCsvCandidates, importCsvTransactions, type CsvCandidateRow } from "@/app/(app)/money/csv-actions";
 
-type Step = "upload" | "mapping" | "review" | "done";
+type Step = "upload" | "mapping" | "confirm" | "review" | "done";
+
+/**
+ * A row whose amount can be read more than one way.
+ *
+ * These used to be dropped. Alan's instruction when asked: import what can be
+ * read and "the rest it prompts me to confirm — reconciliation is the whole
+ * purpose of this in the first place". A row missing from a reconcile leaves a
+ * difference that cannot be explained, which is worse than two seconds of
+ * confirming.
+ */
+interface PendingRow {
+  key: string;
+  date: string;
+  description: string;
+  raw: string;
+  isIncome: boolean;
+  readings: AmountReading[];
+}
 
 export function CsvImport({ accounts, categories }: { accounts: Account[]; categories: Category[] }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +53,14 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importedCount, setImportedCount] = useState(0);
+  /** Rows waiting on a decision, and the decision once made. */
+  const [pending, setPending] = useState<PendingRow[]>([]);
+  const [resolved, setResolved] = useState<Record<string, number>>({});
+  /** Rows that were not a number at all, reported rather than dropped. */
+  const [unreadableCount, setUnreadableCount] = useState(0);
+  const [certainRows, setCertainRows] = useState<
+    { date: string; description: string; amountCents: number; isIncome: boolean }[]
+  >([]);
 
   function reset() {
     setStep("upload");
@@ -34,6 +69,10 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
     setCandidates([]);
     setSelected({});
     setRowCategory({});
+    setPending([]);
+    setResolved({});
+    setUnreadableCount(0);
+    setCertainRows([]);
     setError(null);
   }
 
@@ -63,40 +102,85 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
     setLoading(true);
     setError(null);
 
-    const parsedRows: { date: string; description: string; amountCents: number; isIncome: boolean }[] = [];
-    for (const row of rawRows) {
+    const certain: { date: string; description: string; amountCents: number; isIncome: boolean }[] = [];
+    const ask: PendingRow[] = [];
+    let unreadable = 0;
+
+    for (const [i, row] of rawRows.entries()) {
       const date = normalizeCsvDate(row[mapping.dateCol] ?? "");
       const description = (row[mapping.descriptionCol] ?? "").trim();
       if (!date || !description) continue;
 
-      let amountCents: number | null = null;
-      let isIncome = false;
+      // A debit column is money OUT and a credit column money IN whatever sign
+      // the bank wrote, so only the magnitude comes from the parser.
+      let raw = "";
+      let forcedDirection: boolean | null = null;
       if (useDebitCredit) {
-        const debitRaw = mapping.debitCol !== null ? row[mapping.debitCol]?.trim() : "";
-        const creditRaw = mapping.creditCol !== null ? row[mapping.creditCol]?.trim() : "";
+        const debitRaw = mapping.debitCol !== null ? (row[mapping.debitCol] ?? "").trim() : "";
+        const creditRaw = mapping.creditCol !== null ? (row[mapping.creditCol] ?? "").trim() : "";
         if (debitRaw) {
-          amountCents = Math.round(Math.abs(Number(debitRaw.replace(/[^0-9.-]/g, ""))) * 100);
-          isIncome = false;
+          raw = debitRaw;
+          forcedDirection = false;
         } else if (creditRaw) {
-          amountCents = Math.round(Math.abs(Number(creditRaw.replace(/[^0-9.-]/g, ""))) * 100);
-          isIncome = true;
+          raw = creditRaw;
+          forcedDirection = true;
         }
       } else if (mapping.amountCol !== null) {
-        const raw = Number((row[mapping.amountCol] ?? "").replace(/[^0-9.-]/g, ""));
-        if (!Number.isNaN(raw)) {
-          amountCents = Math.round(Math.abs(raw) * 100);
-          isIncome = raw > 0;
-        }
+        raw = row[mapping.amountCol] ?? "";
       }
-      if (amountCents === null || Number.isNaN(amountCents) || amountCents <= 0) continue;
-      parsedRows.push({ date, description, amountCents, isIncome });
+      if (!raw.trim()) continue;
+
+      const read = readCsvAmount(raw);
+      if (read.kind === "ok") {
+        certain.push({
+          date,
+          description,
+          amountCents: read.cents,
+          isIncome: forcedDirection ?? read.isIncome,
+        });
+      } else if (read.kind === "ambiguous") {
+        ask.push({
+          key: `${i}`,
+          date,
+          description,
+          raw: raw.trim(),
+          isIncome: forcedDirection ?? read.isIncome,
+          readings: read.readings,
+        });
+      } else {
+        unreadable += 1;
+      }
     }
 
-    if (parsedRows.length === 0) {
+    setUnreadableCount(unreadable);
+
+    if (certain.length === 0 && ask.length === 0) {
       setLoading(false);
       setError("None of the rows could be read with this column mapping — check your choices above.");
       return;
     }
+
+    // Anything needing a decision goes to its own step first. Nothing is
+    // dropped on the way through.
+    if (ask.length > 0) {
+      setCertainRows(certain);
+      setPending(ask);
+      setResolved({});
+      setLoading(false);
+      setStep("confirm");
+      return;
+    }
+
+    await continueToReview(certain);
+  }
+
+  /** Merges the confirmed rows back in and carries on to the review list. */
+  async function continueToReview(
+    rows: { date: string; description: string; amountCents: number; isIncome: boolean }[]
+  ) {
+    setLoading(true);
+    setError(null);
+    const parsedRows = rows;
 
     const result = await buildCsvCandidates({ rows: parsedRows });
     setLoading(false);
@@ -275,6 +359,112 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
             </Button>
             <Button type="button" className="flex-1" disabled={loading || !accountId} onClick={handleBuildCandidates}>
               {loading ? "Reading…" : "Continue"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {step === "confirm" && (
+        <div className="flex flex-col gap-3">
+          <div className="border-2 border-rule bg-surface p-3">
+            <p className="text-sm font-semibold">
+              {pending.length} row{pending.length === 1 ? "" : "s"} could be read two ways
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Your bank wrote these amounts in a format where the comma or dot could be a
+              decimal point or a thousands separator. Pick what each one really was — the
+              other {certainRows.length} row{certainRows.length === 1 ? "" : "s"} came
+              through fine and {certainRows.length === 1 ? "is" : "are"} waiting.
+            </p>
+          </div>
+
+          <ul className="border-2 border-rule bg-surface">
+            {pending.map((row, i) => (
+              <li key={row.key} className={cn("p-3", i > 0 && "border-t border-hairline")}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                    {row.description}
+                  </span>
+                  <Micro>{row.date}</Micro>
+                </div>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  file says: {row.raw} · {row.isIncome ? "money in" : "money out"}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {row.readings.map((reading) => (
+                    <button
+                      key={reading.cents}
+                      type="button"
+                      onClick={() =>
+                        setResolved((prev) => ({ ...prev, [row.key]: reading.cents }))
+                      }
+                      aria-pressed={resolved[row.key] === reading.cents}
+                      className={cn(
+                        "tap-press border-2 px-3 py-2 text-sm font-semibold tabular transition-colors",
+                        resolved[row.key] === reading.cents
+                          ? "border-rule bg-foreground text-background"
+                          : "border-rule bg-surface hover:bg-muted"
+                      )}
+                    >
+                      ${reading.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setResolved((prev) => ({ ...prev, [row.key]: -1 }))}
+                    aria-pressed={resolved[row.key] === -1}
+                    className={cn(
+                      "tap-press border-2 px-3 py-2 text-sm transition-colors",
+                      resolved[row.key] === -1
+                        ? "border-rule bg-destructive text-destructive-foreground"
+                        : "border-hairline text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    Skip this row
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {unreadableCount > 0 && (
+            <p className="hatch border-2 border-rule px-3 py-2">
+              <Micro>
+                {unreadableCount} row{unreadableCount === 1 ? "" : "s"} had no readable amount
+                at all and {unreadableCount === 1 ? "was" : "were"} left out.
+              </Micro>
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={reset}>
+              Start over
+            </Button>
+            <Button
+              block
+              disabled={loading || pending.some((r) => resolved[r.key] === undefined)}
+              onClick={() => {
+                const merged = [...certainRows];
+                for (const row of pending) {
+                  const cents = resolved[row.key];
+                  if (cents === undefined || cents < 0) continue;
+                  merged.push({
+                    date: row.date,
+                    description: row.description,
+                    amountCents: cents,
+                    isIncome: row.isIncome,
+                  });
+                }
+                merged.sort((a, b) => a.date.localeCompare(b.date));
+                void continueToReview(merged);
+              }}
+            >
+              {pending.some((r) => resolved[r.key] === undefined)
+                ? `${pending.filter((r) => resolved[r.key] === undefined).length} still to confirm`
+                : `Continue with ${
+                    certainRows.length +
+                    pending.filter((r) => (resolved[r.key] ?? -1) >= 0).length
+                  } rows`}
             </Button>
           </div>
         </div>

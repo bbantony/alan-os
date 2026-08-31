@@ -21,9 +21,17 @@ import { costMicros, formatMicros, type ModelTier } from "./models";
  * Measured: an assistant question costs ~$0.0019 answered and ~$0.0038 acted on
  * in two turns. But the upper bound must come from `MAX_STEPS` in assistant.ts,
  * not from the two-turn case — the loop allows FOUR turns, each resending the
- * system prompt and the whole thirteen-tool schema with the accumulated tool
- * results on top, so a four-step question lands near $0.0085. Thirty of those a
- * day for a month is about $7.65, which is ALREADY OVER this $5 default.
+ * system prompt and the whole tool schema with the accumulated tool results on
+ * top, so a four-step question lands near $0.0085. Thirty of those a day for a
+ * month is about $7.65, which is ALREADY OVER this $5 default.
+ *
+ * RECHECK THIS FIGURE. It was measured against a THIRTEEN-tool schema. The
+ * assistant now carries TWENTY, because Alan asked for one that can change
+ * things rather than only read them — and the schema is resent on every turn,
+ * so the input cost of every question went up with it. The tools were
+ * deliberately consolidated (one `update_task` with an action, not four
+ * separate tools) to hold that down, but the number above is now an
+ * underestimate and needs re-measuring against a real four-step question.
  *
  * So: a normal month is about $1, a heavy month about $3.50, and a pathological
  * month of nothing but four-step questions exceeds the ceiling and switches the
@@ -65,6 +73,16 @@ export interface UsageSummary {
   overBudget: boolean;
   /** e.g. "$0.42 of $5.00" */
   label: string;
+  /**
+   * True when the spend total could not be read at all.
+   *
+   * Alan's decision when this was put to him: CARRY ON rather than stop the AI
+   * — "just keep going". So `overBudget` stays false and every feature keeps
+   * working. But carrying on silently would mean spending with no ceiling and
+   * no way to know, so the AI settings screen shows this, and it is the one
+   * honest thing to say: the number on screen is not the real number.
+   */
+  meterUnavailable: boolean;
 }
 
 function monthStartIso(): string {
@@ -85,28 +103,46 @@ export async function getUsageSummary(): Promise<UsageSummary> {
     remainingMicros: MONTHLY_BUDGET_MICROS,
     overBudget: false,
     label: `${formatMicros(0)} of ${formatMicros(MONTHLY_BUDGET_MICROS)}`,
+    meterUnavailable: false,
   };
   if (!user) return empty;
 
-  const [{ data }, budgetMicros] = await Promise.all([
-    supabase
-      .from("ai_usage")
-      .select("cost_micros")
-      .eq("user_id", user.id)
-      .gte("created_at", monthStartIso()),
+  // Summed in SQL, NOT in JavaScript. This used to select every row for the
+  // month and add them up here — and PostgREST caps a plain select at 1000
+  // rows, so past 1000 calls the total silently stopped growing, the ceiling
+  // could never be reached, and the "hard stop" this file is named for failed
+  // open at exactly the point it was needed. See migration 0035.
+  const [{ data, error }, budgetMicros] = await Promise.all([
+    supabase.rpc("ai_usage_month_total", { since: monthStartIso() }),
     budgetFor(supabase, user.id),
   ]);
 
-  const rows = (data as { cost_micros: number }[]) ?? [];
-  const spentMicros = rows.reduce((sum, r) => sum + r.cost_micros, 0);
+  // The lookup failing is NOT the same as having spent nothing. Reading $0
+  // here lets every AI feature carry on with no ceiling — which is what Alan
+  // asked for, but it must be visible rather than assumed.
+  const meterUnavailable = Boolean(error);
+  if (error) {
+    console.error(
+      `[ai] could not read this month's spend (${error.code ?? "no code"}): ${error.message}. ` +
+        `The cost ceiling is NOT being enforced. Has migration 0035 been applied?`
+    );
+  }
+
+  const row = (data as { spent_micros: number | string; call_count: number | string }[] | null)?.[0];
+  // bigint comes back over the wire as a string once it is large enough.
+  const spentMicros = Number(row?.spent_micros ?? 0);
+  const calls = Number(row?.call_count ?? 0);
 
   return {
     spentMicros,
     budgetMicros,
-    calls: rows.length,
+    calls,
     remainingMicros: Math.max(0, budgetMicros - spentMicros),
-    overBudget: spentMicros >= budgetMicros,
+    // Never over budget on a failed read — that would switch the AI off
+    // because of a database blip, which is the opposite of what was asked for.
+    overBudget: !meterUnavailable && spentMicros >= budgetMicros,
     label: `${formatMicros(spentMicros)} of ${formatMicros(budgetMicros)}`,
+    meterUnavailable,
   };
 }
 
@@ -135,16 +171,35 @@ export async function recordUsage(input: {
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    await supabase.from("ai_usage").insert({
-      user_id: user.id,
-      feature: input.feature,
-      model: input.modelId,
-      input_tokens: input.inputTokens,
-      output_tokens: input.outputTokens,
-      cost_micros: costMicros(input.tier, input.inputTokens, input.outputTokens),
+    // Through the definer, not a direct insert: `ai_usage` is read-only to the
+    // client as of 0035, because a meter the metered party can edit is a
+    // record and not a brake. The function stamps auth.uid() itself.
+    const { error } = await supabase.rpc("record_ai_usage", {
+      p_feature: input.feature,
+      p_model: input.modelId,
+      p_input_tokens: input.inputTokens,
+      p_output_tokens: input.outputTokens,
+      p_cost_micros: costMicros(input.tier, input.inputTokens, input.outputTokens),
     });
-  } catch {
-    // Metering is best-effort by design. See above.
+    // LOGGED, not swallowed. Metering staying best-effort is deliberate — a
+    // failed write must not take down the feature being metered. But this is
+    // now a single point of failure: `ai_usage` is read-only to the client, so
+    // if this one function is missing or erroring, NOTHING is metered, the
+    // month reads $0, and the ceiling can never be reached. Silence there is
+    // the same failure mode as the 1000-row bug this replaced. In particular,
+    // this is exactly what happens if the code deploys before migration 0035.
+    if (error) {
+      console.error(
+        `[ai] metering failed for ${input.feature} (${error.code ?? "no code"}): ${error.message}. ` +
+          `The monthly cost ceiling is NOT being enforced. Has migration 0035 been applied?`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[ai] metering threw for ${input.feature}: ${
+        error instanceof Error ? error.message : String(error)
+      }. The monthly cost ceiling is NOT being enforced.`
+    );
   }
 }
 
@@ -162,18 +217,18 @@ export async function getUsageByFeature(): Promise<FeatureBreakdown[]> {
   } = await supabase.auth.getUser();
   if (!user) return [];
 
-  const { data } = await supabase
-    .from("ai_usage")
-    .select("feature, cost_micros")
-    .eq("user_id", user.id)
-    .gte("created_at", monthStartIso());
+  // Grouped in SQL for the same reason the total is — the old version read
+  // every row and grouped here, so the breakdown quietly stopped counting at
+  // 1000 calls too.
+  const { data } = await supabase.rpc("ai_usage_month_by_feature", {
+    since: monthStartIso(),
+  });
 
-  const totals = new Map<string, FeatureBreakdown>();
-  for (const row of (data as { feature: string; cost_micros: number }[]) ?? []) {
-    const existing = totals.get(row.feature) ?? { feature: row.feature, calls: 0, costMicros: 0 };
-    existing.calls += 1;
-    existing.costMicros += row.cost_micros;
-    totals.set(row.feature, existing);
-  }
-  return [...totals.values()].sort((a, b) => b.costMicros - a.costMicros);
+  return (
+    (data as { feature: string; call_count: number | string; cost_micros: number | string }[] | null) ?? []
+  ).map((row) => ({
+    feature: row.feature,
+    calls: Number(row.call_count),
+    costMicros: Number(row.cost_micros),
+  }));
 }

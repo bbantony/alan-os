@@ -23,11 +23,17 @@ export function UpcomingBills({
 }) {
   if (bills.length === 0) return null;
 
-  const net = bills.reduce(
+  // CAD only. `safeToSpendCents` is a CAD figure, and this used to add every
+  // bill's raw `amountCents` to it regardless of currency — so a Rs.5,000
+  // remittance subtracted $50 from safe-to-spend. Each ROW below has always
+  // formatted with its own currency; only this total was wrong.
+  const cadBills = bills.filter((b) => b.currency === "CAD");
+  const net = cadBills.reduce(
     (sum, b) => sum + (b.isIncome ? b.amountCents : -b.amountCents),
     0
   );
   const after = safeToSpendCents + net;
+  const hasOtherCurrency = cadBills.length !== bills.length;
 
   function whenLabel(bill: UpcomingBill): string {
     if (bill.daysAway === 0) return "today";
@@ -67,7 +73,10 @@ export function UpcomingBills({
           after < 0 ? "bg-destructive text-destructive-foreground" : "bg-muted/50"
         )}
       >
-        <span className="micro-sm">Safe to spend after these</span>
+        <span className="micro-sm">
+          Safe to spend after these
+          {hasOtherCurrency && " (CAD only)"}
+        </span>
         <span className="stat text-lg">{formatCents(after)}</span>
       </div>
     </Panel>

@@ -204,7 +204,7 @@ export function RoutineFormDialog({
                   <button
                     type="button"
                     onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))}
-                    className="tap-press text-muted-foreground/50 hover:text-destructive"
+                    className="tap-press tap-target text-muted-foreground/50 hover:text-destructive"
                   >
                     <Trash2 className="size-3.5" />
                   </button>

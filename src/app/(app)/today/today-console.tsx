@@ -12,6 +12,7 @@ import { getRoutineIcon } from "@/lib/routines/icon-registry";
 import { StreakBadge } from "@/components/streak-badge";
 import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { Tag } from "@/components/ui/tag";
+import { toast } from "@/components/ui/toast";
 import {
   completeRoutineToday,
   uncompleteRoutineToday,
@@ -121,7 +122,15 @@ export function TodayConsole({
       setRoutines((prev) =>
         prev.map((r) => (r.id === routine.id ? { ...r, completedToday: null } : r))
       );
-      await uncompleteRoutineToday({ routineId: routine.id });
+      const undone = await uncompleteRoutineToday({ routineId: routine.id });
+      if (undone.error) {
+        setRoutines((prev) =>
+          prev.map((r) =>
+            r.id === routine.id ? { ...r, completedToday: routine.completedToday } : r
+          )
+        );
+        toast.error(undone.error);
+      }
       return;
     }
     const stepIds = routine.steps.map((s) => s.id);
@@ -142,7 +151,14 @@ export function TodayConsole({
           : r
       )
     );
-    await completeRoutineToday({ routineId: routine.id, stepsDone: stepIds });
+    // Rolled back on failure, matching how toggleTask above already behaves.
+    const result = await completeRoutineToday({ routineId: routine.id, stepsDone: stepIds });
+    if (result.error) {
+      setRoutines((prev) =>
+        prev.map((r) => (r.id === routine.id ? { ...r, completedToday: routine.completedToday } : r))
+      );
+      toast.error(result.error);
+    }
   }
 
   const flow = useMemo<FlowItem[]>(() => {

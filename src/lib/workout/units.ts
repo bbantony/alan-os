@@ -27,10 +27,31 @@ export function formatWeight(weightKg: number, unit: WeightUnit): string {
   return `${rounded} ${unit}`;
 }
 
-// Step size for the +/- weight steppers and the overload nudge (owner
-// preference): 2.5 lb or 1 kg, whichever matches the user's display unit.
-export function smallestIncrementKg(unit: WeightUnit): number {
-  return unit === "lbs" ? lbsToKg(2.5) : 1;
+// The default step, in the unit actually on screen: the smallest pair of
+// plates most gyms have (2.5 lb), or 1 kg on a metric bar.
+export const DEFAULT_INCREMENT: Record<WeightUnit, number> = { lbs: 2.5, kg: 1 };
+
+/**
+ * Step size for the +/- weight steppers, IN THE DISPLAYED UNIT.
+ *
+ * This exists because the kg version below was being used directly by the
+ * stepper, which works in display units — so on a lbs profile the +/- buttons
+ * subtracted `lbsToKg(2.5)` = 1.13 from a number of POUNDS, and the weight
+ * moved in visible 1.1 lb steps instead of 2.5. A kg quantity and a lbs
+ * quantity are not interchangeable; keep the two functions apart.
+ *
+ * `override` is the account's own choice from Settings → Workout, already in
+ * its display unit. Null means "use the default for this unit".
+ */
+export function incrementInDisplayUnit(unit: WeightUnit, override?: number | null): number {
+  if (typeof override === "number" && Number.isFinite(override) && override > 0) return override;
+  return DEFAULT_INCREMENT[unit];
+}
+
+// The same step expressed in kg, for anything reasoning about stored weights
+// (the progressive-overload nudge). Never hand this to the stepper.
+export function smallestIncrementKg(unit: WeightUnit, override?: number | null): number {
+  return toStoredKg(incrementInDisplayUnit(unit, override), unit);
 }
 
 // Standard barbell weight, in the round number lifters actually use for their

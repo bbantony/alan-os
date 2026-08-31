@@ -73,8 +73,20 @@ export function resolveModuleAccess(profile: PermissionProfile): ModuleAccess {
 // nothing, so `moduleForPath` returned null and `canAccessPath` waved it
 // through for every account — reopening precisely the direct-URL hole the
 // proxy guard exists to close.
+//
+// The 26 Aug 2026 audit found /plan was NOT the only one. `/timeline`,
+// `/routines` and `/assistant` all matched nothing too, so every account —
+// including a workout-only crew member — could open them by typing the URL.
+// `/assistant` was the one that mattered: it spends the owner's Gemini credit.
+// Routines are part of Tasks; the Timeline and the Assistant read across
+// whatever the account can see, so they are gated on Tasks as the broadest
+// everyday module. If a route is ever added whose name is not its module, it
+// belongs in this list on the same day.
 const ROUTE_MODULE_ALIASES: { prefix: string; module: ModuleId }[] = [
   { prefix: "/plan", module: "tasks" },
+  { prefix: "/routines", module: "tasks" },
+  { prefix: "/timeline", module: "tasks" },
+  { prefix: "/assistant", module: "tasks" },
 ];
 
 // Maps a pathname to the module it belongs to. Returns null for paths that

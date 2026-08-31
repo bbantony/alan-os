@@ -131,7 +131,7 @@ export function PushDevices({ initialDevices }: { initialDevices: DeviceRow[] })
               <button
                 type="button"
                 onClick={() => handleRemove(d.id)}
-                className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+                className="tap-press tap-target shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
                 aria-label={`Remove ${d.device_label ?? "this device"}`}
               >
                 <Trash2 className="size-4" />

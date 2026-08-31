@@ -10,6 +10,7 @@ import { todayInAppTimezone } from "@/lib/time";
 import { addMonths, parseDateString, toDateString } from "@/lib/calendar";
 import { getPlanRange } from "./actions";
 import { getPreferences } from "@/app/(app)/settings/preferences-actions";
+import { getCurrentProfile } from "@/lib/supabase/profile";
 import { PlanShell } from "./plan-shell";
 
 /**
@@ -43,6 +44,7 @@ export default async function PlanPage({
     planItems,
     gcalStatus,
     preferences,
+    profile,
   ] = await Promise.all([
     getTasks(),
     getWeeklyDoneCount(),
@@ -52,6 +54,7 @@ export default async function PlanPage({
     getPlanRange(rangeStart, rangeEnd),
     getGcalStatus(),
     getPreferences(),
+    getCurrentProfile(),
   ]);
 
   const openCount = tasks.filter((t) => !t.parent_task_id).length;
@@ -92,6 +95,7 @@ export default async function PlanPage({
         initialMonth={todayIso.slice(0, 7)}
         gcalConnected={gcalStatus.connected}
         autoFocusNew={params.new === "1"}
+        timeZone={profile?.timezone ?? undefined}
       />
     </div>
   );

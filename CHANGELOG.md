@@ -3309,3 +3309,863 @@ read about is a feature he will not use. Added: what the panel is and why it is 
 the numbers under it, a real example from the live test, the tap-to-act rule, why it says less on
 a quiet day, what Dismiss does, the 7c/month cost with the two switches that control it, and the
 fact that it can only mention modules the account has.
+
+---
+
+## 40. Full-codebase audit — no code changed
+
+**What Alan asked for.** "Look at the entire code and audit and find bugs and design issues and
+bloat. Be as comprehensive as possible." A read-only diagnostic pass over everything, not a fix
+pass. Nothing in `src/`, `supabase/` or `scripts/` was modified by this entry; the only file
+written was this one.
+
+**Scope actually covered.** All 228 TypeScript/TSX files (32,878 lines), all 34 migrations
+(2,577 lines), `scripts/run-migration.mjs`, `public/sw.js`, `public/manifest.json`,
+`package.json`, `next.config.ts`, `vercel.json` and `eslint.config.mjs`.
+
+**How it was run.** Four parallel audit subagents (money/finance, database+RLS, frontend/UI,
+workout+shopping+tasks+plan), plus a direct read in the main session of the security-critical
+core that was deliberately not delegated: `proxy.ts`, `lib/supabase/*`, `lib/crypto.ts`,
+`lib/reminders/action-token.ts`, `lib/permissions.ts`, all five API route handlers, the whole
+`lib/ai/` tree and `lib/gcal/client.ts`. Every subagent finding quoted below was re-verified
+against the actual file in the main session before being reported; seven were confirmed by
+executing the real logic and reading its output.
+
+**Result: 108 findings.** Delivered to Alan as a published artifact (filterable by severity,
+plain-English title + technical file:line on every row), not as terminal output.
+
+**The five treated as fix-first, all verified in the SQL directly:**
+
+1. `crew_push_subscriptions()` (0015:12) — `select id, user_id, endpoint, keys from
+   push_subscriptions` with NO where clause, `grant execute to authenticated`. Every logged-in
+   account can read every account's push endpoint and p256dh/auth keys. 0018 crew-scoped every
+   workout *table* policy and never revisited this function.
+2. `delete_crew_push_subscription(uuid)` (0013:10) — deletes by id with no ownership predicate,
+   granted to `authenticated`. Chained with #1 this is a full notification hijack, since
+   `savePushSubscription` upserts on `endpoint`.
+3. `check_cron_secret` (0012:43) — `secret <> (select value ...)` returns NULL when the row is
+   absent, so the `if` never fires and no exception is raised. **Fails open.** No migration ever
+   inserts `('cron_secret', ...)` — it exists only because it was typed into the live database by
+   hand. On any rebuilt/restored DB, nine cross-user definer RPCs accept any string.
+4. `seed_default_shopping_categories` / `seed_default_exercises` / `seed_default_categories`
+   (0004:42, 0008:71, 0016:126) — all SECURITY DEFINER, all take `target_user uuid`, and there is
+   **no `revoke execute` anywhere in the entire migration tree** (verified by grep), so Postgres'
+   default EXECUTE-to-PUBLIC stands. Any user can write into any other account's seed data.
+5. `public._migrations` (run-migration.mjs:22) — created with no RLS and no revoke, in the
+   PostgREST-exposed `public` schema. The one table in the app without RLS, and deleting rows
+   from it makes the next deploy replay 0022's unconditional `delete from reminders`.
+
+**Confirmed by execution (`node`, output read, not inferred):**
+
+- Parenthesised-negative CSV amounts: `"(1,234.56)"` -> `+1234.56`, `isIncome: true`. Bank
+  withdrawals written in accounting format import as **income**. Two independent copies of the
+  same parser — `settings/money/csv-import.tsx:85` and `reconcile-flow.tsx:151`.
+- `currentPeriodBounds("monthly", "2026-01-31", "2026-02-28")` -> `[2026-01-31, 2026-02-28)`.
+  `end` is exclusive, so **28 Feb falls outside its own current period** — that day's spending is
+  invisible to budgets and safe-to-spend, then reappears 1 Mar. 27 Feb and 1 Mar are both fine.
+- `projectPayoff` avalanche vs snowball on two realistic debts: **byte-identical** (57 months,
+  $875.62 interest). Freed-up minimums are never rolled forward, which is the entire definition of
+  both strategies, so neither is implemented.
+- Never-pays-off case ($10,000 @ 24%, $10/mo): returns `137349425853`, rendered by
+  `debts-view.tsx:196` as "Interest paid **$1,373,494,258.53**" beside a correct "600+ mo".
+
+**Other findings worth naming here, because they contradict a comment in the code:**
+
+- `lib/ai/tools.ts:178` hardcodes `-05:00` when the assistant creates a task with a due time.
+  Winnipeg is -06:00 from November to March. `zonedTimeToUtc` (DST-aware, two-pass) already exists
+  in the file this one imports from.
+- `lib/ai/usage.ts:91` — the monthly cap sums `ai_usage` rows **in JS** after a plain select.
+  PostgREST caps at 1000 rows, so past 1000 calls in a month the total silently stops growing and
+  the brake the file describes as "a hard stop that cannot be exceeded" fails open.
+- `lib/permissions.ts:102` — `/timeline`, `/routines` and `/assistant` match no MODULE_ID, so
+  `canAccessPath` returns true for every account. The file's own comment describes this exact hole
+  being closed for `/plan`; the same fix was never applied to the other three. The Assistant is
+  the one that matters — it spends the Gemini key.
+- `proxy.ts:62` — the module gate only runs `if (profile && ...)`, so a failed profile read falls
+  through to allowing the page. Fails open.
+- Two `ThemeProvider`s are mounted (`app/layout.tsx:102` and `app/(app)/layout.tsx:11`). React
+  flushes child effects before parent effects, so the outer one — which has no `initialTheme` —
+  runs last and writes the local default over the account's saved theme.
+- `--density-scale` is declared at globals.css:270 and set at :331-332 and **consumed by nothing**
+  (3 occurrences total, all definitions). The Spacing setting in Settings -> Appearance does
+  nothing at all.
+- No `MotionConfig` and no `useReducedMotion` anywhere in `src/` (0 hits). "Motion: Reduced" only
+  shortens CSS transitions; every Framer animation ignores it, as does the OS-level
+  `prefers-reduced-motion`.
+- `today/upcoming-bills.tsx:26` sums `amountCents` across currencies and renders it as CAD, while
+  the row above it correctly passes `bill.currency`. `lib/ai/outlook.ts:139` repeats the same sum,
+  and `OutlookFacts.bills` does not even carry a currency field, so it cannot be fixed there
+  without widening the type.
+- `lib/offline/shopping-db.ts:76` — the outbox is keyed on `crypto.randomUUID()` and read back
+  with `getAll`, which returns **key order**. Offline mutations therefore replay in effectively
+  random order; a tick can run before the add it depends on and is lost with no error.
+- `routines/actions.ts:180` — `updateRoutine` delete-and-reinserts steps on any title change,
+  minting new step UUIDs, while `routine_completions.steps_done` stores the old ones. Renaming a
+  routine wipes today's ticked steps.
+- `vercel.json` declares a daily Vercel cron for `/api/cron/reminders`, while that route's own
+  header comment states Vercel Cron is deliberately not used. One of the two is wrong.
+
+**Verified clean, and worth recording so it isn't re-audited:** every monetary column is `bigint`
+cents; every timestamp is `timestamptz` (the sole naive type, `routines.time_of_day time`, is
+correct); no float money anywhere in the schema; 2 `any` casts in the whole tree and both are in
+comments; zero TODO/FIXME/HACK markers; the journal/vinyl removal (0033/0034) left no orphaned
+type, function, index, policy or `src/` reference. Twelve exports initially flagged as dead were
+checked individually and are used inside their own files — reported as over-exported, not dead.
+
+**Not done, on purpose.** No fixes. The audit is the deliverable; the fix order is the artifact's
+first section. `PROGRESS.md` is untouched because nothing shipped.
+
+---
+
+## 41. Audit fixes, round one — the five security holes, the money maths, and the 1.1 lb stepper
+
+**What Alan asked for.** "Fix everything" (the 108 findings from entry 40), plus four things of his
+own: workouts laid out more simply, the weight increment fixed with a setting to control it, money
+able to log and categorise everything, and an assistant he can talk to that actually changes things
+in the app. He also asked whether the Gemini app on his Android phone can be connected to Alan OS.
+
+**Three of those needed a decision from him before any code was worth writing**, so they were put
+as a plain-English choice with drawn mock-ups rather than guessed at. His answers, which govern the
+work in the next entries:
+
+- **Workout** — "log-first single screen". `/workout` becomes one big Start, this week, and last
+  session; Crew and history move behind links. NOT the notes-style logging rebuild.
+- **Money** — both a single entry screen covering every transaction type AND categories filled in
+  automatically.
+- **Assistant** — everything: workouts, all of money, tasks/routines/shopping, and deleting and
+  editing as well as adding.
+
+None of those three are built yet. This entry is the fixes.
+
+### The 1.1 lb stepper — a unit mix-up, not a rounding error
+
+`smallestIncrementKg("lbs")` returns `lbsToKg(2.5)` = **1.1339 kg**, and `set-row.tsx:78` assigned
+it straight to `increment`, which is then subtracted from `shownWeight` — a value in **pounds**. A
+kg quantity used as a lb quantity. So the +/- buttons moved the weight by 1.1 lb instead of 2.5.
+
+- `lib/workout/units.ts` — added `incrementInDisplayUnit(unit, override)` and `DEFAULT_INCREMENT`.
+  `smallestIncrementKg` now derives from it and keeps its kg meaning for the overload nudge, with
+  a comment saying explicitly that the two must not be swapped.
+- `preferences.ts` — new `weightIncrement: number | null`, stored **in the display unit** (null =
+  2.5 lb / 1 kg). Deliberately not stored in kg: storing it converted is what caused the bug.
+  Clamped 0.1–50 and rounded to 2dp rather than going through `num`, which rounds to integers and
+  would have destroyed 2.5.
+- Settings → Workout: preset chips per unit (lbs 1/2.5/5/10, kg 0.5/1/1.25/2.5/5) plus Custom,
+  with a live "Now moving in steps of X" line and a toast confirming what the buttons will do,
+  since the change is not visible from that screen.
+- Threaded page → form → panel → row, and into `suggestNextWeight` so the progressive-overload
+  nudge uses the same step.
+
+### Migration 0035 — the five security holes
+
+`supabase/migrations/0035_close_audit_security_holes.sql`, plus a fix in `run-migration.mjs`.
+
+1. `crew_push_subscriptions()` now filters `user_id = auth.uid() or is_admin() or same_crew()` —
+   the same predicate the workout tables use, so the two cannot drift apart again.
+2. `delete_crew_push_subscription()` gained the same ownership predicate.
+3. `check_cron_secret` rewritten to `not exists (...)`. `secret <> (select ...)` is NULL when the
+   row is absent and `if NULL` does not fire, so it **failed open**. Also seeds a random
+   `cron_secret` row if none exists — no migration ever created one.
+4. `revoke execute ... from public, anon, authenticated` on all three `seed_default_*(target_user)`
+   functions. There was no `revoke` anywhere in 0001–0034, so Postgres' default EXECUTE-to-PUBLIC
+   stood on every definer function.
+5. `_migrations` gets RLS + revoke, in the migration AND in the script that creates it, so a fresh
+   clone is never briefly exposed.
+
+**Also in 0035:** `routine_completions` unique constraint rebuilt as `(user_id, routine_id,
+completed_date)` — both old constraints are dropped by pg_constraint LOOKUP, not by guessed name,
+because `drop constraint if exists` with a wrong name is a silent no-op that would leave the bug.
+`push_subscriptions.endpoint` made unique per user the same way. `ai_usage` write policies dropped
+in favour of `record_ai_usage()`, with `ai_usage_month_total()` and `ai_usage_month_by_feature()`
+so the spend cap is summed in SQL. `adjust_account_balance()` added (security INVOKER, so RLS still
+scopes it) to replace six read-modify-write balance updates. Missing indexes on `tasks(user_id,
+due_at)`, `tasks(user_id, completed_at)`, `tasks(parent_task_id)`, `workout_templates(user_id)`,
+`routine_completions(user_id, completed_date)`; duplicate `recurring_transactions_notify_idx`
+dropped; unique index on `reconciliations(user_id, account_id, statement_date)`; NOT VALID
+positivity checks on `budgets`, `savings_goals`, `transactions`.
+
+### Money maths, all four re-verified by executing the fixed code
+
+- **CSV parenthesised negatives.** New `parseCsvAmount()` in `lib/finance/csv-parser.ts` handles
+  accounting brackets, trailing minus, leading minus. Both copies of the old inline parser (the
+  importer and the reconciler) now call it. Verified: `(1,234.56)` → `{cents: 123456, isIncome:
+  false}`; `$1,234.56` → income; `$0.00` and `abc` → null.
+- **Budget period gap.** `period.ts` now compares today against the anchor **clamped to the current
+  month**. Verified across 27 Feb / 28 Feb / 1 Mar / 31 Mar with a 31st anchor — all four now fall
+  inside a period; 28 Feb previously fell inside none.
+- **Debt payoff.** Freed-up minimums now roll forward. Verified: the original two-debt case dropped
+  from 57 months/$875.62 to 46 months/$811.64. On a deliberately opposed pair (smallest balance =
+  lowest rate) with $200/mo extra, avalanche and snowball now diverge correctly — 21 mo/$1,229.47
+  vs 22 mo/$1,331.39, attacking different debts first. They are still identical at $0 extra, which
+  is correct: with no discretionary money there is no choice to make until something is freed.
+- **Never-pays-off.** New `neverPaysOff` flag; `debts-view.tsx` renders an explanation instead of
+  the fabricated `$1,373,494,258.53`.
+
+### Everything else fixed in this pass
+
+- **Currency mixing** — `upcoming-bills.tsx` nets CAD bills only and labels the total "(CAD only)"
+  when others are present. `OutlookFacts.bills` gained `currency` (it had no way to be correct
+  before) and `outlook.ts` filters the same way; `today/page.tsx` passes it through.
+- **Receipts** — `approveReceipt` now CLAIMS the receipt with a conditional update
+  (`.eq("status","pending_review")`) so a second approval cannot double-charge, releases the claim
+  on every failure path, and uses `account.currency` instead of a hardcoded `"CAD"` (the ~60x INR
+  bug that `csv-actions.ts` had already been fixed for). The review dialog defaults the date with
+  `todayInAppTimezone()` instead of the UTC date, which was already tomorrow after 6pm.
+- **Recurring** — a failed insert now RESTORES `next_date`/`last_posted_date` instead of `continue`,
+  which used to make that month's rent vanish permanently. `getUpcomingBills` filters on `end_date`.
+  Note: the `.or()` initially landed on the posting query by mistake and was moved — filtering
+  posting on `end_date` would have dropped a series' final legitimate occurrences.
+- **Access** — `/routines`, `/timeline` and `/assistant` added to `ROUTE_MODULE_ALIASES`; they
+  matched no module id, so `canAccessPath` returned true for every account. `proxy.ts` now fails
+  CLOSED when the profile cannot be read.
+- **AI** — key moved from `?key=` to the `x-goog-api-key` header; 30s `AbortSignal.timeout` added
+  (there was none, and the Today page awaits one of these during render); the silent `catch {}` now
+  logs. `tools.ts` `create_task` uses `zonedTimeToUtc` instead of a hardcoded `-05:00` (wrong
+  Nov–Mar); `list_tasks` overdue uses Winnipeg midnight; `log_expense` returns an error listing the
+  available accounts instead of silently falling back to `accountList[0]`, and moves the balance
+  atomically.
+- **Routines** — steps are updated in place by `sort_order` instead of delete-and-reinsert, which
+  minted new UUIDs and wiped `steps_done` on a rename. `revalidatePath("/tasks")` → `"/plan"` in
+  all five places (`/tasks` is a 13-line redirect stub).
+- **Reconcile** — statement rows dated after the statement date are dropped, matching what
+  `getReconcileData` already does for app transactions.
+
+**Checks:** `npm run lint` and `npm run build` pass. There is still no `npm test` script — CLAUDE.md's
+session protocol tells test-runner to run one and it does not exist. That is itself an open finding.
+
+**MUST BE RUN BEFORE THIS DEPLOYS.** `SUPABASE_DB_URL="postgresql://..." node
+scripts/run-migration.mjs`. Until 0035 is applied, `getUsageSummary` calls an RPC that does not
+exist yet — it degrades to reading $0 spent, so the AI keeps working but the monthly cap is not
+enforced. Everything else fails safe.
+
+### 41b. Review round — unit-reviewer FAILED the above, and what changed because of it
+
+`unit-reviewer` returned **FAIL on 5 items**. Three of its citations were stale (it read the
+migration before the unique indexes were made conditional, and `csv-parser.ts` before the
+European-comma hardening) — those were re-verified as already fixed, not argued away. The rest
+were real, and this is what they cost:
+
+**Item 13, and it is the most important one in this whole session.** Migration 0035 adds real
+constraints, which turns "the database refuses" from an impossible state into an ORDINARY outcome
+of a second tap or a typo — and several actions returned `error.message` straight to the screen.
+A second reconcile submit would have shown Alan:
+
+    duplicate key value violates unique constraint "reconciliations_user_account_date_idx"
+
+That is a direct breach of this file's first rule. A constraint that protects the data and then
+explains itself in Postgres' voice has traded one bug for another. Fixed with a new
+`src/lib/db-errors.ts` (`friendlyDbError`), mapping constraint names and SQLSTATE classes to
+sentences, and **33 raw-message sites across 14 action files** converted to use it. Deliberately
+NOT converted: `settings/actions.ts` (supabase.auth messages like "Password should be at least 6
+characters" are genuinely readable), `settings/admin/actions.ts` (the RPCs already raise
+hand-written sentences), and `settings/data/data-actions.ts` (a diagnostic payload, never rendered
+as prose). Unrecognised errors fall back to a plain sentence rather than the raw text.
+
+**Item 8 — the meter could fail silently.** `recordUsage` ignored the result of `record_ai_usage`.
+Because `ai_usage` is now read-only to the client, a failure of that one function means NOTHING is
+metered, the month reads $0, and the ceiling can never be reached — the same failure mode as the
+1000-row bug it replaced, and exactly what happens if this code deploys before 0035. Both the
+error branch and the catch now log loudly, naming the migration.
+
+**Item 9 — silent dependencies on the migration.** `completeRoutineToday` upserts on a constraint
+that does not exist until 0035 and ignored the error, so the tick stayed on screen with nothing
+saved. It now returns `{ error }`, `uncompleteRoutineToday` returns the recomputed streak instead
+of the caller guessing "minus one" (wrong across a forgiven miss), and all three call sites
+(`routine-section.tsx` twice, `today-console.tsx`) roll the optimistic update back and toast.
+Every `adjust_account_balance` call site now checks its error too.
+*(Corrected in 41e: three of the eight did not, and were fixed there.)*
+
+**The reviewer also found a real bug I introduced.** `receipt-actions.ts` returned
+`Number(updatedBalance)`, and `Number(null)` is `0` — so a failed balance RPC would have displayed
+that account at **$0.00** on the Money screen. Now returns `undefined` and the screen keeps what it
+has. Separately, `approveReceipt`'s claim was released on every *returned* error but not on a
+*throw* — a dropped connection mid-request, which is the exact scenario the claim exists for, would
+have stranded the receipt as "approved" with no transactions and no way back to it. Wrapped in
+try/finally.
+
+**And a correct catch on the migration itself:** `gen_random_bytes` is pgcrypto, and would have
+been the only pgcrypto call in 35 migrations — an unproven dependency that would have aborted the
+whole transaction and taken the five security fixes with it. Swapped for two concatenated
+`gen_random_uuid()`s, which is core Postgres and already used by every table in the app.
+
+**Two overclaims corrected rather than defended.** 0035's comment said `adjust_account_balance`
+"replaces six read-modify-write balance updates" while five remained — including the "Add it"
+button in the reconcile flow, the most double-tappable control in the module. All five are now
+converted, so the comment is true. And entry 41's line "everything else fails safe" was wrong on
+two counts (metering and routine completion), both named above.
+
+**Also fixed from the reviewer's non-blocking notes:** statement rows dated after the statement
+date were dropped in silence — they now show a count, mirroring the message the app side already
+prints. Switching lbs↔kg used to silently reinterpret a saved `5` as 5 kg (~11 lb); it now resets
+to the new unit's default and says so. `deleteTransaction` returns `{ error }` instead of void.
+
+**Knowingly NOT fixed, and why.** `approveReceipt` still writes the human-corrected `line_items`,
+`merchant_guess` and `txn_date_guess` over the receipt row, destroying what the AI originally read
+off the photo (reviewer item 3). This is pre-existing, already recorded in `PROGRESS.md`, and
+fixing it properly needs a schema change — a separate column for the original extraction — which
+is a unit of its own, not a line to slip into a fix pass. It is a real violation of "imported
+source data is never rewritten in place" and it stays open. Two other cautions accepted as
+cautions: reordering a routine's steps transfers today's ticks positionally (lasts one day, and is
+quieter than the old behaviour of losing them outright), and `parseCsvAmount` now refuses
+comma-decimal formats rather than reading them.
+
+### 41c. `npm test` now exists
+
+Audit finding: CLAUDE.md's session protocol has told `test-runner` to run `npm test` since 22 Aug,
+and there was no such script and no tests — so that line of the protocol had been quietly doing
+nothing for four days, and every "ALL CHECKS PASS" in that window covered lint and build only.
+
+- `package.json` gains `"test": "node --experimental-strip-types --test \"tests/*.test.mts\""`.
+  **No test framework and no new dependency** — node's own runner and its native TypeScript
+  stripping. That matters here: the project is on free tiers with AI usage as the only paid line,
+  and a devDependency tree for twenty assertions is exactly the bloat the audit was complaining
+  about. (The bare `--test tests/` form fails on this Node with MODULE_NOT_FOUND; the glob form is
+  required, hence the quoted pattern.)
+- `tests/money-and-units.test.mts` — 20 tests, all passing.
+
+**Scope is deliberate and is written into CLAUDE.md so it doesn't drift.** The tests cover the
+PURE money, date and unit helpers: `parseCsvAmount`, `normalizeCsvDate`, `currentPeriodBounds`,
+`daysInMonth`, `projectPayoff`, `incrementInDisplayUnit`, `smallestIncrementKg`, `friendlyDbError`.
+Those are the functions where a wrong answer is silent, expensive and needs no database to
+reproduce. Anything requiring Supabase stays with the `qa` agent's end-to-end pass rather than
+being mocked into a test that proves nothing.
+
+**Every case is a bug that was genuinely in this codebase**, proved by running the code before it
+was fixed — the bracketed withdrawal read as income, 28 February belonging to no budget period,
+avalanche and snowball returning identical plans, the $1.37bn interest figure, the 1.1 lb stepper,
+and a constraint violation reaching the screen as Postgres output. This is a regression net for
+those specific mistakes, not an attempt at coverage. Two guard tests were added beyond the fixed
+bugs: that avalanche never costs more interest than snowball at any extra-payment level, and that
+`friendlyDbError` never leaks raw text for an error it does not recognise.
+
+CLAUDE.md's "Maintaining this file" section is dated and updated accordingly, including the
+instruction to add to this file whenever a maths or parsing bug is fixed, and NOT to chase coverage
+of UI components.
+
+### 41d. Receipt extraction is no longer destroyed on approval (migration 0036)
+
+This was reviewer item 3, and the reason it is fixed here rather than deferred a third time: it is
+recorded in `PROGRESS.md` as **"ongoing data loss, not a latent risk"** — every receipt approved
+while it stayed open permanently lost what the model actually read — and the review failed the unit
+on it. "Out of scope" was the right call for a deletion pass; it is not the right call for a pass
+whose whole purpose is fixing what the audit found.
+
+- `supabase/migrations/0036_preserve_receipt_extraction.sql` adds `receipts.original_extraction
+  jsonb`, with a `comment on column` stating that it is written once and never updated, so the
+  invariant is visible in the schema and not only in a code comment.
+- `scanReceipt` now writes it at insert time, frozen alongside the working columns.
+- `approveReceipt` backfills it for receipts scanned before 0036 — at the moment of the claim,
+  BEFORE the corrections are written, those columns still hold the model's own output, so this is
+  a faithful snapshot rather than a guess.
+- The migration backfills `status = 'pending_review'` rows for the same reason. Approved rows are
+  deliberately left null: their columns already hold Alan's corrections, and copying those in would
+  be worse than an empty field because it would look as though the model had been right all along.
+
+**Not recoverable, and said plainly rather than quietly:** receipts approved before this landed had
+their extraction overwritten and it is gone. `PROGRESS.md` item 4 is marked fixed with that caveat,
+and `MANUAL.md` has a short section telling Alan in his own terms — the transactions are correct,
+only the record of what the scan read is missing, and only for receipts approved before 26 Aug 2026.
+
+### 41e. Second review round — and one thing the reviewer got wrong
+
+`unit-reviewer` failed the unit again, on 4 items. It withdrew three of its round-one citations
+as stale after re-reading from disk (the conditional indexes, the pgcrypto swap, the parser
+hardening) — those were genuinely already fixed.
+
+**One of its round-two findings is wrong, and the record should say so.** It reports item 3
+(receipt extraction) as still deferred and calls the new MANUAL.md section false. It isn't: the
+feature was built in 41d, AFTER the message that briefed the reviewer, so it reviewed against my
+own out-of-date summary rather than the code. Verified: `original_extraction` is written at insert
+(`receipt-actions.ts:129`) and backfilled at claim time for pre-0036 receipts (`:252`), and
+migration 0036 exists. The line it flags (`:381`) overwrites only the WORKING columns, which is the
+design — the original lives in its own column. MANUAL.md is accurate. No change made.
+
+**Everything else it found was real, and several were regressions from 41b.**
+
+- **The guard that couldn't be heard.** 0035's two conditional indexes use `raise warning` when they
+  skip, and `run-migration.mjs` attached no `notice` handler — so node-pg discarded them and the
+  script would have printed `Applying 0035... ok` while the indexes were silently not created. A
+  guarded migration whose guard is invisible is not a guard. Handler added, plus an explicit
+  end-of-run message, plus the `delete from public._migrations where filename = ...` line needed to
+  re-run a migration once the data is tidied — the file told the operator to "re-run this
+  migration" while the script skips anything already applied, so that instruction could not work.
+- **A contradiction I created in 41b.** `approveReceipt` returned an error when only the balance
+  RPC failed — but by then the transactions were written and the receipt approved, so the dialog
+  said "Something went wrong saving this receipt", stayed open, and a second tap answered "That
+  receipt has already been approved". Two contradictory messages and a dead end, across the whole
+  pre-migration window. It now returns a `warning` instead: saved, but check the balance.
+- **Three of eight balance calls were not checked**, contradicting 41b's own claim (now corrected
+  in place). The worst was `reconcile-actions.ts`, which fell back to an optimistic local sum and
+  then printed "Your account balance now matches the bank" — the exact lie the adjustment-insert
+  fix in 41 was made for.
+- **The assistant was reading Postgres aloud.** `lib/ai/tools.ts` was not in 41b's conversion list
+  and had three raw `error.message` returns — including the one the new `transactions_amount_positive`
+  check will hit. All three now go through `friendlyDbError`. `log_expense` also confirmed "logged"
+  when the balance had not moved; it now returns a warning alongside the result.
+- **`deleteTransaction` gained an error in 41 and its only caller still discarded it**, toasting
+  "Transaction deleted" regardless — so from Alan's side the bug 41 claimed to fix was still there.
+- **Two routine call sites still ignored their errors** (`today-console.tsx` untick,
+  `routine-section.tsx` checklist-with-nothing-ticked).
+- **`money.ts`'s "only two places touch a float" comment** was made false by `parseCsvAmount`. The
+  comment now names all three and says why the parser rounds itself rather than calling
+  `dollarsToCents` — it has to decide whether the text is a number at all.
+
+**Still open and going to Alan rather than fixed:** the CSV importer silently drops rows the
+stricter parser refuses, where the reconciler got a "rows skipped" banner this round. And
+`getUsageSummary` discards its own RPC error and reads $0, so the AI cap fails open — loudly logged
+in `recordUsage`, but to a server log Alan never sees.
+
+**On the two-strikes rule.** CLAUDE.md says not to attempt a third fix when the reviewer fails the
+same item twice. Items 9 and 13 have now failed twice, so that line is reached. The judgement made
+here: each round surfaced DIFFERENT sites rather than the same fix failing again, and several were
+regressions introduced by the previous round — leaving those would have shipped known-broken code I
+had just written. So round three was applied to those, and the two genuinely pre-existing items
+above were stopped on and handed to Alan, which is what the rule is for.
+
+---
+
+## 42. Alan's two decisions, and Workout rebuilt log-first
+
+Two open questions from entry 41e were put to him as plain choices. His answers, verbatim:
+
+1. **Ambiguous bank-file rows** — *"import what it can, show/reconcile only that while the rest it
+   prompts me to confirm. reconciliation is the whole purpose of this in the first place"*
+2. **AI meter unreadable** — *"carry on. just keep going i just want everything done"*
+
+He is right about (1) in a way worth writing down: a row silently missing from a reconcile leaves a
+difference with no explanation, and explaining the difference is the entire job of that screen.
+Refusing rows was the safe choice for an importer and the WRONG choice for a reconciler.
+
+### The ambiguous-amount flow
+
+`lib/finance/csv-parser.ts` gains `readCsvAmount()`, returning a three-way result instead of
+`ParsedAmount | null`:
+
+- `{ kind: "ok" }` — one reading only.
+- `{ kind: "ambiguous", readings[] }` — readable, but more than one way. Each reading carries a
+  `label` formatted for a button (`"1,234.56"`), not for a developer.
+- `{ kind: "unreadable" }` — not a number at all.
+
+`parseCsvAmount()` stays as the strict wrapper, so nothing that only wants certain answers changed.
+Both ambiguous families are handled: comma-after-last-dot (`1234,56` → 1,234.56 or 123,456.00) and
+multi-dot (`1.234.567`). Direction (in/out) is preserved through the ambiguity, and a debit/credit
+column still forces direction regardless of what the parser reads.
+
+**Two confirmation UIs, deliberately different in shape:**
+
+- `settings/money/csv-import.tsx` gains a `confirm` step between mapping and review. It holds the
+  certain rows aside, lists the ambiguous ones with their readings as buttons plus "Skip this row",
+  and the Continue button is disabled until every one is decided — it reads
+  `"3 still to confirm"` and then `"Continue with 47 rows"`. Unreadable rows are COUNTED and
+  reported rather than vanishing.
+- `money/reconcile/reconcile-flow.tsx` does it inline in the matching step, as a "Need a decision"
+  panel: picking a reading pushes the line straight into `bankRows` and it joins the match
+  immediately, so the difference updates as you decide. No extra step, because you are already
+  mid-task. "Leave it out" drops just that line.
+
+Tests extended to 24: an ambiguous amount offers exactly two readings with money-shaped labels,
+keeps its direction, unambiguous amounts never come back as a question, and junk is `unreadable`
+rather than `ambiguous`.
+
+### The AI meter — carry on, but not blind
+
+`UsageSummary` gains `meterUnavailable`. `getUsageSummary` now captures the RPC error it used to
+discard, and `overBudget` is forced false when the meter can't be read — so a database blip cannot
+switch the AI off, which is what he asked for. What it must NOT do is carry on silently while a
+screen shows a reassuring number, so Settings → AI & cost renders a panel saying the figure is not
+the real number, the AI is still working, the ceiling is not being enforced, and the likely cause is
+an unapplied migration. The two stats show `—` and "not being enforced right now" rather than `$0.00`
+and "hard stop".
+
+### Workout, log-first
+
+His earlier choice, from three drawn options: *"one big Start, this week, last session — everything
+else one tap away, not in the way."*
+
+- New `workout/workout-home.tsx`: a full-height Start (or **Resume**, with an exercise count and a
+  Discard control when a draft exists), the seven-day strip, ONE last session (tappable to repeat),
+  and two plain rows — History & records, Crew.
+- `workout-shell.tsx` goes from two tabs to three views (`home` / `history` / `crew`) with a Back
+  button, so the other two are places you go rather than tabs competing for the first glance.
+- **Nothing was deleted.** The whole previous You tab — records, templates, next-up, recent — is
+  `YouView` unchanged, now reached through History. `CrewView` is untouched.
+- The screen states its own rule in a comment: if something doesn't help you decide to start, or
+  tell you what you did last, it belongs behind a link. This screen has now been redesigned twice;
+  that line is there to stop it filling up a third time.
+
+One shape bug caught before it shipped: `WorkoutDraft` has `payload.exercises?`, not `.exercises`,
+and the count is optional — a draft can exist with a type chosen and nothing logged.
+
+---
+
+## 43. The assistant can change things now — and you can talk to it
+
+Alan: *"fucking ai doesnt work the way i want it to work. I want to talk/write to it directly and
+have it to make changes for me in the app like adding records and such directly. Can i connect this
+with gemini of my android phone?"*
+
+**The Gemini question, answered plainly first.** No — Google's Gemini app reaches Google's own
+services and a handful of commercially negotiated partners; there is no route for a personal PWA to
+register with it, and nothing buildable here changes that. But the premise was slightly off: the
+assistant already IS Gemini, calling the same API with his key. The gap was never the model. It was
+that the assistant could only do four things, and none of them were the things he wanted.
+
+Asked what it should be allowed to touch, he picked every option: workouts, all of money,
+tasks/routines/shopping, and deleting and editing as well as adding.
+
+### Seven new tools (13 → 20)
+
+`update_task` (rename / reschedule / move / delete), `complete_routine`, `manage_shopping_item`
+(check off / uncheck / remove), `log_workout`, `manage_budget`, `manage_goal` (create / add money),
+`update_transaction` (recategorise / fix amount / delete).
+
+**Consolidated on purpose.** Renaming, rescheduling, moving and deleting a task are ONE tool with
+an `action`, not four. The schema is resent on every turn of the loop, so each tool is a permanent
+tax on every question — and cost is the thing Alan was most worried about when AI went in. The
+figure in `usage.ts` was measured against thirteen tools and is now flagged as an underestimate
+needing re-measurement, rather than left standing as though nothing changed.
+
+### `matchOneStrictly` — the new rule that matters
+
+`matchByName` is deliberately loose so "the visa" finds "Visa Infinite". That is right for reading
+and for adding, and **wrong for destroying**: it returns a best guess where there was no clear
+winner, and the model cannot tell the difference between a confident match and a coin flip.
+
+Every destructive path now resolves its target through `matchOneStrictly`, which returns exactly one
+match or an error carrying the candidates. So "delete the visa one" with two possible meanings comes
+back as a question, never as a deletion. The system prompt reinforces it: say what you are about to
+remove and wait, never delete and then report.
+
+### Correctness carried into the new tools rather than re-learned
+
+- `update_task`'s reschedule uses `zonedTimeToUtc`, not a hardcoded offset — the same bug fixed in
+  `create_task` in entry 41, which would otherwise have been reintroduced one function later.
+- `update_transaction`'s delete and fix-amount read the direction from the CATEGORY, not from
+  anything passed in, and move the balance through `adjust_account_balance`. Fix-amount moves by the
+  DIFFERENCE, not the new total.
+- `log_workout` takes weights in the person's own display unit and converts once, here, where the
+  unit is actually known — the model is told explicitly not to convert. It matches against the
+  existing exercise library before creating anything, so "bench" and "Bench Press" don't become two
+  exercises. If every exercise fails it deletes the workout row rather than leaving an empty session.
+- `manage_budget` upserts on `(user_id, category_id)` because that constraint exists — asking for a
+  budget that already exists means change it, not fail.
+- Every error goes through `friendlyDbError`.
+
+### Prompt injection, now that it can write
+
+The system prompt gained a section naming the actual risk: some tool results are text from outside
+Alan's control — merchant names off bank statements, item names read off photographed receipts —
+and it is DATA, never instructions. This mattered less when the assistant could only add a task. It
+matters now.
+
+### Talking to it
+
+New `src/lib/speech.ts`, wrapping the browser's own speech recognition. No dependency, no audio
+routed through this app, and it is the honest answer to "connect it with Gemini on my phone" — the
+dictation he actually wanted, in the assistant that is already here.
+
+The mic button only renders where the API exists (Android Chrome yes, iOS Safari no), so it never
+appears and then fails. Support is checked in an effect rather than at render, because touching
+`window` during render would be a hydration mismatch on the composer. Interim results stream into
+the box as he speaks, `continuous` is on so the pauses in "bench press, 135 for 8, three sets" don't
+end the session early, speech appends to whatever was already typed, and sending stops the mic.
+A blocked microphone says so in plain English instead of failing silently.
+
+The opener suggestions were reweighted from questions to instructions, because a list of four
+questions taught exactly the wrong lesson about what it is for.
+
+`MANUAL.md` has a table of real sentences and what each one does, the two safety rules, and a note
+that more capability means slightly more cost per question and where to see it.
+
+---
+
+## 44. Categories that fill themselves in
+
+Alan asked for two things from Money: one screen that logs every kind of transaction, and
+categories that fill themselves in. This is the second; the unified entry screen is still to come.
+
+**Deliberately NOT an AI call.** Receipt scanning and CSV import pay for a model because a human
+genuinely cannot do those by hand. Typing "Superstore" into a form is not that, and a model call
+per keystroke would be the single most expensive thing in the app. New `lib/finance/categorise.ts`
+guesses in three steps and stops rather than guessing badly:
+
+1. **What you did before.** Exact merchant match, most-used category first.
+2. **A partial match**, so "superstore" finds a stored "Real Canadian Superstore #4021" while it is
+   still being typed. Four characters minimum, so a two-letter prefix cannot sweep up the history.
+3. **A keyword table** for merchants with no history — weighted to what a Winnipeg statement
+   actually looks like. Resolved against the account's OWN categories, so a keyword naming a
+   category that was renamed or deleted matches nothing instead of resurrecting it.
+4. Otherwise null. A blank category costs one tap; a wrong one costs a wrong budget.
+
+**`getRecentMerchants` rewritten from "most recent" to "most used".** The old version read 50
+transactions and kept the FIRST category it saw per merchant — so one mis-categorised coffee taught
+the form the wrong answer permanently, and the most recent entry is precisely the one most likely to
+be a mistake not yet corrected. Now 400 transactions, grouped by (merchant, category) with the count
+kept, so eleven Groceries beats one Takeout. The display spelling still comes from the most recent
+use, so it offers "Superstore" rather than an older "SUPERSTORE #4021".
+
+**In the form**, the category fills in as the merchant is typed — but only when the person has not
+chosen one themselves, or when the previous value came from this same guesser. A category you
+tapped is never quietly replaced. The label says WHY ("you've used this 11 times", or "change it if
+that's wrong" for a keyword hit), because a category that appears on its own with no explanation
+reads as a bug the first time it happens. The explanation disappears the moment you choose your
+own — at that point it is not the app's decision to explain.
+
+**Nine tests added (24 -> 33)**, including the two that matter most: most-used beats most-recent,
+and an expense guess can never return an income category or the reverse.
+
+**One bug caught in my own work:** the tally key was built with a literal NUL byte as the separator,
+which turned `money/actions.ts` into a binary file as far as git and grep were concerned. Replaced
+with `::`. There is no reason to smuggle a control character into source.
+
+---
+
+## 45. One screen for every kind of transaction — transfers
+
+The other half of Alan's money answer: "one fast screen for every kind". Four of the five already
+existed (spending, income, remittance, repeating). The missing one was a plain transfer — paying
+the credit card, moving cash to savings, paying yourself back.
+
+### Why it needed a column, not a category called "Transfer"
+
+A transfer is TWO transactions and neither of them is spending. Money left chequing and arrived on
+the card; nothing was consumed. Filed under an ordinary category they inflate every budget, every
+monthly total, every report and safe-to-spend — by twice the amount, once per leg. Matching on a
+category *named* "Transfer" would work until the day it is renamed, which is precisely the
+fragility the audit already flagged in the remittance path (`.eq("name", "Remittance")`).
+
+`0037_transfers.sql` adds `transactions.transfer_group_id uuid`, null on every ordinary row, and
+the same value on both legs of a transfer. A `comment on column` states the invariant in the schema
+rather than only in a code comment. Partial index, since almost every row is null.
+
+**`log_transfer()` does it in ONE statement** — both legs and both balance moves — because a
+transfer that exists on only one side is worse than one that doesn't exist. It is `security
+invoker`, so RLS is still what scopes it (a foreign account id returns null, which the function
+treats as "not yours"). It refuses same-account transfers, non-positive amounts, and
+cross-currency: that last one needs a rate and a decision about which side is authoritative, and
+remittance already exists for that job — refusing beats inventing a rate. It mirrors the
+credit-card sign rule from `lib/finance/balance.ts`, with a comment saying so, since a card is a
+debt and receiving money onto it moves the balance the opposite way.
+
+**Six report queries now exclude transfers**: budget spend and monthly-by-category, monthly trend
+and top merchants in `money/actions.ts`, and the budget/spending pair in `lib/ai/tools.ts` so the
+assistant's answers agree with the screens.
+
+### The screen
+
+The kind selector — **Spent / Received / Moved** — sits on the FIRST step next to the amount, not
+the second, because it changes what the second step asks for: a transfer needs two accounts and no
+category, and discovering that after filling in a merchant would be the wrong order. Moved is
+disabled with fewer than two accounts. Changing kind clears the category, since one chosen for a
+purchase means nothing on a transfer and an expense category is wrong on income. Category and
+merchant hide for a transfer; a destination account appears, with a line saying plainly that this
+won't count against any budget.
+
+**One bug caught before it shipped:** `logTransfer` ordered categories by `sort_order`, which
+`categories` does not have — only `shopping_categories` does. Ordered by name, matching
+`getCategories`.
+
+---
+
+## 46. The Timeline's day boundary
+
+Audit findings: the Timeline grouped completed tasks by their UTC date, and rendered times with no
+timezone at all. Winnipeg is 5-6 hours behind UTC, so both break in the evening — which is when the
+app is actually used.
+
+- `lib/ledger.ts` — `dayStart()` returned `${date}T00:00:00.000Z`, which is **6pm the previous
+  evening** in Winnipeg. It now goes through `zonedTimeToUtc`, with a matching
+  `dayEndExclusive()` so the task query uses a real local day rather than
+  `gte(UTC midnight)` / `lte(T23:59:59.999Z)`.
+- New `zonedDayOf()` replaces four `.slice(0, 10)` calls. Three of those were the
+  `created_at.slice(0,10) === txn_date` "was this logged on the day it's dated?" test, where BOTH
+  sides have to be Winnipeg days or an evening entry compares as tomorrow and gets pinned to
+  midnight for no reason.
+- `timeline-view.tsx`'s `formatTime` had no `timeZone`, so it rendered in the device's zone — and
+  because that component server-renders first, the server (UTC) and the phone (Winnipeg) produced
+  different text: a hydration mismatch on every timed row, on top of being the wrong time.
+
+**A trap this fix set, and defused.** `formatTime` detected "this row only knows a date" by checking
+whether `at` ended in `"T00:00:00.000Z"`. That worked only while day-starts were UTC midnight —
+after this change a date-only row is `T05:00:00.000Z` or `T06:00:00.000Z`, the sniff fails, and the
+Timeline would have started confidently displaying "7:00 PM" for rows that never had a time. So
+`LedgerEvent` gained an explicit `timeKnown: boolean`, set at all six push sites, and the string
+sniff is gone. Encoding a fact in the shape of a string is how a fix in one file breaks another.
+
+Also merged a duplicate `@/lib/time` import that this change introduced in timeline-view.tsx.
+
+---
+
+## 47. Two settings that did nothing, and 33 lines of CSS that did nothing
+
+Three audit findings, all of the same shape: something present, visible and tappable that had no
+effect whatsoever.
+
+### "Motion: Reduced" now reduces motion
+
+The option's own description promised "page transitions, **list animations**, everything". Behind it
+was a single CSS block shortening `transition-duration` and `animation-duration`. Every animation in
+this app is Framer Motion, which drives inline styles frame by frame and ignores CSS duration
+entirely — so every list, panel and page transition ran at full length regardless of the setting.
+The phone's own accessibility setting was ignored too: there was no `prefers-reduced-motion`
+handling anywhere in `src/`, and no `MotionConfig` or `useReducedMotion` (0 hits).
+
+`ThemeProvider` now wraps its children in `<MotionConfig reducedMotion={...}>` — `"always"` when the
+setting says reduced, `"user"` otherwise, which is what makes the OS setting work for the first
+time.
+
+### "Spacing" now changes spacing
+
+`--density-scale` was declared in three places and read by none. Compact and Comfortable both saved
+to the account and changed the screen in no way at all.
+
+Tailwind v4 derives its ENTIRE spacing scale from one variable — `p-3` is
+`calc(var(--spacing) * 3)` — so pointing `--spacing` at the density token in the `@theme` block
+makes the setting real everywhere in one line, rather than hand-scaling padding across sixty
+components.
+
+**Compact eased from 0.8 to 0.875**, deliberately. The scale drives control SIZES as well as
+padding, so 0.8 would take a 36px control to 28.8px — and undersized tap targets are already a
+separate finding. A denser screen must not become a harder one to hit.
+
+### The dead structural CSS
+
+`.panel`, `.panel-raised`, `.panel-invert` (plus its two descendant rules), `.hair-t`/`.hair-b`,
+`.rule-t/b/l/r` and `.grid-field` — nine classes, **zero references** across every `.tsx` in the app.
+They described the design language accurately but were superseded by the `Panel` component and its
+`tone` prop. Removed with a comment saying where the language actually lives now, because deleting
+the description of a system without saying where the system went is how the next person reinvents it.
+Verified `hatch`, `tap-press`, `press-hard`, `micro`, `micro-sm`, `display-sm`, `stat` and `tabular`
+are all still defined and in use before touching the file.
+
+---
+
+## 48. Tap targets
+
+The audit counted 19 icon-only controls with no padding. A sweep of every `.tsx` found **49** — a
+bare 16px icon is a ~16px target on a phone, and most of these are delete buttons sitting a few
+pixels from another control.
+
+Two classes rather than one, because the controls are not all the same shape:
+
+- **`.tap-target`** — padding plus a matching negative margin. The hit area grows, the layout
+  footprint does not, so nothing moves on screen. Applied to 34 bare icon buttons.
+- **`.tap-reach`** — an invisible `::after`, painted never, hit-tested always. For the eight bordered
+  28px square buttons, where padding would make the `hover:bg-foreground` fill spill past the
+  visible border and read as a rendering bug. Applied to those 8, plus the emoji reaction button
+  the automated sweep missed because it has no icon element to match on.
+
+**Both expand vertically more than horizontally, deliberately.** These sit side by side in rows —
+edit next to delete — and widening both as far would make their hit areas overlap, handing taps to
+whichever is later in the DOM. A confidently wrong target is worse than a small one. Rows have
+height to give; the gap between two adjacent icons does not.
+
+**Neither scales with `--density-scale`.** An accessibility floor that shrinks when you choose a
+denser layout is not a floor. This is why entry 47 eased Compact from 0.8 to 0.875 in the same
+breath.
+
+Six controls were deliberately left alone: `w-11` and `w-10` arrow buttons that are already 40-44px,
+and a `w-36` labelled button. Widening something that is already big enough only creates overlap.
+
+---
+
+## 49. One Plan row instead of two
+
+`AgendaRow` (agenda-view.tsx) and `DayRow` (calendar-view.tsx) were 75 lines of identical markup —
+verified character-for-character identical after renaming, differing only in where lines happened to
+wrap. Two copies kept in step by hand, which holds right up until it doesn't.
+
+Now `plan/plan-row.tsx`. **Two other audit findings were fixed while merging rather than duplicated
+into the merged copy:**
+
+- **The timezone was the literal string `"America/Winnipeg"`** in both copies, while
+  `profiles.timezone` is documented in `lib/supabase/profile.ts` as "every date in the app is
+  rendered in it". It is now a prop, threaded `plan/page.tsx` -> `plan-shell.tsx` -> both views, so
+  a traveller sees their own hours. Merging the two copies is what made this a one-line change
+  instead of a two-line change in two files that could drift apart again.
+- **The bell was the emoji 🔔**, while every other bell in the app is lucide's `Bell`. An emoji
+  renders in the platform's font, ignores `currentColor` so it stays coloured when the row greys
+  out, and sits at the wrong weight in a line of mono metadata.
+
+The Google-event link also picked up `.tap-target` from entry 48 — it was a 14px icon.
+
+Unused imports pruned from both files afterwards (`Repeat`, `Check`, `ExternalLink`, `Tag`,
+`shortNudge`, and a `Link` and `CalendarDays` that each became dead in one of the two).
+
+---
+
+## 50. Migrations 0035-0037 applied to production (27 Aug 2026)
+
+Alan: *"can you do this for me? i have no clue where the connection strings are and what to do."*
+`SUPABASE_DB_URL` was already in `.env.local` — he was looking in the Supabase dashboard for
+something that was on his own machine. Read from there, never echoed, and all output filtered
+through a `sed` that redacts anything matching `postgresql://` so a stack trace could not print the
+password.
+
+**The first attempt FAILED, and that is the good news.** 0035 aborted on:
+
+    operator does not exist: name[] = text[]
+
+`pg_attribute.attname` is of type `name`, so `array_agg(a.attname)` produces `name[]`, and comparing
+that to an `array['completed_date','routine_id']` literal (`text[]`) has no operator. Both
+constraint-lookup DO blocks — added in 41e precisely so constraints were dropped by lookup rather
+than by guessed name — had the same fault. Fixed with `::text` on both the aggregate and its ORDER
+BY.
+
+**Nothing was half-applied**, and this was verified rather than assumed: `run-migration.mjs` wraps
+each file in its own transaction, and a query afterwards confirmed `_migrations` still ended at
+0034 and `transactions.transfer_group_id` did not exist. That per-file transaction is what turned a
+bad migration into a non-event.
+
+**Second run: all three applied.** No WARNING lines, which is the meaningful part — the two
+conditional unique indexes from 0035 found no duplicate rows in the live data and were both
+created. The NOTICE lines were all `drop constraint if exists` on constraints that did not exist
+yet.
+
+**13 checks run against production afterwards, all passing:** crew push filtered by `same_crew`;
+`delete_crew_push_subscription` scoped by `auth.uid()`; `check_cron_secret` using `not exists`;
+seed functions no longer executable by `authenticated`; RLS on `_migrations`; the per-account
+routine-completion constraint; `adjust_account_balance`, `ai_usage_month_total`, `ai_usage`
+SELECT-only; `receipts.original_extraction`; `transactions.transfer_group_id`; both conditional
+indexes.
+
+**One check that mattered more than the rest.** 0035 seeds a RANDOM `cron_secret` when the row is
+absent. If that had fired, the dispatcher would have kept sending the real `CRON_SECRET` from the
+environment, it would no longer have matched, and **reminders would have stopped silently** — the
+exact failure mode the fail-closed rewrite was meant to make impossible to miss. Verified: the row
+already existed, the `where not exists` guard held, and the stored value matches `CRON_SECRET`.
+Also proved the gate behaves — the real secret is accepted, `"definitely-wrong"` is rejected. Before
+0035, on a database with no row, that second call would have PASSED.
+
+---
+
+## 51. Making the assistant findable
+
+Alan, immediately after it shipped: *"how the fuck do i access the ai"*.
+
+He was right to be annoyed. It was at **bottom bar -> More -> Assistant**: three taps, behind a
+hamburger menu, at the bottom of an overflow list. The feature he had been most vocal about wanting
+was in the least reachable place in the app, and entry 43 rebuilt the whole thing without once
+checking whether he could get to it. Building a feature and shipping it somewhere nobody will find
+is the same as not building it.
+
+**It is now the first entry in the floating + button**, which is on every screen in the app:
+"Ask or tell it anything — type or talk". One tap from anywhere.
+
+That is also where the file always said it belonged: `quick-add.tsx`'s own header comment describes
+the button as the place for real free-text capture "(Phase 7 AI work)", written before the assistant
+existed.
+
+**The dead `"always"` id went at the same time** — an audit finding. It looked like exactly the case
+for the Assistant, but the Assistant IS gated (`ROUTE_MODULE_ALIASES` maps `/assistant` to `tasks`),
+and an entry that appears and then bounces you to `/today` is worse than no entry. So it uses
+`tasks` with a comment tying it to that alias list, and the union type plus its `as ModuleId` cast
+are gone.
+
+Today's "Jump to" description also updated — it still said "ask anything, or tell it to do
+something", written when it could do four things. It now says it can log, add and change.
+
+**Worth recording for whoever ships the next feature:** none of the audit's 108 findings was
+"nobody can find the assistant", because an audit reads code and this is only visible if you try to
+use the app. The verification loop this session was lint, build, tests and a code reviewer — all of
+which passed on a feature sitting three taps deep behind a hamburger.

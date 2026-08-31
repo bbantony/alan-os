@@ -15,7 +15,17 @@ import { formatCents } from "@/lib/finance/money";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
 import type { Account, Category, Transaction } from "@/lib/finance/types";
-import { logExpense, type MerchantMemory } from "./actions";
+
+/** Spent / received / moved between accounts. One screen, three shapes. */
+type TxnKind = "spent" | "received" | "moved";
+
+const KIND_LABELS: Record<TxnKind, string> = {
+  spent: "Spent",
+  received: "Received",
+  moved: "Moved",
+};
+import { guessCategoryForMerchant, type CategoryGuess } from "@/lib/finance/categorise";
+import { logExpense, logTransfer, type MerchantMemory } from "./actions";
 
 const KEYPAD = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"];
 
@@ -43,7 +53,16 @@ export function QuickLogForm({
 }) {
   const [step, setStep] = useState<"amount" | "details">("amount");
   const [digits, setDigits] = useState(""); // raw digits typed, interpreted as cents
-  const [isIncome, setIsIncome] = useState(false);
+  /**
+   * What kind of thing this is. One screen for all of them was the point —
+   * Alan asked for "one fast screen for every kind" rather than hunting for
+   * the right form. `spent` and `received` were always here as an
+   * income toggle; `moved` is new (migration 0037).
+   */
+  const [kind, setKind] = useState<TxnKind>("spent");
+  const isIncome = kind === "received";
+  const isTransfer = kind === "moved";
+  const [toAccountId, setToAccountId] = useState(accounts[1]?.id ?? accounts[0]?.id ?? "");
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [merchant, setMerchant] = useState("");
@@ -51,6 +70,13 @@ export function QuickLogForm({
   const [date, setDate] = useState(todayInAppTimezone());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Why the category is what it is, when the app chose it rather than you.
+   *
+   * Null once you pick one yourself — from that moment the choice is yours and
+   * the app must stop explaining a decision it is no longer making.
+   */
+  const [autoGuess, setAutoGuess] = useState<CategoryGuess | null>(null);
 
   const amountCents = digits === "" ? 0 : parseInt(digits, 10);
   const visibleCategories = categories.filter(
@@ -75,10 +101,71 @@ export function QuickLogForm({
   function pickMerchantSuggestion(m: MerchantMemory) {
     setMerchant(m.merchant);
     setCategoryId(m.categoryId);
+    setAutoGuess({ categoryId: m.categoryId, source: "learned", count: m.count });
+  }
+
+  /**
+   * Fills the category in as the merchant is typed.
+   *
+   * Only ever fills a category the person has NOT chosen themselves, or one
+   * this same guesser filled a keystroke ago — so typing "Sup" then "Superstore"
+   * refines the guess, but a category you tapped is never quietly replaced.
+   */
+  function handleMerchantChange(next: string) {
+    setMerchant(next);
+    if (categoryId !== null && autoGuess === null) return;
+
+    const guess = guessCategoryForMerchant(
+      next,
+      recentMerchants,
+      categories,
+      isIncome ? "income" : "expense"
+    );
+    if (guess) {
+      setCategoryId(guess.categoryId);
+      setAutoGuess(guess);
+    } else if (autoGuess !== null) {
+      // The guess that was there no longer applies to what's now typed.
+      setCategoryId(null);
+      setAutoGuess(null);
+    }
+  }
+
+  function chooseCategory(id: string) {
+    setCategoryId(id);
+    setAutoGuess(null);
   }
 
   async function handleSave() {
-    if (amountCents <= 0 || !categoryId || !accountId) return;
+    if (amountCents <= 0 || !accountId) return;
+
+    // A transfer has no merchant and no category — it is two accounts and an
+    // amount — so it takes its own path and closes rather than trying to
+    // hand back one optimistic transaction for what is actually two rows.
+    if (isTransfer) {
+      if (toAccountId === accountId) {
+        setError("Pick two different accounts.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      const moved = await logTransfer({
+        fromAccountId: accountId,
+        toAccountId,
+        amountCents,
+        txnDate: date,
+        note: note.trim() || null,
+      });
+      setSaving(false);
+      if (moved.error) {
+        setError(moved.error);
+        return;
+      }
+      onClose();
+      return;
+    }
+
+    if (!categoryId) return;
     setSaving(true);
     setError(null);
 
@@ -139,7 +226,9 @@ export function QuickLogForm({
         >
           <div className="min-w-0">
             <p className="micro-sm text-background/60">
-              {isIncome ? "Income" : "Expense"}
+              {/* Was a two-way Income/Expense label and would have shown
+                  "Expense" over a transfer. */}
+              {KIND_LABELS[kind]}
             </p>
             <p
               className={cn(
@@ -162,14 +251,25 @@ export function QuickLogForm({
 
         {step === "amount" ? (
           <>
+            {/* Sits above the keypad, where the Expense/Income toggle used to
+                be, because the kind changes what the SECOND step asks for: a
+                transfer needs two accounts and no category, and discovering
+                that after typing a merchant would be the wrong order. */}
             <div className="p-3">
               <Segmented
                 options={[
-                  { value: "expense", label: "Expense" },
-                  { value: "income", label: "Income" },
+                  { value: "spent", label: KIND_LABELS.spent },
+                  { value: "received", label: KIND_LABELS.received },
+                  { value: "moved", label: KIND_LABELS.moved, disabled: accounts.length < 2 },
                 ]}
-                value={isIncome ? "income" : "expense"}
-                onChange={(v) => setIsIncome(v === "income")}
+                value={kind}
+                onChange={(v) => {
+                  setKind(v as TxnKind);
+                  // A category chosen for a purchase means nothing on a
+                  // transfer, and an expense category is wrong on income.
+                  setCategoryId(null);
+                  setAutoGuess(null);
+                }}
               />
             </div>
 
@@ -193,7 +293,7 @@ export function QuickLogForm({
               )}
             </div>
 
-            <div className="p-3">
+            <div className="flex flex-col gap-3 p-3">
               <Button
                 type="button"
                 block
@@ -207,8 +307,49 @@ export function QuickLogForm({
           </>
         ) : (
           <div className="flex flex-col gap-3 p-3">
-            <div>
-              <label className="micro-sm mb-1.5 block text-muted-foreground">Category</label>
+            {isTransfer && (
+              <div>
+                <label className="micro-sm mb-1.5 block text-muted-foreground">
+                  Into which account
+                </label>
+                <Select
+                  value={toAccountId}
+                  onChange={(e) => setToAccountId(e.target.value)}
+                  className="h-10 w-full border-2 border-rule bg-surface px-2 text-sm"
+                >
+                  {accounts
+                    .filter((a) => a.id !== accountId)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                </Select>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Moving money between your own accounts isn&rsquo;t spending, so this
+                  won&rsquo;t count against any budget or show up in your reports.
+                </p>
+              </div>
+            )}
+
+            <div className={cn(isTransfer && "hidden")}>
+              <label className="micro-sm mb-1.5 block text-muted-foreground">
+                Category
+                {/* Says WHY it filled itself in. A category that appears on its
+                    own with no explanation reads as a bug the first time it
+                    happens; one that says "you usually do" reads as the app
+                    paying attention. Disappears the moment you choose your
+                    own, because then it isn't the app's decision to explain. */}
+                {autoGuess && (
+                  <span className="ml-2 normal-case tracking-normal text-primary">
+                    {autoGuess.source === "learned"
+                      ? autoGuess.count && autoGuess.count > 1
+                        ? `filled in — you've used this ${autoGuess.count} times`
+                        : "filled in — you used this last time"
+                      : "filled in — change it if that's wrong"}
+                  </span>
+                )}
+              </label>
               <div className="grid grid-cols-4 gap-px border-2 border-rule bg-hairline">
                 {visibleCategories.map((c) => {
                   const Icon = getFinanceIcon(c.icon);
@@ -217,7 +358,7 @@ export function QuickLogForm({
                     <button
                       key={c.id}
                       type="button"
-                      onClick={() => setCategoryId(c.id)}
+                      onClick={() => chooseCategory(c.id)}
                       aria-pressed={active}
                       className={cn(
                         "tap-press flex flex-col items-center gap-1 p-2 text-center transition-colors",
@@ -260,14 +401,16 @@ export function QuickLogForm({
               )}
             </div>
 
-            <div>
+            {/* A transfer has no merchant — there is no shop, only two of your
+                own accounts. */}
+            <div className={cn(isTransfer && "hidden")}>
               <label className="micro-sm mb-1.5 block text-muted-foreground">
                 Merchant (optional)
               </label>
               <div className="relative">
                 <Input
                   value={merchant}
-                  onChange={(e) => setMerchant(e.target.value)}
+                  onChange={(e) => handleMerchantChange(e.target.value)}
                   placeholder="Where?"
                 />
                 {merchantSuggestions.length > 0 && (
@@ -322,7 +465,13 @@ export function QuickLogForm({
               <Button
                 type="button"
                 className="flex-1"
-                disabled={saving || !categoryId || !accountId}
+                // A transfer needs two accounts and no category; everything
+                // else needs a category and one account.
+                disabled={
+                  saving ||
+                  !accountId ||
+                  (isTransfer ? !toAccountId || toAccountId === accountId : !categoryId)
+                }
                 onClick={handleSave}
               >
                 {saving ? "Saving…" : "Save"}

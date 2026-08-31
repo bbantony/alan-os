@@ -861,7 +861,15 @@ rediscover them:
    documents (they still carry the uncancelled Journal schema). They are Alan's own writing, so
    deleting them is his call, not an agent's.
 
-4. **`approveReceipt` overwrites the AI's original extraction** (`money/receipt-actions.ts`) —
+4. ~~**`approveReceipt` overwrites the AI's original extraction**~~ — **FIXED 26 Aug 2026**,
+   migration 0036. `receipts.original_extraction` is written once at scan time and never updated;
+   the corrected values stay in the columns of the same name. Receipts still pending review were
+   backfilled by the migration (their columns were still the model's own output at that point).
+   **Receipts approved BEFORE 26 Aug 2026 cannot be recovered** — their extraction was already
+   overwritten. MANUAL.md says so plainly rather than leaving Alan to wonder why older receipts
+   have no "what the scan said" record. Original note kept below for the history:
+
+   **`approveReceipt` overwrites the AI's original extraction** (`money/receipt-actions.ts`) —
    the human-corrected `line_items`, `merchant_guess` and `txn_date_guess` are written over the
    receipt row, so what was actually read off the photo is gone once approved. This breaks the
    "imported source data is never rewritten in place" rule. Found during the audit, out of scope
@@ -871,3 +879,60 @@ rediscover them:
    receipts approved before it cannot have their original extraction recovered.
 
 Also: `shadcn` is an unused dev dependency, kept because it is the tool for adding UI components.
+
+
+---
+
+## 26-30 Aug 2026 — full-codebase audit, and the fixes from it
+
+**The audit.** 108 findings across 228 files, 34 migrations, the service worker and the build config
+(CHANGELOG entry 40). Delivered to Alan as a filterable artifact, not terminal output.
+
+**40 of the 108 are now closed** (entries 41-51). What matters most, for anyone picking this up:
+
+### Security — all five criticals closed (migration 0035)
+1. `crew_push_subscriptions()` returned every user's push endpoint and keys to any logged-in
+   account. Now `same_crew`-filtered.
+2. `delete_crew_push_subscription()` deleted any row by id with no ownership check. Chained with
+   #1 that was a full notification hijack.
+3. `check_cron_secret` **failed open** when the secret row was missing — `secret <> (select ...)`
+   is NULL, and `if NULL` does not fire. Rewritten with `not exists`.
+4. Three `seed_default_*(target_user)` functions were EXECUTE-to-PUBLIC. There was no `revoke`
+   anywhere in migrations 0001-0034.
+5. `public._migrations` had no RLS. Fixed in the migration AND in `run-migration.mjs`.
+
+### Money — every bug that produced a wrong number
+Parenthesised CSV negatives imported as income; 28 Feb belonged to no budget period; avalanche and
+snowball returned identical plans; a $1.37bn interest figure rendered as fact; receipts hardcoded
+CAD on INR accounts; a failed recurring post silently lost that month's bill forever; INR and CAD
+were added together on the Today dashboard. All proved wrong by execution first, then proved fixed
+the same way.
+
+### What Alan asked for, and what he chose
+- **Workout** — rebuilt log-first (his pick from three drawn options). `workout-home.tsx`.
+- **Weight increment** — the 1.1 lb stepper was a kg value used as a lb value. Fixed, plus a
+  Settings -> Workout control.
+- **Money** — one screen for Spent / Received / **Moved** (transfers, migration 0037), with
+  categories that fill themselves in from your own history (`lib/finance/categorise.ts`).
+- **Assistant** — 4 write tools became 11, plus dictation, plus it moved into the floating + button
+  because it was three taps deep behind a hamburger and he could not find it.
+
+### Two things that are now permanent process
+- **`npm test` exists.** 33 tests over the pure money/date/unit helpers. Every case is a bug that
+  was genuinely in this codebase. CLAUDE.md's protocol had been telling test-runner to run it for
+  four days while no such script existed.
+- **`lib/db-errors.ts`.** Migration 0035 added real constraints, which turns "the database refuses"
+  into an ordinary outcome of a second tap — and 33 sites were returning `error.message` straight
+  to the screen. Every constraint added from here needs a line in that mapper.
+
+### Still open (68 findings), none of them data-losing
+Mostly consolidation: six duplicate short-date formatters, the shopping list's private toast
+system, `requireUser()` copy-pasted 18 times. Two behaviours worth doing first: the Plan calendar
+does not load data when you page past the preloaded month window, and `getUsageSummary` discards
+its own RPC error so the AI cap fails open (Alan's explicit choice — "carry on" — but it is now
+visible on Settings -> AI & cost rather than silent).
+
+**Applied to production 27 Aug 2026:** migrations 0035, 0036, 0037, verified with 13 checks against
+the live database. The first attempt failed on a `name[] = text[]` type error and rolled back
+cleanly — see entry 50, and note that the per-file transaction in `run-migration.mjs` is what made
+that a non-event rather than a half-migrated database.

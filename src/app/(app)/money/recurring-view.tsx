@@ -157,7 +157,7 @@ export function RecurringView({
               disabled={accounts.length === 0}
               aria-label="New repeating transaction"
               title={accounts.length === 0 ? "Add an account first" : undefined}
-              className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background disabled:pointer-events-none disabled:opacity-40"
+              className="tap-press tap-reach flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background disabled:pointer-events-none disabled:opacity-40"
             >
               <Plus className="size-4" strokeWidth={3} />
             </button>
@@ -216,7 +216,7 @@ export function RecurringView({
                       type="button"
                       onClick={() => handleToggle(r)}
                       aria-label={r.active ? `Pause ${r.name}` : `Resume ${r.name}`}
-                      className="tap-press text-muted-foreground/60 transition-colors hover:text-foreground"
+                      className="tap-press tap-target text-muted-foreground/60 transition-colors hover:text-foreground"
                     >
                       {r.active ? <Pause className="size-4" /> : <Play className="size-4" />}
                     </button>
@@ -224,7 +224,7 @@ export function RecurringView({
                       type="button"
                       onClick={() => setConfirmingDelete(r)}
                       aria-label={`Stop ${r.name}`}
-                      className="tap-press text-muted-foreground/60 transition-colors hover:text-destructive"
+                      className="tap-press tap-target text-muted-foreground/60 transition-colors hover:text-destructive"
                     >
                       <Trash2 className="size-4" />
                     </button>

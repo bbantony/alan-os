@@ -1,6 +1,6 @@
 "use client";
 
-import { addDaysToDateString } from "@/lib/time";
+import { addDaysToDateString, formatInAppTimezone } from "@/lib/time";
 import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -66,13 +66,17 @@ function formatDayHeading(iso: string, todayIso: string): string {
   }).format(d);
 }
 
-function formatTime(at: string): string | null {
-  // A row that only knows a date lands exactly on midnight UTC — showing
-  // "12:00 AM" for it would be inventing a time it never had.
-  if (at.endsWith("T00:00:00.000Z")) return null;
-  return new Intl.DateTimeFormat("en-CA", { hour: "numeric", minute: "2-digit" }).format(
-    new Date(at)
-  );
+function formatTime(event: { at: string; timeKnown: boolean }): string | null {
+  // A row that only knows a date has no time to show, and inventing one would
+  // be a lie. This used to be detected by sniffing for a "T00:00:00.000Z"
+  // suffix, which only held while day-starts were UTC midnight; the ledger
+  // now says so outright.
+  if (!event.timeKnown) return null;
+  // WITH a timezone. Without one this rendered in the device's zone — and
+  // because this component server-renders first, the server (UTC) and the
+  // phone (Winnipeg) produced different text, which is a hydration mismatch
+  // on every timed row as well as being the wrong time.
+  return formatInAppTimezone(event.at, { hour: "numeric", minute: "2-digit" });
 }
 
 type Range = "day" | "week";
@@ -285,7 +289,7 @@ export function TimelineView({
 
 function TimelineRow({ event, first }: { event: LedgerEvent; first: boolean }) {
   const Icon = KIND_ICONS[event.kind];
-  const time = formatTime(event.at);
+  const time = formatTime(event);
 
   return (
     <li className={cn(!first && "border-t border-hairline")}>

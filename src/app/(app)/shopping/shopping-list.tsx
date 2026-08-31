@@ -505,7 +505,7 @@ export function ShoppingList({
               <button
                 type="submit"
                 aria-label="Add item"
-                className="tap-press flex w-12 shrink-0 items-center justify-center bg-primary text-primary-foreground transition-colors hover:brightness-95"
+                className="tap-press tap-target flex w-12 shrink-0 items-center justify-center bg-primary text-primary-foreground transition-colors hover:brightness-95"
               >
                 <Plus className="size-5" strokeWidth={3} />
               </button>
@@ -736,7 +736,7 @@ function ShoppingRow({
       <button
         type="button"
         onClick={onDelete}
-        className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+        className="tap-press tap-target shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
         aria-label={`Delete ${item.name}`}
       >
         <Trash2 className="size-4" />

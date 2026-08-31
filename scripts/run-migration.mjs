@@ -15,14 +15,35 @@ const dir = new URL("../supabase/migrations/", import.meta.url);
 const files = readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
 
 const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
+let sawWarning = false;
+
+// Postgres NOTICE/WARNING output is discarded by node-pg unless something
+// listens for it. Migration 0035 uses `raise warning` to say when it SKIPPED
+// creating a unique index because duplicate rows already exist — without this
+// handler the script printed a cheerful "ok" while the index silently was not
+// created and nobody was told. A guarded migration whose guard is invisible is
+// not a guard.
+client.on("notice", (msg) => {
+  const severity = msg.severity ?? "NOTICE";
+  console.log(`  [${severity}] ${msg.message}`);
+  if (severity === "WARNING") sawWarning = true;
+});
 
 await client.connect();
 try {
+  // RLS and the revoke are NOT optional and must happen in the same breath as
+  // the create. This table lives in the PostgREST-exposed `public` schema, so
+  // without them anyone holding the public anon key can delete rows from it —
+  // and the next deploy then replays old migrations, one of which (0022)
+  // contains an unconditional `delete from public.reminders`. It was the only
+  // table in the app without RLS. Re-run safe: both statements are idempotent.
   await client.query(`
     create table if not exists public._migrations (
       filename text primary key,
       applied_at timestamptz not null default now()
     );
+    alter table public._migrations enable row level security;
+    revoke all on public._migrations from anon, authenticated;
   `);
 
   const { rows } = await client.query("select filename from public._migrations");
@@ -48,4 +69,15 @@ try {
   }
 } finally {
   await client.end();
+}
+
+if (sawWarning) {
+  console.log("");
+  console.log("  ONE OR MORE WARNINGS ABOVE — something was skipped on purpose.");
+  console.log("  Fix the data the warning names, then re-run THAT migration. Re-running");
+  console.log("  this script is not enough on its own: applied files are skipped, so you");
+  console.log("  must first remove its row, e.g.");
+  console.log("");
+  console.log("    delete from public._migrations where filename = '0035_close_audit_security_holes.sql';");
+  console.log("");
 }

@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { formatCents } from "@/lib/finance/money";
 import { formatDuration, formatPace } from "@/lib/workout/format";
+import { utcToZonedParts, zonedTimeToUtc } from "@/lib/time";
 
 // One timeline across every module.
 //
@@ -25,8 +26,18 @@ import { formatDuration, formatPace } from "@/lib/workout/format";
 export type LedgerKind = "money" | "training" | "task" | "routine" | "shopping" | "check";
 
 export interface LedgerEvent {
-  /** ISO instant, or a date at midnight for rows that only know a day. */
+  /** ISO instant, or the start of the day for rows that only know a day. */
   at: string;
+  /**
+   * False when the row only knows a DATE and `at` is a stand-in for sorting.
+   *
+   * The view used to detect this by checking whether `at` ended in
+   * "T00:00:00.000Z". That worked only while day-starts were UTC midnight;
+   * now that they are Winnipeg midnight the string is different and the sniff
+   * would silently start inventing a "7:00 PM" for rows that never had a time.
+   * Say it explicitly instead of encoding it in a string.
+   */
+  timeKnown: boolean;
   /** YYYY-MM-DD, for grouping — some rows genuinely have no time of day. */
   date: string;
   kind: LedgerKind;
@@ -41,8 +52,42 @@ export interface LedgerEvent {
   highlight?: boolean;
 }
 
-function dayStart(date: string): string {
-  return `${date}T00:00:00.000Z`;
+/**
+ * The instant a WINNIPEG day begins, as UTC.
+ *
+ * This used to be `${date}T00:00:00.000Z` — UTC midnight — which is 6pm the
+ * PREVIOUS evening in Winnipeg. Combined with the `.slice(0, 10)` grouping
+ * below it meant anything finished after 6pm vanished from that day's timeline
+ * and reappeared grouped under tomorrow. The rule at the top of lib/time.ts
+ * says store UTC and convert at the boundary; this is the boundary.
+ */
+function dayStart(date: string, timeZone?: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return zonedTimeToUtc(
+    { year: y, month: m, day: d, hour: 0, minute: 0, second: 0 },
+    timeZone
+  ).toISOString();
+}
+
+/** The instant a Winnipeg day ENDS, exclusive — midnight the following day. */
+function dayEndExclusive(date: string, timeZone?: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const start = zonedTimeToUtc(
+    { year: y, month: m, day: d, hour: 0, minute: 0, second: 0 },
+    timeZone
+  );
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * Which Winnipeg calendar day a UTC timestamp belongs to.
+ *
+ * `iso.slice(0, 10)` is the UTC day, not the local one — the bug this fixes.
+ */
+function zonedDayOf(iso: string, timeZone?: string): string {
+  const parts = utcToZonedParts(new Date(iso), timeZone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
 }
 
 /**
@@ -86,8 +131,11 @@ export async function getLedger(from: string, to: string): Promise<LedgerEvent[]
       .select("id, title, completed_at, category")
       .eq("user_id", user.id)
       .not("completed_at", "is", null)
+      // Winnipeg day boundaries, not UTC ones — a task finished at 7pm on the
+      // last day of the range is already tomorrow in UTC and used to fall
+      // outside its own window.
       .gte("completed_at", dayStart(from))
-      .lte("completed_at", `${to}T23:59:59.999Z`),
+      .lt("completed_at", dayEndExclusive(to)),
     supabase
       .from("routine_completions")
       .select("id, completed_date, completed_at, routines(title)")
@@ -125,7 +173,13 @@ export async function getLedger(from: string, to: string): Promise<LedgerEvent[]
     events.push({
       // created_at is the only time-of-day money has; txn_date can be
       // back-dated, so the ordering uses whichever is on the right day.
-      at: t.created_at.slice(0, 10) === t.txn_date ? t.created_at : dayStart(t.txn_date),
+      // "Was this logged on the day it is dated?" — if so the creation time
+      // is the real moment and sorts correctly within the day; if not, fall
+      // back to the start of the day it belongs to. Both sides of the
+      // comparison must be WINNIPEG days or an evening entry compares as
+      // tomorrow and gets pinned to midnight for no reason.
+      at: zonedDayOf(t.created_at) === t.txn_date ? t.created_at : dayStart(t.txn_date),
+      timeKnown: zonedDayOf(t.created_at) === t.txn_date,
       date: t.txn_date,
       kind: "money",
       title: t.merchant || t.categories?.name || "Transaction",
@@ -150,7 +204,8 @@ export async function getLedger(from: string, to: string): Promise<LedgerEvent[]
     const sets = w.workout_sets ?? [];
     const exercises = new Set(sets.map((s) => s.exercise_id)).size;
     events.push({
-      at: w.created_at.slice(0, 10) === w.workout_date ? w.created_at : dayStart(w.workout_date),
+      at: zonedDayOf(w.created_at) === w.workout_date ? w.created_at : dayStart(w.workout_date),
+      timeKnown: zonedDayOf(w.created_at) === w.workout_date,
       date: w.workout_date,
       kind: "training",
       title: run ? "Run" : "Trained",
@@ -171,7 +226,10 @@ export async function getLedger(from: string, to: string): Promise<LedgerEvent[]
   for (const t of (tasks as { id: string; title: string; completed_at: string; category: string }[]) ?? []) {
     events.push({
       at: t.completed_at,
-      date: t.completed_at.slice(0, 10),
+      timeKnown: true,
+      // The WINNIPEG day, not the UTC one. `.slice(0, 10)` put anything
+      // finished after 6pm under tomorrow's heading.
+      date: zonedDayOf(t.completed_at),
       kind: "task",
       title: t.title,
       detail: "Done",
@@ -188,6 +246,9 @@ export async function getLedger(from: string, to: string): Promise<LedgerEvent[]
   }[]) ?? []) {
     events.push({
       at: r.completed_at ?? dayStart(r.completed_date),
+      // `completed_at` is a real timestamp when present; the fallback is a
+      // stand-in for a row that only recorded the date.
+      timeKnown: Boolean(r.completed_at),
       date: r.completed_date,
       kind: "routine",
       title: r.routines?.title ?? "Routine",
@@ -223,7 +284,8 @@ export async function getLedger(from: string, to: string): Promise<LedgerEvent[]
   }
   for (const trip of trips.values()) {
     events.push({
-      at: trip.at.slice(0, 10) === trip.date ? trip.at : dayStart(trip.date),
+      at: zonedDayOf(trip.at) === trip.date ? trip.at : dayStart(trip.date),
+      timeKnown: zonedDayOf(trip.at) === trip.date,
       date: trip.date,
       kind: "shopping",
       title: trip.merchant ? `Shopping · ${trip.merchant}` : "Shopping trip",
@@ -244,6 +306,9 @@ export async function getLedger(from: string, to: string): Promise<LedgerEvent[]
   }[]) ?? []) {
     events.push({
       at: r.created_at,
+      // A reconciliation is stamped when you finished it, so the time is real
+      // — but it belongs on the STATEMENT's date, which may be another day.
+      timeKnown: zonedDayOf(r.created_at) === r.statement_date,
       date: r.statement_date,
       kind: "check",
       title: `Checked ${r.accounts?.name ?? "an account"} against the bank`,

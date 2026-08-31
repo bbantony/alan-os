@@ -165,7 +165,7 @@ export function ShoppingSettings({
                 {!cat.is_protected && (
                   <button
                     onClick={() => handleDeleteCategory(cat.id)}
-                    className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
+                    className="tap-press tap-target shrink-0 text-muted-foreground/40 hover:text-destructive"
                     aria-label="Delete category"
                     disabled={isPending}
                   >

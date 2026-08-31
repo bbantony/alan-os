@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { todayInAppTimezone } from "@/lib/time";
 import { currentPeriodBounds } from "@/lib/finance/period";
 import { balanceDeltaCents } from "@/lib/finance/balance";
+import { friendlyDbError } from "@/lib/db-errors";
+import { normaliseMerchant, type MerchantMemoryEntry } from "@/lib/finance/categorise";
 import type {
   Account,
   AccountType,
@@ -80,7 +82,7 @@ export async function createAccount(input: {
     })
     .select("*")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not add that account." };
+  if (error || !data) return { error: friendlyDbError(error) ?? "Could not add that account." };
   revalidatePath("/money");
   revalidatePath("/today");
   return { account: data as Account };
@@ -106,7 +108,7 @@ export async function updateAccount(input: {
     .eq("user_id", user.id)
     .select("*")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not save that account." };
+  if (error || !data) return { error: friendlyDbError(error) ?? "Could not save that account." };
   revalidatePath("/money");
   revalidatePath("/today");
   return { account: data as Account };
@@ -131,7 +133,7 @@ export async function getAccountTransactionCount(input: { id: string }): Promise
 export async function deleteAccount(input: { id: string }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const { error } = await supabase.from("accounts").delete().eq("id", input.id).eq("user_id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   revalidatePath("/money");
   revalidatePath("/today");
   return {};
@@ -175,11 +177,22 @@ export async function archiveCategory(input: { id: string }) {
 
 // ---------- Quick expense logging (<=5s) ----------
 
-export interface MerchantMemory {
-  merchant: string;
-  categoryId: string;
-}
+export type MerchantMemory = MerchantMemoryEntry;
 
+/**
+ * What you usually file each merchant under.
+ *
+ * Rewritten to count rather than to take the most recent. The old version read
+ * 50 transactions and kept the FIRST category it saw per merchant, so one
+ * mis-categorised coffee taught the form the wrong answer for good — the most
+ * recent entry is the one most likely to be a mistake you have not corrected
+ * yet, and the least likely to represent what you normally do.
+ *
+ * Now: 400 transactions, grouped by (merchant, category), with the count kept
+ * so the guesser can prefer the answer you have given eleven times over the
+ * one you gave once. The display spelling comes from the most recent use, so
+ * it shows "Superstore" rather than an older "SUPERSTORE #4021".
+ */
 export async function getRecentMerchants(): Promise<MerchantMemory[]> {
   const { supabase, user } = await requireUser();
   const { data } = await supabase
@@ -188,17 +201,25 @@ export async function getRecentMerchants(): Promise<MerchantMemory[]> {
     .eq("user_id", user.id)
     .not("merchant", "is", null)
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(400);
 
-  const seen = new Set<string>();
-  const memory: MerchantMemory[] = [];
+  const tally = new Map<string, MerchantMemory>();
   for (const row of data ?? []) {
-    const key = (row.merchant as string).trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    memory.push({ merchant: row.merchant as string, categoryId: row.category_id as string });
+    const merchant = (row.merchant as string) ?? "";
+    const categoryId = row.category_id as string;
+    if (!merchant.trim() || !categoryId) continue;
+    const key = `${normaliseMerchant(merchant)}::${categoryId}`;
+    const existing = tally.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      // First time seen means most recent, because the query is newest-first —
+      // so this spelling is the freshest one.
+      tally.set(key, { merchant, categoryId, count: 1 });
+    }
   }
-  return memory;
+
+  return [...tally.values()].sort((a, b) => b.count - a.count);
 }
 
 export async function getRecentTransactions(limit = 20): Promise<Transaction[]> {
@@ -246,20 +267,30 @@ export async function logExpense(input: {
     txn_date: input.txnDate,
     source: "manual",
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   const delta = balanceDeltaCents(input.amountCents, input.isIncome, account.type as AccountType);
-  await supabase
-    .from("accounts")
-    .update({ current_balance_cents: (account.current_balance_cents as number) + delta })
-    .eq("id", account.id);
+  // Atomic. Read-add-write from here let two concurrent changes each read the
+  // same starting balance, with the second silently erasing the first — while
+  // both transactions stayed in the ledger. See migration 0035.
+  const { error: balanceError } = await supabase.rpc("adjust_account_balance", {
+    p_account_id: account.id,
+    p_delta_cents: delta,
+  });
+  if (balanceError) {
+    return { error: "Saved, but the account balance didn't update. Check it on the Money screen." };
+  }
 
   revalidatePath("/money");
   revalidatePath("/today");
   return {};
 }
 
-export async function deleteTransaction(input: { id: string }) {
+// Returns an error like every other action in this file. It used to return
+// nothing and check nothing, so the row vanished from the screen and a
+// "Transaction deleted" message appeared whether or not anything happened —
+// and if the balance reversal failed, the balance stayed wrong with no trace.
+export async function deleteTransaction(input: { id: string }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const { data: txn } = await supabase
     .from("transactions")
@@ -267,27 +298,38 @@ export async function deleteTransaction(input: { id: string }) {
     .eq("id", input.id)
     .eq("user_id", user.id)
     .maybeSingle();
+  if (!txn) return { error: "That transaction is already gone." };
 
-  await supabase.from("transactions").delete().eq("id", input.id).eq("user_id", user.id);
+  const { error: deleteError } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", input.id)
+    .eq("user_id", user.id);
+  if (deleteError) return { error: "Couldn't delete that — try again." };
 
-  if (txn) {
-    const { data: account } = await supabase
-      .from("accounts")
-      .select("id, type, current_balance_cents")
-      .eq("id", txn.account_id)
-      .maybeSingle();
-    if (account) {
-      const kind = (txn as unknown as { categories: { kind: string } | null }).categories?.kind;
-      const delta = balanceDeltaCents(txn.amount_cents as number, kind === "income", account.type as AccountType);
-      await supabase
-        .from("accounts")
-        .update({ current_balance_cents: (account.current_balance_cents as number) - delta })
-        .eq("id", account.id);
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("id, type")
+    .eq("id", txn.account_id)
+    .maybeSingle();
+  if (account) {
+    const kind = (txn as unknown as { categories: { kind: string } | null }).categories?.kind;
+    const delta = balanceDeltaCents(txn.amount_cents as number, kind === "income", account.type as AccountType);
+  // Atomic. Read-add-write from here let two concurrent changes each read the
+  // same starting balance, with the second silently erasing the first — while
+  // both transactions stayed in the ledger. See migration 0035.
+    const { error: balanceError } = await supabase.rpc("adjust_account_balance", {
+      p_account_id: account.id,
+      p_delta_cents: -delta,
+    });
+    if (balanceError) {
+      return { error: "Deleted, but the account balance didn't update. Check it on the Money screen." };
     }
   }
 
   revalidatePath("/money");
   revalidatePath("/today");
+  return {};
 }
 
 // ---------- Budgets ----------
@@ -298,6 +340,76 @@ export interface BudgetWithProgress extends Budget {
   spent_cents: number;
   period_start: string;
   period_end: string;
+}
+
+/**
+ * Moving money between two of your own accounts.
+ *
+ * One database call, because a transfer that exists on only one side is worse
+ * than one that doesn't exist: the two legs and both balance moves happen in a
+ * single statement (`log_transfer`, migration 0037) rather than four
+ * round-trips that can fail in the middle.
+ *
+ * Both legs carry the same `transfer_group_id`, which is what keeps this out
+ * of every budget and report — see the column comment in 0037 for why a
+ * category called "Transfer" would not have been good enough.
+ */
+export async function logTransfer(input: {
+  fromAccountId: string;
+  toAccountId: string;
+  amountCents: number;
+  txnDate: string;
+  note?: string | null;
+}): Promise<{ error?: string }> {
+  const { supabase, user } = await requireUser();
+
+  if (input.fromAccountId === input.toAccountId) {
+    return { error: "Pick two different accounts." };
+  }
+  if (input.amountCents <= 0) {
+    return { error: "Enter an amount bigger than zero." };
+  }
+
+  // Transfers still need a category id because the column is NOT NULL, but the
+  // choice is never shown — `transfer_group_id` is what reports actually key
+  // off. "Misc" is the seeded catch-all; if it has been renamed or deleted,
+  // any expense category will do, because nothing reads it.
+  const { data: categories } = await supabase
+    .from("categories")
+    .select("id, name")
+    .eq("user_id", user.id)
+    .eq("kind", "expense")
+    .eq("is_archived", false)
+    // `categories` has no sort_order column — only `shopping_categories` does.
+    // getCategories orders by name, so this matches it.
+    .order("name", { ascending: true });
+  const list = (categories as { id: string; name: string }[]) ?? [];
+  const holder = list.find((c) => c.name.toLowerCase() === "misc") ?? list[0];
+  if (!holder) return { error: "Set up a category first." };
+
+  const { error } = await supabase.rpc("log_transfer", {
+    p_from_account: input.fromAccountId,
+    p_to_account: input.toAccountId,
+    p_amount_cents: input.amountCents,
+    p_txn_date: input.txnDate,
+    p_category_id: holder.id,
+    p_note: input.note ?? null,
+  });
+  if (error) {
+    // The function raises plain sentences for the two cases a person can
+    // actually cause, so those are worth passing through.
+    if (error.message?.includes("same currency")) {
+      return {
+        error: "Those two accounts use different currencies — use Send money home instead.",
+      };
+    }
+    if (error.message?.includes("same account")) return { error: "Pick two different accounts." };
+    return { error: friendlyDbError(error) ?? "Couldn't move that." };
+  }
+
+  revalidatePath("/money");
+  revalidatePath("/today");
+  return {};
 }
 
 export async function getBudgets(): Promise<BudgetWithProgress[]> {
@@ -327,6 +439,10 @@ export async function getBudgets(): Promise<BudgetWithProgress[]> {
       .eq("user_id", user.id)
       .eq("category_id", budget.category_id)
       .eq("currency", "CAD")
+      // Transfers excluded: money moved between your own accounts is not
+      // spending, and counting it inflates this by twice the amount — once on
+      // each leg. See migration 0037.
+      .is("transfer_group_id", null)
       .gte("txn_date", start)
       .lt("txn_date", end);
     const spent = (spentRows ?? []).reduce((sum, r) => sum + (r.amount_cents as number), 0);
@@ -361,7 +477,7 @@ export async function createBudget(input: {
     },
     { onConflict: "user_id,category_id" }
   );
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   revalidatePath("/money");
   return {};
 }
@@ -423,7 +539,7 @@ export async function createSavingsGoal(input: {
     })
     .select("*")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not create that goal." };
+  if (error || !data) return { error: friendlyDbError(error) ?? "Could not create that goal." };
   revalidatePath("/money");
   return { goal: data as SavingsGoal };
 }
@@ -452,7 +568,7 @@ export async function addToGoal(input: {
     .update({ saved_cents: nextSaved, is_done: isDone })
     .eq("id", input.id)
     .eq("user_id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   revalidatePath("/money");
   return { savedCents: nextSaved, isDone };
 }
@@ -495,7 +611,7 @@ export async function createDebt(input: {
     })
     .select("*")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not add that debt." };
+  if (error || !data) return { error: friendlyDbError(error) ?? "Could not add that debt." };
   revalidatePath("/money");
   return { debt: data as Debt };
 }
@@ -561,13 +677,17 @@ export async function logRemittance(input: {
     txn_date: input.txnDate,
     source: "manual",
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   const delta = balanceDeltaCents(input.cadCents, false, account.type as AccountType);
-  await supabase
-    .from("accounts")
-    .update({ current_balance_cents: (account.current_balance_cents as number) + delta })
-    .eq("id", account.id);
+  // Atomic — see migration 0035.
+  const { error: balanceError } = await supabase.rpc("adjust_account_balance", {
+    p_account_id: account.id,
+    p_delta_cents: delta,
+  });
+  if (balanceError) {
+    return { error: "Saved, but the account balance didn't update. Check it on the Money screen." };
+  }
 
   revalidatePath("/money");
   return {};
@@ -648,6 +768,7 @@ export async function getMonthlySpendByCategory(monthOffset = 0): Promise<Catego
     .select("amount_cents, category_id, categories(name, kind)")
     .eq("user_id", user.id)
     .eq("currency", "CAD")
+    .is("transfer_group_id", null)
     .gte("txn_date", start)
     .lt("txn_date", end);
 
@@ -677,6 +798,7 @@ export async function getMonthlyTrend(monthsBack = 6): Promise<{ label: string; 
       .select("amount_cents, categories(kind)")
       .eq("user_id", user.id)
       .eq("currency", "CAD")
+      .is("transfer_group_id", null)
       .gte("txn_date", start)
       .lt("txn_date", end);
     const total = (data ?? []).reduce((sum, row) => {
@@ -699,6 +821,7 @@ export async function getTopMerchants(limit = 5): Promise<{ merchant: string; to
     .select("amount_cents, merchant, categories(kind)")
     .eq("user_id", user.id)
     .eq("currency", "CAD")
+    .is("transfer_group_id", null)
     .not("merchant", "is", null)
     .gte("txn_date", start)
     .lt("txn_date", end);

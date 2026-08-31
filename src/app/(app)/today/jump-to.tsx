@@ -75,7 +75,7 @@ export function JumpTo({ moduleAccess }: { moduleAccess: ModuleAccess }) {
           <Sparkles className="size-4 shrink-0 text-muted-foreground" strokeWidth={2.25} />
           <span className="min-w-0">
             <span className="block truncate text-sm font-semibold">Assistant</span>
-            <Micro className="block truncate">Ask anything, or tell it to do something</Micro>
+            <Micro className="block truncate">Talk or type — it can log, add and change things</Micro>
           </span>
         </span>
       </PanelRow>

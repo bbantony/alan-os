@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolvePreferences } from "@/lib/preferences";
 import { todayInAppTimezone } from "@/lib/time";
 import { balanceDeltaCents } from "@/lib/finance/balance";
+import { friendlyDbError } from "@/lib/db-errors";
 import {
   dueOccurrences,
   firstOccurrenceOnOrAfter,
@@ -84,7 +85,7 @@ export async function createRecurringTransaction(input: {
     })
     .select("*")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not save that." };
+  if (error || !data) return { error: friendlyDbError(error) ?? "Could not save that." };
 
   revalidatePath("/money");
   revalidatePath("/today");
@@ -103,7 +104,7 @@ export async function setRecurringActive(input: {
     .eq("user_id", user.id)
     .select("*")
     .single();
-  if (error || !data) return { error: error?.message ?? "Could not update that." };
+  if (error || !data) return { error: friendlyDbError(error) ?? "Could not update that." };
   revalidatePath("/money");
   return { recurring: data as RecurringTransaction };
 }
@@ -227,16 +228,48 @@ export async function postDueRecurringTransactions(): Promise<PostedSummary> {
       recurring_id: rule.id,
     }));
     const { error: insertError } = await supabase.from("transactions").insert(rows);
-    if (insertError) continue;
+    if (insertError) {
+      // PUT THE CLAIM BACK. This used to be a bare `continue`, which left the
+      // row marked as posted with no transaction behind it — and because
+      // `next_date` had already moved on, no later sweep would ever retry it.
+      // That month's rent simply vanished from the ledger and the balance,
+      // permanently and silently. Restoring the pre-claim values makes the
+      // next sweep pick it up again.
+      await supabase
+        .from("recurring_transactions")
+        .update({
+          next_date: rule.next_date,
+          last_posted_date: rule.last_posted_date,
+          active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", rule.id)
+        .eq("user_id", user.id);
+      continue;
+    }
 
     const account = accountById.get(rule.account_id);
     if (account) {
+      // Atomic, for the same reason as everywhere else — this runs on both the
+      // Money page and the Today page, so two loads really can race.
       const delta =
         balanceDeltaCents(rule.amount_cents, isIncome, account.type as AccountType) *
         occurrences.length;
-      const updated = account.current_balance_cents + delta;
-      await supabase.from("accounts").update({ current_balance_cents: updated }).eq("id", account.id);
-      account.current_balance_cents = updated;
+      const { data: updated, error: balanceError } = await supabase.rpc(
+        "adjust_account_balance",
+        { p_account_id: account.id, p_delta_cents: delta }
+      );
+      if (balanceError || updated === null || updated === undefined) {
+        // This runs unattended on page load, so there is nobody to tell — but
+        // a transaction posted without its balance moving is a real
+        // divergence, and it must not vanish silently.
+        console.error(
+          `[recurring] posted ${rule.name} but the balance did not move on account ` +
+            `${account.id}: ${balanceError?.message ?? "no row returned"}`
+        );
+      } else {
+        account.current_balance_cents = Number(updated);
+      }
     }
 
     summary.posted += occurrences.length;
@@ -296,6 +329,11 @@ export async function getUpcomingBills(days = 7): Promise<UpcomingBill[]> {
     .select("id, name, amount_cents, currency, next_date, category_id, categories(kind)")
     .eq("user_id", user.id)
     .eq("active", true)
+    // A fixed-term series stays `active` until a posting sweep switches it
+    // off — and that sweep never runs when auto_post is false. So "About to
+    // land" kept promising payments that had already ended, and
+    // upcoming-bills.tsx kept subtracting them from safe-to-spend.
+    .or(`end_date.is.null,end_date.gte.${today}`)
     .gte("next_date", today)
     .lte("next_date", horizonIso)
     .order("next_date", { ascending: true });

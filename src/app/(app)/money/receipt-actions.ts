@@ -10,6 +10,7 @@ import { normalizeItemName } from "@/lib/shopping/purchases";
 import { resolvePreferences } from "@/lib/preferences";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import type { AccountType, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -119,6 +120,19 @@ export async function uploadReceipt(formData: FormData): Promise<{ receiptId?: s
       txn_date_guess: extraction?.date ?? null,
       line_items: lineItems,
       status: "pending_review",
+      // Frozen at extraction time and NEVER updated again. The three columns
+      // above are working values that approval overwrites with Alan's
+      // corrections — which used to destroy the only record of what the model
+      // actually read, breaking "imported source data is never rewritten in
+      // place" and making it impossible to judge whether scanning is worth
+      // paying for. See migration 0036.
+      original_extraction: {
+        line_items: lineItems,
+        merchant_guess: extraction?.merchant ?? null,
+        total_cents_guess: extraction?.total_cents ?? null,
+        txn_date_guess: extraction?.date ?? null,
+        extracted_at: new Date().toISOString(),
+      },
     })
     .select("id")
     .single();
@@ -208,90 +222,191 @@ export async function approveReceipt(input: {
   txnDate: string;
   lineItems: ReceiptLineItem[];
   splitByCategory: boolean;
-}): Promise<{ error?: string; transactions?: Transaction[]; updatedAccountBalanceCents?: number }> {
+}): Promise<{
+  error?: string;
+  /** Saved, but something secondary didn't happen. NOT a failure. */
+  warning?: string;
+  transactions?: Transaction[];
+  updatedAccountBalanceCents?: number;
+}> {
   const { supabase, user } = await requireUser();
 
   const items = input.lineItems.filter((li) => li.price_cents > 0);
   if (items.length === 0) return { error: "Add at least one item before approving." };
   if (items.some((li) => !li.category_id)) return { error: "Every item needs a category." };
 
+  // CLAIM FIRST. Nothing used to check whether this receipt had already been
+  // approved, so a retried request, a second tab, or reopening an approved
+  // receipt inserted every transaction again AND applied the balance delta
+  // again. The conditional update is the claim: it only matches while the row
+  // is still pending, so exactly one caller can get past this line.
+  const { data: claimed } = await supabase
+    .from("receipts")
+    .update({ status: "approved" })
+    .eq("id", input.id)
+    .eq("user_id", user.id)
+    .eq("status", "pending_review")
+    .select("id, original_extraction, line_items, merchant_guess, total_cents_guess, txn_date_guess")
+    .maybeSingle();
+  if (!claimed) {
+    return { error: "That receipt has already been approved." };
+  }
+
+  // A receipt scanned before migration 0036 has no frozen extraction, and
+  // right now — before the corrections below are written — its columns still
+  // hold exactly what the model read. Last chance to preserve it.
+  if (claimed.original_extraction === null) {
+    await supabase
+      .from("receipts")
+      .update({
+        original_extraction: {
+          line_items: claimed.line_items ?? [],
+          merchant_guess: claimed.merchant_guess,
+          total_cents_guess: claimed.total_cents_guess,
+          txn_date_guess: claimed.txn_date_guess,
+          extracted_at: null,
+          backfilled: true,
+        },
+      })
+      .eq("id", input.id)
+      .eq("user_id", user.id);
+  }
+
+  // `currency` is selected and used below. It used to be hardcoded "CAD" here
+  // while csv-actions.ts had already been fixed for exactly this — the comment
+  // there records that an Indian statement was being recorded at ~60x its real
+  // value. Approving a receipt against an INR account did the same thing.
   const { data: account } = await supabase
     .from("accounts")
-    .select("id, type, current_balance_cents")
+    .select("id, type, currency, current_balance_cents")
     .eq("id", input.accountId)
     .eq("user_id", user.id)
     .maybeSingle();
-  if (!account) return { error: "Couldn't find that account." };
+  if (!account) {
+    // Put the claim back — the caller is going to be told this failed.
+    await supabase
+      .from("receipts")
+      .update({ status: "pending_review" })
+      .eq("id", input.id)
+      .eq("user_id", user.id);
+    return { error: "Couldn't find that account." };
+  }
+
+  // Any failure from here on must hand the receipt back, or it is stuck as
+  // "approved" with no transactions behind it and no way to retry from the UI.
+  async function releaseClaim() {
+    await supabase
+      .from("receipts")
+      .update({ status: "pending_review" })
+      .eq("id", input.id)
+      .eq("user_id", user.id);
+  }
 
   let totalCents = 0;
   let insertedTransactions: Transaction[];
-  if (input.splitByCategory) {
-    const byCategory = new Map<string, number>();
-    for (const li of items) {
-      byCategory.set(li.category_id!, (byCategory.get(li.category_id!) ?? 0) + li.price_cents);
-    }
-    const rows = [...byCategory.entries()].map(([categoryId, amountCents]) => ({
-      user_id: user.id,
-      account_id: input.accountId,
-      category_id: categoryId,
-      amount_cents: amountCents,
-      currency: "CAD",
-      merchant: input.merchant,
-      note: null,
-      txn_date: input.txnDate,
-      source: "receipt",
-      receipt_id: input.id,
-    }));
-    totalCents = rows.reduce((sum, r) => sum + r.amount_cents, 0);
-    const { data, error } = await supabase.from("transactions").insert(rows).select("*");
-    if (error) return { error: error.message };
-    insertedTransactions = (data as Transaction[]) ?? [];
-  } else {
-    totalCents = items.reduce((sum, li) => sum + li.price_cents, 0);
-    const counts = new Map<string, number>();
-    for (const li of items) counts.set(li.category_id!, (counts.get(li.category_id!) ?? 0) + 1);
-    const dominantCategory = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-    const { data, error } = await supabase
-      .from("transactions")
-      .insert({
+  // try/finally around the write section. Every RETURNED error already
+  // releases the claim, but a THROW — a dropped connection mid-request, which
+  // is exactly the retry the claim exists to guard against — would have left
+  // the receipt stuck as "approved" with no transactions and no way back to
+  // it, since it drops out of getPendingReceipts.
+  let committed = false;
+  try {
+    if (input.splitByCategory) {
+      const byCategory = new Map<string, number>();
+      for (const li of items) {
+        byCategory.set(li.category_id!, (byCategory.get(li.category_id!) ?? 0) + li.price_cents);
+      }
+      const rows = [...byCategory.entries()].map(([categoryId, amountCents]) => ({
         user_id: user.id,
         account_id: input.accountId,
-        category_id: dominantCategory,
-        amount_cents: totalCents,
-        currency: "CAD",
+        category_id: categoryId,
+        amount_cents: amountCents,
+        currency: account.currency,
         merchant: input.merchant,
         note: null,
         txn_date: input.txnDate,
         source: "receipt",
         receipt_id: input.id,
-      })
-      .select("*")
-      .single();
-    if (error) return { error: error.message };
-    insertedTransactions = data ? [data as Transaction] : [];
+      }));
+      totalCents = rows.reduce((sum, r) => sum + r.amount_cents, 0);
+      const { data, error } = await supabase.from("transactions").insert(rows).select("*");
+      if (error) {
+        return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
+      }
+      insertedTransactions = (data as Transaction[]) ?? [];
+    } else {
+      totalCents = items.reduce((sum, li) => sum + li.price_cents, 0);
+      const counts = new Map<string, number>();
+      for (const li of items) counts.set(li.category_id!, (counts.get(li.category_id!) ?? 0) + 1);
+      const dominantCategory = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      const { data, error } = await supabase
+        .from("transactions")
+        .insert({
+          user_id: user.id,
+          account_id: input.accountId,
+          category_id: dominantCategory,
+          amount_cents: totalCents,
+          currency: account.currency,
+          merchant: input.merchant,
+          note: null,
+          txn_date: input.txnDate,
+          source: "receipt",
+          receipt_id: input.id,
+        })
+        .select("*")
+        .single();
+      if (error) {
+        return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
+      }
+      insertedTransactions = data ? [data as Transaction] : [];
+    }
+
+    // One statement in the database instead of read-add-write from here, so a
+    // concurrent log can't read the same starting balance and erase this one.
+    const delta = balanceDeltaCents(totalCents, false, account.type as AccountType);
+    const { data: updatedBalance, error: balanceError } = await supabase.rpc(
+      "adjust_account_balance",
+      { p_account_id: account.id, p_delta_cents: delta }
+    );
+    // `Number(null)` is 0, and this value is handed to the Money screen as the
+    // account's new balance — so a failed RPC would have displayed the account
+    // at $0.00. Leave it undefined instead and let the screen keep what it has.
+    const settledBalance =
+      balanceError || updatedBalance === null || updatedBalance === undefined
+        ? undefined
+        : Number(updatedBalance);
+    // NOT an error return. By this point the transactions are written and the
+    // receipt is approved, so "something went wrong saving this receipt" would
+    // be false, would leave the dialog open, and a second tap would answer
+    // "already approved" — two contradictory messages and a dead end. The
+    // balance is the only thing that didn't move, so say exactly that.
+    const balanceWarning =
+      settledBalance === undefined
+        ? "Saved — but the account balance didn't update. Check it on the Money screen."
+        : undefined;
+
+    await applyShoppingCrossCheck(supabase, user.id, items, {
+      merchant: input.merchant,
+      txnDate: input.txnDate,
+      receiptId: input.id,
+    });
+
+    await supabase
+      .from("receipts")
+      .update({ line_items: items, merchant_guess: input.merchant, txn_date_guess: input.txnDate })
+      .eq("id", input.id)
+      .eq("user_id", user.id);
+
+    committed = true;
+    revalidatePath("/money");
+    revalidatePath("/shopping");
+    revalidatePath("/today");
+    return {
+      transactions: insertedTransactions,
+      updatedAccountBalanceCents: settledBalance,
+      warning: balanceWarning,
+    };
+  } finally {
+    if (!committed) await releaseClaim();
   }
-
-  const delta = balanceDeltaCents(totalCents, false, account.type as AccountType);
-  const updatedBalance = (account.current_balance_cents as number) + delta;
-  await supabase.from("accounts").update({ current_balance_cents: updatedBalance }).eq("id", account.id);
-
-  await applyShoppingCrossCheck(supabase, user.id, items, {
-    merchant: input.merchant,
-    txnDate: input.txnDate,
-    receiptId: input.id,
-  });
-
-  await supabase
-    .from("receipts")
-    .update({ status: "approved", line_items: items, merchant_guess: input.merchant, txn_date_guess: input.txnDate })
-    .eq("id", input.id)
-    .eq("user_id", user.id);
-
-  revalidatePath("/money");
-  revalidatePath("/shopping");
-  revalidatePath("/today");
-  return {
-    transactions: insertedTransactions,
-    updatedAccountBalanceCents: updatedBalance,
-  };
 }

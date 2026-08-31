@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Plus,
+  Sparkles,
   ListChecks,
   Wallet,
   ShoppingCart,
@@ -37,7 +38,17 @@ import type { ModuleAccess, ModuleId } from "@/lib/permissions";
  */
 
 interface QuickAddTarget {
-  id: ModuleId | "always";
+  /**
+   * The module that gates this entry.
+   *
+   * Was `ModuleId | "always"`, and nothing ever used `"always"` — it only
+   * forced an `as ModuleId` cast on the filter below. The Assistant looked
+   * like the case for it, but it is gated too (see ROUTE_MODULE_ALIASES in
+   * lib/permissions.ts, where /assistant maps to `tasks`), and an entry that
+   * appears and then bounces you to /today is worse than no entry.
+   * KEEP THIS IN STEP with that alias list.
+   */
+  id: ModuleId;
   label: string;
   hint: string;
   href: string;
@@ -45,6 +56,18 @@ interface QuickAddTarget {
 }
 
 const TARGETS: QuickAddTarget[] = [
+  {
+    // FIRST, deliberately. Alan's words on trying to find it: "how the fuck do
+    // I access the ai". It was three taps down behind the More menu — the
+    // feature he was most vocal about wanting, in the least reachable place in
+    // the app. This is the + he already sees on every screen, and the comment
+    // at the top of this file always said free-text capture belonged here.
+    id: "tasks",
+    label: "Ask or tell it anything",
+    hint: "Type or talk — it can log, add and change things",
+    href: "/assistant",
+    icon: Sparkles,
+  },
   {
     id: "tasks",
     // Reminders used to be a separate entry here. They're a setting on a task
@@ -82,9 +105,7 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
 
-  const targets = TARGETS.filter(
-    (t) => t.id === "always" || moduleAccess[t.id as ModuleId]
-  );
+  const targets = TARGETS.filter((t) => moduleAccess[t.id]);
 
   // An account with access to nothing that can be created from here shouldn't
   // see the control at all.
@@ -101,7 +122,7 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Add something"
-        className="press-hard fixed right-4 bottom-24 z-40 flex size-14 items-center justify-center border-2 border-rule bg-primary text-primary-foreground md:bottom-8"
+        className="press-hard tap-target fixed right-4 bottom-24 z-40 flex size-14 items-center justify-center border-2 border-rule bg-primary text-primary-foreground md:bottom-8"
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
       >
         <Plus className="size-6" strokeWidth={3} />

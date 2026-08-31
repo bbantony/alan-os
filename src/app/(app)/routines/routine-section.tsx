@@ -46,7 +46,23 @@ export function RoutineSection({
             : r
         )
       );
-      await uncompleteRoutineToday({ routineId: routine.id });
+      const undone = await uncompleteRoutineToday({ routineId: routine.id });
+      if (undone.error) {
+        setRoutines((prev) =>
+          prev.map((r) =>
+            r.id === routine.id
+              ? { ...r, completedToday: routine.completedToday, streak: routine.streak }
+              : r
+          )
+        );
+        toast.error(undone.error);
+        return;
+      }
+      // The optimistic "minus one" above is a guess, and it is wrong whenever
+      // the streak spans a forgiven miss. Settle on the server's number.
+      setRoutines((prev) =>
+        prev.map((r) => (r.id === routine.id ? { ...r, streak: undone.streak } : r))
+      );
       return;
     }
     const stepIds = routine.steps.map((s) => s.id);
@@ -64,9 +80,22 @@ export function RoutineSection({
           : r
       )
     );
-    const { streak } = await completeRoutineToday({ routineId: routine.id, stepsDone: stepIds });
-    setRoutines((prev) => prev.map((r) => (r.id === routine.id ? { ...r, streak } : r)));
-    toast.success(`"${routine.title}" done — ${streak.current} day streak`);
+    const result = await completeRoutineToday({ routineId: routine.id, stepsDone: stepIds });
+    // Roll the optimistic tick back. Without this a failed save left the
+    // routine looking done — and the streak incremented — until a reload.
+    if (result.error) {
+      setRoutines((prev) =>
+        prev.map((r) =>
+          r.id === routine.id
+            ? { ...r, completedToday: routine.completedToday, streak: routine.streak }
+            : r
+        )
+      );
+      toast.error(result.error);
+      return;
+    }
+    setRoutines((prev) => prev.map((r) => (r.id === routine.id ? { ...r, streak: result.streak } : r)));
+    toast.success(`"${routine.title}" done — ${result.streak.current} day streak`);
   }
 
   function handleSuggestionAccept(title: string) {
@@ -118,7 +147,7 @@ export function RoutineSection({
               onClick={() => setExpanded((v) => !v)}
               disabled={routines.length === 0}
               aria-expanded={expanded}
-              className="tap-press flex items-center gap-1.5 disabled:cursor-default"
+              className="tap-press tap-target flex items-center gap-1.5 disabled:cursor-default"
             >
               {routines.length > 0 &&
                 (expanded ? (
@@ -138,7 +167,7 @@ export function RoutineSection({
                 setCreating(true);
               }}
               aria-label="Add routine"
-              className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+              className="tap-press tap-reach flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
             >
               <Plus className="size-4" strokeWidth={3} />
             </button>
@@ -347,18 +376,35 @@ function ChecklistDialog({
   async function handleSave() {
     setSaving(true);
     const stepsDone = [...checked];
-    const { streak } = await completeRoutineToday({ routineId: routine.id, stepsDone });
+
+    // Nothing ticked means NOT done. This used to call completeRoutineToday
+    // regardless, so the database recorded the routine as complete and
+    // extended the streak while the screen showed it as not done — and on the
+    // next load it came back complete with 0 of N steps.
+    if (stepsDone.length === 0) {
+      const result = await uncompleteRoutineToday({ routineId: routine.id });
+      setSaving(false);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      onSaved({ ...routine, streak: result.streak, completedToday: null });
+      return;
+    }
+
+    const result = await completeRoutineToday({ routineId: routine.id, stepsDone });
     setSaving(false);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
     onSaved({
       ...routine,
-      streak,
-      completedToday:
-        stepsDone.length > 0
-          ? {
-              id: "", routine_id: routine.id, user_id: "", completed_date: "",
-              steps_done: stepsDone, completed_at: "",
-            }
-          : null,
+      streak: result.streak,
+      completedToday: {
+        id: "", routine_id: routine.id, user_id: "", completed_date: "",
+        steps_done: stepsDone, completed_at: "",
+      },
     });
   }
 

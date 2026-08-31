@@ -8,6 +8,15 @@ import { MECHANICAL } from "@/lib/motion";
 export interface SegmentedOption<T extends string> {
   value: T;
   label: string;
+  /**
+   * Greyed out and unselectable, rather than hidden.
+   *
+   * Added for "Moved" on the money logger, which is meaningless with only one
+   * account. Hiding it would make the control silently change shape depending
+   * on data; showing it disabled says the option exists and why it isn't
+   * available yet.
+   */
+  disabled?: boolean;
 }
 
 // The app's one tab bar / segmented input, used as a page tab bar (Money,
@@ -48,11 +57,13 @@ export function Segmented<T extends string>({
             type="button"
             role="tab"
             aria-selected={active}
+            disabled={option.disabled}
             onClick={() => onChange(option.value)}
             className={cn(
               "relative min-h-9 px-2 py-2 text-center transition-colors duration-100",
               "micro-sm",
               i > 0 && "border-l border-hairline",
+              option.disabled && "cursor-not-allowed opacity-40",
               active ? "text-background" : "text-muted-foreground hover:text-foreground"
             )}
           >

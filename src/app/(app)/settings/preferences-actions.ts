@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { resolvePreferences, type Preferences } from "@/lib/preferences";
+import { friendlyDbError } from "@/lib/db-errors";
 
 // The one way settings get written.
 //
@@ -69,7 +70,7 @@ export async function updatePreferences(
     .from("profiles")
     .update({ preferences: resolved })
     .eq("id", user.id);
-  if (error) return { preferences: resolved, error: error.message };
+  if (error) return { preferences: resolved, error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   // Preferences change how nearly every screen behaves, so everything that
   // reads them needs re-rendering.
@@ -89,7 +90,7 @@ export async function updateProfileBasics(input: {
   if (Object.keys(patch).length === 0) return {};
 
   const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   revalidatePath("/", "layout");
   return {};

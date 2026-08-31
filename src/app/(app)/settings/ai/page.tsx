@@ -59,20 +59,53 @@ export default async function AiSettingsPage() {
         </Panel>
       )}
 
+      {/* The meter failing is not the same as having spent nothing. Alan chose
+          "carry on" over "stop the AI" when this was put to him, so nothing is
+          switched off — but he is told, because carrying on with an unknown
+          spend and a number on screen that looks fine is the one outcome he
+          would not have chosen. */}
+      {usage.meterUnavailable && (
+        <Panel tone="raised">
+          <PanelHead title="Can't read this month's spending" />
+          <div className="flex flex-col gap-2 px-3 py-3 text-sm">
+            <p>
+              The figure below is <strong>not the real number</strong> — the app couldn&rsquo;t
+              look up what you&rsquo;ve spent, so it&rsquo;s showing zero.
+            </p>
+            <p>
+              The AI is still working, which is what you asked for. But the monthly
+              ceiling isn&rsquo;t being enforced while this says so, so keep an eye on
+              your Google AI Studio billing page until it clears.
+            </p>
+            <p className="text-muted-foreground">
+              Most likely cause: the latest database update hasn&rsquo;t been applied yet.
+            </p>
+          </div>
+        </Panel>
+      )}
+
       <AiPreferences initial={preferences} />
 
       <StatStrip columns={2}>
         <Stat
           label="This month"
-          value={formatMicros(usage.spentMicros)}
-          sub={`across ${usage.calls} request${usage.calls === 1 ? "" : "s"}`}
-          tone={usage.overBudget ? "alert" : "default"}
-          meter={Math.min(1, usage.spentMicros / usage.budgetMicros)}
+          value={usage.meterUnavailable ? "—" : formatMicros(usage.spentMicros)}
+          sub={
+            usage.meterUnavailable
+              ? "couldn't be read"
+              : `across ${usage.calls} request${usage.calls === 1 ? "" : "s"}`
+          }
+          tone={usage.meterUnavailable || usage.overBudget ? "alert" : "default"}
+          meter={usage.meterUnavailable ? undefined : Math.min(1, usage.spentMicros / usage.budgetMicros)}
         />
         <Stat
           label="Monthly ceiling"
           value={formatMicros(usage.budgetMicros)}
-          sub="hard stop — nothing can spend past it"
+          sub={
+            usage.meterUnavailable
+              ? "not being enforced right now"
+              : "hard stop — nothing can spend past it"
+          }
         />
       </StatStrip>
 

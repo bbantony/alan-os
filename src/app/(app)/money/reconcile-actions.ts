@@ -11,6 +11,7 @@ import {
   type AppTxn,
 } from "@/lib/finance/reconcile";
 import type { AccountType, Category } from "@/lib/finance/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -163,13 +164,18 @@ export async function addMissingTransaction(input: {
     })
     .select("id, txn_date, amount_cents, merchant, category_id")
     .single();
-  if (error || !data) return { error: error?.message ?? "Couldn't add that." };
+  if (error || !data) return { error: friendlyDbError(error) ?? "Couldn't add that." };
 
   const delta = balanceDeltaCents(input.amountCents, input.isIncome, account.type as AccountType);
-  await supabase
-    .from("accounts")
-    .update({ current_balance_cents: (account.current_balance_cents as number) + delta })
-    .eq("id", account.id);
+  // Atomic — see migration 0035. This is the "Add it" button in the reconcile
+  // flow, which is the most double-tappable control in the module.
+  const { error: balanceError } = await supabase.rpc("adjust_account_balance", {
+    p_account_id: account.id,
+    p_delta_cents: delta,
+  });
+  if (balanceError) {
+    return { error: "Added, but the account balance didn't update. Check it on the Money screen." };
+  }
 
   return { transaction: { ...data, is_income: input.isIncome } as AppTxn };
 }
@@ -254,7 +260,7 @@ export async function finishReconciliation(input: {
     })
     .select("id")
     .single();
-  if (recError || !reconciliation) return { error: recError?.message ?? "Couldn't save that." };
+  if (recError || !reconciliation) return { error: friendlyDbError(recError) ?? "Couldn't save that." };
 
   let newBalanceCents = account.current_balance_cents as number;
 
@@ -266,7 +272,12 @@ export async function finishReconciliation(input: {
     );
     if (!categoryId) return { error: "Couldn't file the adjustment." };
 
-    const { data: adjustmentTxn } = await supabase
+    // The error is CAPTURED now. It used to be discarded, so a failed insert
+    // skipped the `if` below, never touched the balance, and still returned
+    // `adjustedCents: differenceCents` — which the flow renders as "Corrected
+    // by $X. Your account balance now matches the bank." The reconciliation
+    // record then claimed a correction that did not exist.
+    const { data: adjustmentTxn, error: adjustmentError } = await supabase
       .from("transactions")
       .insert({
         user_id: user.id,
@@ -284,23 +295,38 @@ export async function finishReconciliation(input: {
       .select("id")
       .single();
 
-    if (adjustmentTxn) {
-      await supabase
-        .from("reconciliations")
-        .update({ adjustment_txn_id: adjustmentTxn.id })
-        .eq("id", reconciliation.id);
-
-      const delta = balanceDeltaCents(
-        adjustment.amountCents,
-        adjustment.isIncome,
-        account.type as AccountType
-      );
-      newBalanceCents += delta;
-      await supabase
-        .from("accounts")
-        .update({ current_balance_cents: newBalanceCents })
-        .eq("id", account.id);
+    if (adjustmentError || !adjustmentTxn) {
+      return {
+        error:
+          friendlyDbError(adjustmentError) ?? "The correction couldn't be saved, so the balance hasn't been changed.",
+      };
     }
+
+    await supabase
+      .from("reconciliations")
+      .update({ adjustment_txn_id: adjustmentTxn.id })
+      .eq("id", reconciliation.id);
+
+    const delta = balanceDeltaCents(
+      adjustment.amountCents,
+      adjustment.isIncome,
+      account.type as AccountType
+    );
+    // Atomic, like every other balance move now.
+    const { data: settled, error: settleError } = await supabase.rpc(
+      "adjust_account_balance",
+      { p_account_id: account.id, p_delta_cents: delta }
+    );
+    // Checked, because the screen above this prints "Your account balance now
+    // matches the bank" — which is exactly the lie the adjustment-insert fix
+    // was made for. Falling back to an optimistic local sum would repeat it.
+    if (settleError || settled === null || settled === undefined) {
+      return {
+        error:
+          "The correction was recorded but the account balance didn't move. Check the account on the Money screen before relying on it.",
+      };
+    }
+    newBalanceCents = Number(settled);
   }
 
   if (input.clearedTransactionIds.length > 0) {

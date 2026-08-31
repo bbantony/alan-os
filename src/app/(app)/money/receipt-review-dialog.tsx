@@ -10,6 +10,7 @@ import { Segmented } from "@/components/ui/segmented";
 import { toast } from "@/components/ui/toast";
 import { DateField } from "@/components/ui/date-field";
 import { cn } from "@/lib/utils";
+import { todayInAppTimezone } from "@/lib/time";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
 import type { Account, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
 import { approveReceipt, discardReceipt, getReceiptPhotoUrl } from "./receipt-actions";
@@ -28,10 +29,23 @@ export function ReceiptReviewDialog({
   categories: Category[];
   onClose: () => void;
   onDiscarded: (receiptId: string) => void;
-  onApproved: (receiptId: string, transactions: Transaction[], accountId: string, updatedBalanceCents: number) => void;
+  /** `updatedBalanceCents` is null when the balance move failed — the receipt
+      is still approved and the transactions still saved, so the caller should
+      leave the displayed balance alone rather than write a wrong number. */
+  onApproved: (
+    receiptId: string,
+    transactions: Transaction[],
+    accountId: string,
+    updatedBalanceCents: number | null
+  ) => void;
 }) {
   const [merchant, setMerchant] = useState(receipt.merchant_guess ?? "");
-  const [txnDate, setTxnDate] = useState(receipt.txn_date_guess ?? new Date().toISOString().slice(0, 10));
+  // todayInAppTimezone, not toISOString(): the UTC date is already TOMORROW
+  // after 6pm in Winnipeg, so an evening receipt pre-filled the wrong day and
+  // could file the spend into the wrong budget period.
+  const [txnDate, setTxnDate] = useState(
+    receipt.txn_date_guess ?? todayInAppTimezone()
+  );
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [items, setItems] = useState<ReceiptLineItem[]>(
     receipt.line_items.length > 0
@@ -116,12 +130,21 @@ export function ReceiptReviewDialog({
       splitByCategory,
     });
     setSaving(false);
-    if (result.error || !result.transactions || result.updatedAccountBalanceCents === undefined) {
+    if (result.error || !result.transactions) {
       setError(result.error ?? "Something went wrong saving this receipt.");
       return;
     }
-    toast.success("Receipt approved");
-    onApproved(receipt.id, result.transactions, accountId, result.updatedAccountBalanceCents);
+    // A missing balance is a WARNING, not a failure — the receipt IS approved
+    // and the transactions ARE saved. Treating it as a failure kept the dialog
+    // open and made a second tap answer "already approved".
+    if (result.warning) toast.warning(result.warning);
+    else toast.success("Receipt approved");
+    onApproved(
+      receipt.id,
+      result.transactions,
+      accountId,
+      result.updatedAccountBalanceCents ?? null
+    );
   }
 
   async function handleDiscard() {
@@ -220,7 +243,7 @@ export function ReceiptReviewDialog({
                   />
                   <button
                     onClick={() => removeItem(i)}
-                    className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
+                    className="tap-press tap-target shrink-0 text-muted-foreground/40 hover:text-destructive"
                     aria-label="Remove item"
                   >
                     <Trash2 className="size-3.5" />
@@ -252,7 +275,7 @@ export function ReceiptReviewDialog({
             ))}
           </ul>
 
-          <button onClick={addItem} className="tap-press flex items-center gap-1.5 text-xs font-medium text-primary">
+          <button onClick={addItem} className="tap-press tap-target flex items-center gap-1.5 text-xs font-medium text-primary">
             <Plus className="size-3.5" />
             Add item
           </button>

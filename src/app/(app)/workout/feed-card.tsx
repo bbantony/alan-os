@@ -145,7 +145,7 @@ export function FeedCard({
             type="button"
             onClick={handleDelete}
             disabled={deleting}
-            className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive disabled:opacity-50"
+            className="tap-press tap-target shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive disabled:opacity-50"
             aria-label="Delete workout"
           >
             <Trash2 className="size-4" />

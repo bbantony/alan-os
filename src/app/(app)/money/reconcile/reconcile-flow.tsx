@@ -13,7 +13,14 @@ import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { todayInAppTimezone } from "@/lib/time";
 import { formatCents, dollarsToCents } from "@/lib/finance/money";
-import { parseCsv, guessColumns, normalizeCsvDate, type ColumnGuess } from "@/lib/finance/csv-parser";
+import {
+  parseCsv,
+  guessColumns,
+  normalizeCsvDate,
+  readCsvAmount,
+  type AmountReading,
+  type ColumnGuess,
+} from "@/lib/finance/csv-parser";
 import { matchStatement, type AppTxn, type BankRow } from "@/lib/finance/reconcile";
 import type { Account, Category } from "@/lib/finance/types";
 import {
@@ -56,6 +63,20 @@ export function ReconcileFlow({
 
   // Statement CSV state.
   const [bankRows, setBankRows] = useState<BankRow[] | null>(null);
+  /** Statement rows dated after the statement date, excluded so they can't be
+      added twice. Shown, because a silently shorter statement is confusing. */
+  const [skippedAfterDate, setSkippedAfterDate] = useState(0);
+  /**
+   * Statement lines whose amount can be read two ways, held back for a
+   * decision instead of dropped. Alan: "reconcile only that, while the rest it
+   * prompts me to confirm — reconciliation is the whole purpose of this in the
+   * first place." A line missing from a reconcile leaves a difference with no
+   * explanation, which is the one thing this screen exists to prevent.
+   */
+  const [pendingRows, setPendingRows] = useState<
+    { key: string; date: string; description: string; raw: string; isIncome: boolean; readings: AmountReading[] }[]
+  >([]);
+  const [unreadableCount, setUnreadableCount] = useState(0);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvRows, setCsvRows] = useState<string[][]>([]);
   const [mapping, setMapping] = useState<ColumnGuess | null>(null);
@@ -130,43 +151,82 @@ export function ReconcileFlow({
     if (!mapping) return;
     const useDebitCredit = mapping.amountCol === null && mapping.debitCol !== null;
     const rows: BankRow[] = [];
+    const ask: typeof pendingRows = [];
+    let unreadable = 0;
+    // Counted, not silently dropped — the app-side equivalent already tells
+    // you how many of YOUR transactions fall after the statement date, and
+    // statement rows are evidence too.
+    let skippedAfterDate = 0;
 
     for (const [i, row] of csvRows.entries()) {
       const date = normalizeCsvDate(row[mapping.dateCol] ?? "");
       const description = (row[mapping.descriptionCol] ?? "").trim();
       if (!date) continue;
 
-      let amountCents: number | null = null;
-      let isIncome = false;
+      let raw = "";
+      let forcedDirection: boolean | null = null;
       if (useDebitCredit) {
         const debit = mapping.debitCol !== null ? (row[mapping.debitCol] ?? "").trim() : "";
         const credit = mapping.creditCol !== null ? (row[mapping.creditCol] ?? "").trim() : "";
         if (debit) {
-          amountCents = Math.round(Math.abs(Number(debit.replace(/[^0-9.-]/g, ""))) * 100);
+          raw = debit;
+          forcedDirection = false;
         } else if (credit) {
-          amountCents = Math.round(Math.abs(Number(credit.replace(/[^0-9.-]/g, ""))) * 100);
-          isIncome = true;
+          raw = credit;
+          forcedDirection = true;
         }
       } else if (mapping.amountCol !== null) {
-        const raw = Number((row[mapping.amountCol] ?? "").replace(/[^0-9.-]/g, ""));
-        if (Number.isFinite(raw) && raw !== 0) {
-          amountCents = Math.round(Math.abs(raw) * 100);
-          // A positive number in a single "Amount" column is money in.
-          isIncome = raw > 0;
-        }
+        raw = row[mapping.amountCol] ?? "";
+      }
+      if (!raw.trim()) continue;
+
+      // Statement rows dated after the statement date are excluded, because
+      // getReconcileData excludes app transactions after it too — without
+      // this they showed up as "on the statement, not in the app" and one tap
+      // on "Add it" wrote a real duplicate.
+      if (date > statementDate) {
+        skippedAfterDate += 1;
+        continue;
       }
 
-      if (!amountCents || amountCents <= 0) continue;
-      rows.push({ key: `${i}`, date, description, amountCents, isIncome });
+      const read = readCsvAmount(raw);
+      if (read.kind === "ok") {
+        rows.push({
+          key: `${i}`,
+          date,
+          description,
+          amountCents: read.cents,
+          isIncome: forcedDirection ?? read.isIncome,
+        });
+      } else if (read.kind === "ambiguous") {
+        ask.push({
+          key: `${i}`,
+          date,
+          description,
+          raw: raw.trim(),
+          isIncome: forcedDirection ?? read.isIncome,
+          readings: read.readings,
+        });
+      } else {
+        unreadable += 1;
+      }
     }
 
-    if (rows.length === 0) {
+    setPendingRows(ask);
+    setUnreadableCount(unreadable);
+
+    if (rows.length === 0 && ask.length === 0) {
       setError("Couldn't read any amounts — check which columns are which above.");
       return;
     }
     setBankRows(rows);
     setError(null);
-    toast.success(`${rows.length} lines read from the statement`);
+    setSkippedAfterDate(skippedAfterDate);
+    toast.success(
+      ask.length > 0
+        ? `${rows.length} lines read — ${ask.length} need a decision`
+        : `${rows.length} lines read from the statement`
+    );
   }
 
   // ---------------- Step 2 ----------------
@@ -440,6 +500,91 @@ export function ReconcileFlow({
             {data.countAfterDate} transaction{data.countAfterDate === 1 ? " is" : "s are"} dated
             after {statementDate} and {data.countAfterDate === 1 ? "isn't" : "aren't"} counted
             here — they belong to next month&rsquo;s statement.
+          </Micro>
+        </p>
+      )}
+
+      {/* Lines the parser can read two ways. Held back rather than dropped —
+          a statement line missing from a reconcile leaves a difference with no
+          explanation, which is the one thing this screen exists to prevent. */}
+      {pendingRows.length > 0 && (
+        <Panel tone="raised">
+          <PanelHead
+            title="Need a decision"
+            count={pendingRows.length}
+          />
+          <p className="border-b border-hairline px-3 py-2 text-xs text-muted-foreground">
+            Your bank wrote these amounts in a way that could mean two different numbers.
+            Pick the real one and the line joins the statement; skip it and it stays out.
+          </p>
+          <ul>
+            {pendingRows.map((row, i) => (
+              <li key={row.key} className={cn("px-3 py-2.5", i > 0 && "border-t border-hairline")}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                    {row.description || "(no description)"}
+                  </span>
+                  <Micro>{row.date}</Micro>
+                </div>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  file says: {row.raw} · {row.isIncome ? "money in" : "money out"}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {row.readings.map((reading) => (
+                    <button
+                      key={reading.cents}
+                      type="button"
+                      onClick={() => {
+                        setBankRows((prev) => [
+                          ...(prev ?? []),
+                          {
+                            key: row.key,
+                            date: row.date,
+                            description: row.description,
+                            amountCents: reading.cents,
+                            isIncome: row.isIncome,
+                          },
+                        ]);
+                        setPendingRows((prev) => prev.filter((r) => r.key !== row.key));
+                      }}
+                      className="tap-press border-2 border-rule bg-surface px-3 py-2 text-sm font-semibold tabular transition-colors hover:bg-muted"
+                    >
+                      ${reading.label}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setPendingRows((prev) => prev.filter((r) => r.key !== row.key))}
+                    className="tap-press border-2 border-hairline px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
+                  >
+                    Leave it out
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
+
+      {unreadableCount > 0 && (
+        <p className="hatch border-2 border-rule px-3 py-2">
+          <Micro>
+            {unreadableCount} line{unreadableCount === 1 ? "" : "s"} in your file had no
+            readable amount at all and {unreadableCount === 1 ? "was" : "were"} left out.
+          </Micro>
+        </p>
+      )}
+
+      {/* The mirror image of the message above, for the STATEMENT side. These
+          rows used to be dropped in silence, which made the file look shorter
+          than it was and the difference harder to explain. */}
+      {skippedAfterDate > 0 && (
+        <p className="hatch border-2 border-rule px-3 py-2">
+          <Micro>
+            {skippedAfterDate} row{skippedAfterDate === 1 ? "" : "s"} in your file{" "}
+            {skippedAfterDate === 1 ? "is" : "are"} dated after {statementDate} and{" "}
+            {skippedAfterDate === 1 ? "was" : "were"} left out — they belong to next
+            month&rsquo;s statement.
           </Micro>
         </p>
       )}

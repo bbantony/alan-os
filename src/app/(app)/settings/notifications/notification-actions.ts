@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -68,7 +69,7 @@ export async function revokePushDevice(input: { id: string }): Promise<{ error?:
     .delete()
     .eq("id", input.id)
     .eq("user_id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   revalidatePath("/settings/notifications");
   return {};
 }

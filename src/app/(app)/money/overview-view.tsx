@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Pencil, Plus, Scale, Send, Trash2, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
@@ -101,12 +102,22 @@ export function OverviewView({
     toast.success(`${account.name} deleted`);
   }
 
+  const router = useRouter();
+
   async function handleDeleteTransaction() {
     if (!confirmingTransaction) return;
     const id = confirmingTransaction.id;
     setConfirmingTransaction(null);
     onTransactionDeleted(id);
-    await deleteTransaction({ id });
+    // deleteTransaction returns { error } now. Discarding it meant the row
+    // vanished and "Transaction deleted" appeared whether or not anything
+    // happened — including when the balance reversal failed.
+    const result = await deleteTransaction({ id });
+    if (result?.error) {
+      toast.error(result.error);
+      router.refresh();
+      return;
+    }
     toast.success("Transaction deleted");
   }
 
@@ -178,7 +189,7 @@ export function OverviewView({
                 type="button"
                 onClick={() => setShowAccountForm(true)}
                 aria-label="Add account"
-                className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+                className="tap-press tap-reach flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
               >
                 <Plus className="size-4" strokeWidth={3} />
               </button>
@@ -226,7 +237,7 @@ export function OverviewView({
                           type="button"
                           onClick={() => setEditingAccount(a)}
                           aria-label={`Edit ${a.name}`}
-                          className="tap-press text-muted-foreground/60 transition-colors hover:text-foreground"
+                          className="tap-press tap-target text-muted-foreground/60 transition-colors hover:text-foreground"
                         >
                           <Pencil className="size-4" />
                         </button>
@@ -234,7 +245,7 @@ export function OverviewView({
                           type="button"
                           onClick={() => askToDeleteAccount(a)}
                           aria-label={`Delete ${a.name}`}
-                          className="tap-press text-muted-foreground/60 transition-colors hover:text-destructive"
+                          className="tap-press tap-target text-muted-foreground/60 transition-colors hover:text-destructive"
                         >
                           <Trash2 className="size-4" />
                         </button>
@@ -402,7 +413,7 @@ export function OverviewView({
                   <button
                     type="button"
                     onClick={() => setConfirmingTransaction(t)}
-                    className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+                    className="tap-press tap-target shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
                     aria-label="Delete transaction"
                   >
                     <Trash2 className="size-4" />
@@ -492,11 +503,15 @@ export function OverviewView({
           }}
           onApproved={(receiptId, transactions, accountId, updatedBalanceCents) => {
             onReceiptsChanged((prev) => prev.filter((r) => r.id !== receiptId));
-            onAccountsChanged((prev) =>
-              prev.map((a) =>
-                a.id === accountId ? { ...a, current_balance_cents: updatedBalanceCents } : a
-              )
-            );
+            // Null means the balance move failed; keep what's on screen rather
+            // than writing a number we know is wrong.
+            if (updatedBalanceCents !== null) {
+              onAccountsChanged((prev) =>
+                prev.map((a) =>
+                  a.id === accountId ? { ...a, current_balance_cents: updatedBalanceCents } : a
+                )
+              );
+            }
             onTransactionsAdded(transactions);
             setReviewingReceipt(null);
           }}

@@ -17,6 +17,10 @@ import { recordUsage, withinBudget } from "./usage";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
+// Long enough for a deep call with thinking, short enough that a hung request
+// cannot hold a page render open. See the fetch below.
+const REQUEST_TIMEOUT_MS = 30_000;
+
 export function isAiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
@@ -118,10 +122,20 @@ async function rawCall(params: RawCallParams, apiKey: string): Promise<RawCallRe
   }
 
   try {
-    const res = await fetch(`${API_BASE}/${spec.id}:generateContent?key=${apiKey}`, {
+    // The key goes in a HEADER, never the query string. As `?key=` it was
+    // written into every proxy and platform access log that records URLs.
+    //
+    // The timeout is the other half: there was none, so a hung Google request
+    // held the caller until the platform gave up 300s later — and the Today
+    // page awaits one of these during render, which meant a blank screen.
+    const res = await fetch(`${API_BASE}/${spec.id}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) {
       // Logged, not swallowed. Every caller treats null as "let the person do
@@ -195,7 +209,16 @@ async function rawCall(params: RawCallParams, apiKey: string): Promise<RawCallRe
       inputTokens,
       outputTokens,
     };
-  } catch {
+  } catch (error) {
+    // Logged, not silently swallowed. The HTTP branch above already explains
+    // why: a dead model and a feature that was never switched on look
+    // identical from the outside, and this branch is where a timeout or a
+    // network failure lands.
+    console.error(
+      `[ai] ${params.feature} ${spec.id} failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
     return null;
   }
 }

@@ -7,6 +7,7 @@ import { todayInAppTimezone } from "@/lib/time";
 import { goalPace } from "@/lib/finance/goal-pace";
 import { firstOccurrenceOnOrAfter } from "@/lib/finance/recurring";
 import type { RecurrenceFrequency } from "@/lib/finance/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -145,7 +146,7 @@ export async function setUpGoalHabit(input: {
     next_date: firstOccurrenceOnOrAfter(input.frequency, today, today),
     auto_post: true,
   });
-  if (recurringError) return { error: recurringError.message };
+  if (recurringError) return { error: friendlyDbError(recurringError) ?? "That didn't save. Try again." };
 
   if (input.addRoutine) {
     const { data: routine } = await supabase

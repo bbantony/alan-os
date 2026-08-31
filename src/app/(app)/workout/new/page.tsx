@@ -8,6 +8,7 @@ import {
   getWeightUnit,
 } from "../actions";
 import { getDraft } from "../personal-actions";
+import { getPreferences } from "@/app/(app)/settings/preferences-actions";
 import { NewWorkoutForm } from "./new-workout-form";
 
 /**
@@ -21,7 +22,7 @@ export default async function NewWorkoutPage({
 }: {
   searchParams: Promise<{ repeat?: string; template?: string; muscle?: string }>;
 }) {
-  const [params, exercises, recentExerciseIds, templates, weightUnit, lastSession, draft] =
+  const [params, exercises, recentExerciseIds, templates, weightUnit, lastSession, draft, prefs] =
     await Promise.all([
       searchParams,
       getExercises(),
@@ -30,6 +31,7 @@ export default async function NewWorkoutPage({
       getWeightUnit(),
       getLastResistanceSession(),
       getDraft(),
+      getPreferences(),
     ]);
 
   // An unfinished session always wins: someone who left mid-workout and came
@@ -53,6 +55,7 @@ export default async function NewWorkoutPage({
       exercises={exercises}
       recentExerciseIds={recentExerciseIds}
       weightUnit={weightUnit}
+      weightIncrement={prefs.weightIncrement}
       todayDate={todayInAppTimezone()}
       initialDraft={draft}
       startExerciseIds={startExerciseIds}

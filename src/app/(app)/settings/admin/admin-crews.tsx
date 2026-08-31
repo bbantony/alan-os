@@ -83,7 +83,7 @@ export function AdminCrews({ initialCrews }: { initialCrews: AdminCrewRow[] }) {
             </span>
             <button
               onClick={() => handleDelete(crew.id)}
-              className="tap-press text-muted-foreground/40 hover:text-destructive"
+              className="tap-press tap-target text-muted-foreground/40 hover:text-destructive"
               aria-label={`Delete ${crew.name}`}
             >
               <Trash2 className="size-3.5" />

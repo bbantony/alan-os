@@ -1,7 +1,7 @@
 "use client";
 
 import { Minus, Plus, X } from "lucide-react";
-import { barWeightKg, displayWeight, smallestIncrementKg, toStoredKg } from "@/lib/workout/units";
+import { barWeightKg, displayWeight, incrementInDisplayUnit, toStoredKg } from "@/lib/workout/units";
 import type { DraftSet, EquipmentType, WeightUnit } from "@/lib/workout/types";
 
 /**
@@ -64,6 +64,7 @@ export function SetRow({
   set,
   unit,
   equipment,
+  weightIncrement,
   onChange,
   onRemove,
 }: {
@@ -71,11 +72,15 @@ export function SetRow({
   set: DraftSet;
   unit: WeightUnit;
   equipment: EquipmentType;
+  /** Settings → Workout, already in the display unit. Null = 2.5 lb / 1 kg. */
+  weightIncrement: number | null;
   onChange: (set: DraftSet) => void;
   onRemove: () => void;
 }) {
   const isBarbell = equipment === "barbell";
-  const increment = smallestIncrementKg(unit);
+  // In the DISPLAYED unit, because `shownWeight` below is too. This used to be
+  // smallestIncrementKg(), which is kg — so a lbs profile stepped by 1.1.
+  const increment = incrementInDisplayUnit(unit, weightIncrement);
   const bar = barWeightKg(unit);
 
   // Barbell exercises: the number the lifter actually types is what's loaded

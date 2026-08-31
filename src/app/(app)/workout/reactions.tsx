@@ -49,7 +49,7 @@ export function Reactions({
       <button
         type="button"
         onClick={() => setPicking(true)}
-        className="micro-sm tap-press flex items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground"
+        className="micro-sm tap-press tap-target flex items-center gap-1.5 text-muted-foreground/70 transition-colors hover:text-foreground"
         aria-label="React"
       >
         <SmilePlus className="size-3.5" />
@@ -91,7 +91,7 @@ export function Reactions({
           <button
             type="button"
             onClick={() => setPicking(false)}
-            className="tap-press text-muted-foreground/60 transition-colors hover:text-foreground"
+            className="tap-press tap-target text-muted-foreground/60 transition-colors hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-4" />
@@ -101,7 +101,7 @@ export function Reactions({
         <button
           type="button"
           onClick={() => setPicking(true)}
-          className="tap-press text-muted-foreground/60 transition-colors hover:text-foreground"
+          className="tap-press tap-target text-muted-foreground/60 transition-colors hover:text-foreground"
           aria-label="Add reaction"
         >
           <SmilePlus className="size-4" />

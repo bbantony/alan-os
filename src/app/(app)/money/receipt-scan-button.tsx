@@ -90,7 +90,7 @@ export function ReceiptScanButton({ onUploaded }: { onUploaded: (receipt: Receip
             <button
               type="button"
               onClick={() => cameraRef.current?.click()}
-              className="tap-press flex items-center gap-1.5 text-xs font-medium text-primary"
+              className="tap-press tap-target flex items-center gap-1.5 text-xs font-medium text-primary"
             >
               <Camera className="size-3.5" />
               Take photo
@@ -98,7 +98,7 @@ export function ReceiptScanButton({ onUploaded }: { onUploaded: (receipt: Receip
             <button
               type="button"
               onClick={() => galleryRef.current?.click()}
-              className="tap-press flex items-center gap-1.5 text-xs font-medium text-primary"
+              className="tap-press tap-target flex items-center gap-1.5 text-xs font-medium text-primary"
             >
               <Images className="size-3.5" />
               From gallery

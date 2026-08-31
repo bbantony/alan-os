@@ -84,6 +84,17 @@ export interface Preferences {
   recurringAutoPost: boolean;
   reconcileReminder: boolean;
 
+  /**
+   * Workout — how much the +/- buttons move the weight, IN THE DISPLAY UNIT
+   * (so 2.5 means 2.5 lb on a lbs profile, 2.5 kg on a kg one).
+   *
+   * Null means "use the default for the unit" — 2.5 lb or 1 kg. It is stored in
+   * the display unit rather than kg on purpose: this is the number Alan thinks
+   * in when he looks at the plates on the bar, and storing it converted is what
+   * produced the 1.1 lb stepper this setting exists to replace.
+   */
+  weightIncrement: number | null;
+
   // AI
   aiMonthlyBudgetMicros: number;
   aiBoldness: AiBoldness;
@@ -126,6 +137,9 @@ export const DEFAULT_PREFERENCES: Preferences = {
   paydayAnchorDay: null,
   recurringAutoPost: true,
   reconcileReminder: true,
+
+  // Null = 2.5 lb / 1 kg, matching what the steppers were always meant to do.
+  weightIncrement: null,
 
   // $5 — what `MONTHLY_BUDGET_MICROS` hardcoded.
   aiMonthlyBudgetMicros: 5_000_000,
@@ -228,6 +242,16 @@ export function resolvePreferences(raw: unknown): Preferences {
         : num(p.paydayAnchorDay, 1, 1, 31),
     recurringAutoPost: bool(p.recurringAutoPost, d.recurringAutoPost),
     reconcileReminder: bool(p.reconcileReminder, d.reconcileReminder),
+
+    // Not clamped through `num`, which rounds to whole numbers — 2.5 is the
+    // single most likely value here. Bounded to something a plate could
+    // plausibly be so a stray keystroke can't make the buttons useless.
+    weightIncrement:
+      typeof p.weightIncrement === "number" &&
+      Number.isFinite(p.weightIncrement) &&
+      p.weightIncrement > 0
+        ? Math.min(50, Math.max(0.1, Math.round(p.weightIncrement * 100) / 100))
+        : null,
 
     // Floor of 50 cents: a cap low enough to block everything would look like
     // the AI features are broken rather than switched off.

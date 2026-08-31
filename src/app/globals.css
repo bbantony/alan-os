@@ -328,7 +328,18 @@
 :root[data-font-size="md"] { --font-scale: 1; }
 :root[data-font-size="lg"] { --font-scale: 1.0625; }
 
-:root[data-density="compact"] { --density-scale: 0.8; }
+/* THE SPACING SETTING ACTUALLY DOES SOMETHING NOW.
+   `--density-scale` was declared here and read by NOTHING — three occurrences
+   in the whole codebase, all of them definitions. Compact and Comfortable both
+   saved to the account and changed the screen in no way at all.
+   It is wired into Tailwind's `--spacing` in the @theme block below, which is
+   the base unit every p-*, gap-*, m-* and size-* utility multiplies.
+
+   0.875, not the old 0.8. The scale drives control SIZES as well as padding,
+   so an aggressive value shrinks tap targets — and undersized tap targets are
+   already a finding in their own right. A tighter screen must not become a
+   harder one to hit. */
+:root[data-density="compact"] { --density-scale: 0.875; }
 :root[data-density="comfortable"] { --density-scale: 1; }
 
 :root { --font-heading: var(--font-archivo); }
@@ -356,6 +367,11 @@
 }
 
 @theme inline {
+  /* Tailwind v4 derives the whole spacing scale from this one value: `p-3` is
+     calc(var(--spacing) * 3). Pointing it at the density token is what makes
+     Settings -> Appearance -> Spacing real, everywhere, in one line. */
+  --spacing: calc(0.25rem * var(--density-scale));
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
@@ -483,44 +499,58 @@ h1, h2, h3, h4, h5, h6 {
 
 .tabular { font-variant-numeric: tabular-nums; }
 
+/* ---------------------------------------------------------------------------
+   TAP TARGETS
+
+   A bare 16px icon with no padding is a ~16px target. On a phone that is a
+   coin toss, and the audit found FORTY-NINE of them — most of them delete
+   buttons sitting a few pixels from another control.
+
+   Padding grows the hit area; the matching negative margin pulls the layout
+   back, so nothing moves on screen. Vertical is larger than horizontal
+   because these sit in rows that already have the height to give, while
+   horizontal space between two adjacent icons does not — expanding sideways
+   as far would make neighbouring targets overlap and hand taps to the wrong
+   one, which is worse than a small target.
+
+   NOT scaled by --density-scale, deliberately: an accessibility floor that
+   shrinks when you pick a denser layout is not a floor. */
+.tap-target {
+  padding: 0.75rem 0.5rem;
+  margin: -0.75rem -0.5rem;
+}
+
+/* The same job for a control that has a VISIBLE box — a bordered 28px square
+   button. Padding would work but the hover fill would spill past the border
+   and look like a rendering bug, so the reach is an invisible pseudo-element
+   instead: nothing is painted, only hit-tested.
+
+   Vertical only, on purpose. These sit side by side in rows (edit next to
+   delete), and widening both would make their reaches overlap and hand taps
+   to whichever is later in the DOM — a confidently wrong target is worse than
+   a small one. Rows have height to give; the gap between two icons does not. */
+.tap-reach { position: relative; }
+.tap-reach::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2.75rem;
+  transform: translateY(-50%);
+}
+
 /* ===========================================================================
    STRUCTURAL PRIMITIVES
    =========================================================================== */
 
-/* The standard framed container. Everything that is "a thing" on a screen is
-   a .panel — no shadow, no radius, just a decisive edge. */
-.panel {
-  background: var(--surface);
-  border: var(--rule-w) solid var(--rule);
-}
-
-/* A panel that is genuinely above the page (dialog, menu, pressed control). */
-.panel-raised {
-  background: var(--surface);
-  border: var(--rule-w) solid var(--rule);
-  box-shadow: var(--shadow-hard-md);
-}
-
-/* The inverted emphasis block: ink ground, paper text. Reserved for the one
-   most important figure on a screen. Used more than once per screen it stops
-   meaning anything. */
-.panel-invert {
-  background: var(--foreground);
-  color: var(--background);
-  border: var(--rule-w) solid var(--rule);
-}
-.panel-invert .micro,
-.panel-invert .micro-sm { color: color-mix(in oklab, var(--background), transparent 42%); }
-
-/* Row separators inside an already-framed panel. */
-.hair-t { border-top: var(--hairline-w) solid var(--hairline); }
-.hair-b { border-bottom: var(--hairline-w) solid var(--hairline); }
-
-/* Structural divisions between major regions. */
-.rule-t { border-top: var(--rule-w) solid var(--rule); }
-.rule-b { border-bottom: var(--rule-w) solid var(--rule); }
-.rule-l { border-left: var(--rule-w) solid var(--rule); }
-.rule-r { border-right: var(--rule-w) solid var(--rule); }
+/* The structural primitives that used to live here — .panel, .panel-raised,
+   .panel-invert, .hair-t/.hair-b and .rule-t/b/l/r — were removed on
+   26 Aug 2026. They described the design language correctly but were
+   superseded by the `Panel` component and its `tone` prop, and were used by
+   exactly nothing: nine classes, zero references across every .tsx in the app.
+   The language they described is still the language; it just lives in
+   components/ui/panel.tsx now. */
 
 /* ===========================================================================
    INTERACTION
@@ -645,12 +675,6 @@ h1, h2, h3, h4, h5, h6 {
    region reads as deliberately empty rather than unfinished.
    =========================================================================== */
 
-.grid-field {
-  background-image:
-    linear-gradient(to right, var(--hairline) var(--hairline-w), transparent var(--hairline-w)),
-    linear-gradient(to bottom, var(--hairline) var(--hairline-w), transparent var(--hairline-w));
-  background-size: 14px 14px;
-}
 
 .hatch {
   background-image: repeating-linear-gradient(

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { motion } from "framer-motion";
-import { ArrowUp, Sparkles } from "lucide-react";
+import { ArrowUp, Mic, Sparkles, Square } from "lucide-react";
 import { Panel, PanelEmpty } from "@/components/ui/panel";
 import { Micro } from "@/components/ui/tag";
 import { cn } from "@/lib/utils";
@@ -10,17 +10,23 @@ import { fadeInUpVariants } from "@/lib/motion";
 import type { AssistantMessage } from "@/lib/ai/assistant";
 import type { UsageSummary } from "@/lib/ai/usage";
 import type { ModuleAccess } from "@/lib/permissions";
+import { speechSupported, startDictation, type Dictation } from "@/lib/speech";
 import { ask } from "./actions";
 
 /** Openers that show what it's for, chosen from what the account can actually see. */
 function suggestionsFor(access: ModuleAccess): string[] {
+  // Deliberately weighted towards DOING rather than asking. The assistant
+  // could always answer questions; what Alan wanted was one that changes
+  // things, and an opener list of questions taught the opposite.
   const all: { module: keyof ModuleAccess | null; text: string }[] = [
-    { module: "money", text: "What did I spend on groceries this month?" },
-    { module: "tasks", text: "What's overdue?" },
-    { module: "money", text: "Write me a summary of last month's money" },
+    { module: "workout", text: "Log bench press, 135 for 8, three sets" },
+    { module: "money", text: "Log $42 at Superstore on groceries" },
     { module: "tasks", text: "Add a task to renew my passport on the 3rd" },
     { module: "shopping", text: "Add milk and eggs to the shopping list" },
-    { module: "workout", text: "How much have I trained in the last month?" },
+    { module: "money", text: "Set my groceries budget to $600 a month" },
+    { module: "tasks", text: "Move the dentist task to next Tuesday" },
+    { module: "money", text: "What did I spend on groceries this month?" },
+    { module: "money", text: "Write me a summary of last month's money" },
   ];
   return all.filter((s) => s.module === null || access[s.module]).map((s) => s.text).slice(0, 4);
 }
@@ -42,6 +48,54 @@ export function AssistantChat({
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Dictation. Whether the browser has speech recognition is a CLIENT-ONLY
+  // fact: reading it during render would differ between the server pass and
+  // the client one and produce a hydration mismatch on the composer, and
+  // setting it from an effect is a cascading render (and a lint error).
+  // `useSyncExternalStore` is the built-in answer to exactly this — a server
+  // snapshot of false, a client snapshot of the real value, and no extra
+  // render. It never changes after load, so the subscribe function is a no-op.
+  const canDictate = useSyncExternalStore(
+    () => () => {},
+    () => speechSupported(),
+    () => false
+  );
+  const [listening, setListening] = useState(false);
+  const dictationRef = useRef<Dictation | null>(null);
+  /** What was already typed before the mic opened, so speech appends. */
+  const beforeSpeechRef = useRef("");
+
+  // Stop the microphone if the page is left mid-sentence.
+  useEffect(() => () => dictationRef.current?.stop(), []);
+
+  function toggleDictation() {
+    if (listening) {
+      dictationRef.current?.stop();
+      return;
+    }
+    beforeSpeechRef.current = input ? `${input.trim()} ` : "";
+    const session = startDictation({
+      onText: (text) => setInput(beforeSpeechRef.current + text),
+      onDone: (error) => {
+        setListening(false);
+        dictationRef.current = null;
+        if (error === "not-allowed" || error === "service-not-allowed") {
+          setNotice("Microphone access is blocked. Allow it in your browser settings to talk to it.");
+        } else if (error) {
+          setNotice("The microphone stopped working. Type it instead.");
+        }
+        inputRef.current?.focus();
+      },
+    });
+    if (!session) {
+      setNotice("Dictation isn't available in this browser. Type it instead.");
+      return;
+    }
+    dictationRef.current = session;
+    setNotice(null);
+    setListening(true);
+  }
+
   const suggestions = suggestionsFor(moduleAccess);
 
   useEffect(() => {
@@ -51,6 +105,10 @@ export function AssistantChat({
   async function send(question: string) {
     const trimmed = question.trim();
     if (!trimmed || thinking) return;
+
+    // Sending ends dictation — otherwise the mic keeps appending to a box
+    // that has already been cleared.
+    dictationRef.current?.stop();
 
     const history = messages;
     setMessages([...history, { role: "user", content: trimmed }]);
@@ -168,10 +226,33 @@ export function AssistantChat({
               }
             }}
             rows={1}
-            placeholder="Ask anything, or tell it to do something"
+            placeholder={
+              listening ? "Listening…" : "Ask anything, or tell it to do something"
+            }
             disabled={!configured || thinking}
             className="max-h-32 min-h-9 flex-1 resize-none bg-transparent px-1 py-1.5 text-base outline-none placeholder:text-muted-foreground disabled:opacity-50 md:text-sm"
           />
+          {canDictate && (
+            <button
+              type="button"
+              onClick={toggleDictation}
+              disabled={!configured || thinking}
+              aria-label={listening ? "Stop listening" : "Talk to it"}
+              aria-pressed={listening}
+              className={cn(
+                "press-hard flex size-9 shrink-0 items-center justify-center border-2 border-rule disabled:pointer-events-none disabled:opacity-40",
+                listening
+                  ? "bg-destructive text-destructive-foreground"
+                  : "bg-surface text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {listening ? (
+                <Square className="size-3.5" strokeWidth={3} />
+              ) : (
+                <Mic className="size-4" strokeWidth={2.5} />
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => send(input)}

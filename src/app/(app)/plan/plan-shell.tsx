@@ -36,6 +36,7 @@ export function PlanShell({
   initialMonth,
   gcalConnected,
   autoFocusNew,
+  timeZone,
 }: {
   initialView: View;
   tasks: Task[];
@@ -47,6 +48,8 @@ export function PlanShell({
   todayIso: string;
   initialMonth: string;
   gcalConnected: boolean;
+  /** The profile's timezone — every time on this screen renders in it. */
+  timeZone?: string;
   autoFocusNew: boolean;
 }) {
   const [view, setView] = useState<View>(initialView);
@@ -77,6 +80,7 @@ export function PlanShell({
 
       {view === "calendar" && (
         <CalendarView
+          timeZone={timeZone}
           todayIso={todayIso}
           initialItems={planItems}
           initialMonth={initialMonth}
@@ -84,7 +88,12 @@ export function PlanShell({
       )}
 
       {view === "agenda" && (
-        <AgendaView items={planItems} todayIso={todayIso} gcalConnected={gcalConnected} />
+        <AgendaView
+          items={planItems}
+          todayIso={todayIso}
+          gcalConnected={gcalConnected}
+          timeZone={timeZone}
+        />
       )}
     </div>
   );

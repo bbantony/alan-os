@@ -166,6 +166,7 @@ export default async function TodayPage() {
         bills: upcomingBills.map((b) => ({
           name: b.name,
           amountCents: b.amountCents,
+          currency: b.currency,
           daysAway: b.daysAway,
           isIncome: b.isIncome,
         })),

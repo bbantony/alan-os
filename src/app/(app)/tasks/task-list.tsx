@@ -304,7 +304,7 @@ export function TaskList({
             <button
               type="submit"
               aria-label="Add task"
-              className="tap-press flex w-12 shrink-0 items-center justify-center bg-primary text-primary-foreground transition-colors hover:brightness-95"
+              className="tap-press tap-target flex w-12 shrink-0 items-center justify-center bg-primary text-primary-foreground transition-colors hover:brightness-95"
             >
               <Plus className="size-5" strokeWidth={3} />
             </button>
@@ -440,7 +440,7 @@ export function TaskList({
                 <button
                   type="button"
                   onClick={() => handleUndoComplete(task)}
-                  className="tap-press flex size-5 shrink-0 items-center justify-center border-2 border-rule bg-foreground text-background"
+                  className="tap-press tap-target flex size-5 shrink-0 items-center justify-center border-2 border-rule bg-foreground text-background"
                   aria-label={`Mark ${task.title} not done`}
                 >
                   <Check className="size-3" strokeWidth={3} />
@@ -724,7 +724,7 @@ function TaskRow({
       <button
         type="button"
         onClick={onDelete}
-        className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+        className="tap-press tap-target shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
         aria-label={`Delete ${task.title}`}
       >
         <Trash2 className="size-4" />

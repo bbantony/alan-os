@@ -7,6 +7,7 @@ import { categorizeCsvRows } from "@/lib/ai/csv-categorizer";
 import { findBestMatch } from "@/lib/finance/fuzzy-match";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import type { AccountType, Category } from "@/lib/finance/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -166,16 +167,23 @@ export async function importCsvTransactions(input: {
     source: "csv",
   }));
   const { error } = await supabase.from("transactions").insert(inserts);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   const totalDelta = input.rows.reduce(
     (sum, r) => sum + balanceDeltaCents(r.amountCents, r.isIncome, account.type as AccountType),
     0
   );
-  await supabase
-    .from("accounts")
-    .update({ current_balance_cents: (account.current_balance_cents as number) + totalDelta })
-    .eq("id", account.id);
+  // Atomic — see migration 0035. An import moves the balance by the sum of
+  // every row at once, so losing this to a concurrent write is expensive.
+  const { error: balanceError } = await supabase.rpc("adjust_account_balance", {
+    p_account_id: account.id,
+    p_delta_cents: totalDelta,
+  });
+  if (balanceError) {
+    return {
+      error: "The transactions imported, but the account balance didn't update. Check it on the Money screen.",
+    };
+  }
 
   revalidatePath("/money");
   revalidatePath("/today");

@@ -4,6 +4,7 @@ import { extForMimeType } from "@/lib/mime";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -52,7 +53,7 @@ export async function uploadAvatar(formData: FormData): Promise<{ url?: string; 
     .from("profiles")
     .update({ avatar_url: publicUrl.publicUrl })
     .eq("id", user.id);
-  if (saveError) return { error: saveError.message };
+  if (saveError) return { error: friendlyDbError(saveError) ?? "That didn't save. Try again." };
 
   // Tidy up the one it replaced, so the bucket doesn't accumulate every photo
   // you've ever set. Best-effort: a failure here costs storage, not correctness.
@@ -75,7 +76,7 @@ export async function uploadAvatar(formData: FormData): Promise<{ url?: string; 
 export async function removeAvatar(): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   revalidatePath("/", "layout");
   return {};
 }

@@ -1,5 +1,7 @@
 "use client";
 
+import { MotionConfig } from "framer-motion";
+
 import {
   createContext,
   useCallback,
@@ -71,7 +73,30 @@ export function ThemeProvider({
 
   const value = useMemo(() => ({ theme, setTheme }), [theme, setTheme]);
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>
+      {/*
+        THE MOTION SETTING ACTUALLY DOES SOMETHING NOW.
+
+        "Motion: Reduced" promised "page transitions, list animations,
+        everything" and delivered none of it: the only thing behind it was a
+        CSS block shortening `transition-duration` and `animation-duration`.
+        Every animation in this app is Framer Motion, which drives inline
+        styles frame by frame and ignores CSS duration entirely — so every
+        list, panel and page transition ran at full length regardless.
+
+        `MotionConfig` is the switch Framer provides for exactly this:
+          - "always" — the person asked for reduced motion in Settings;
+          - "user"   — follow the operating system's own accessibility
+                       setting, which the app was ALSO ignoring completely
+                       (there was no prefers-reduced-motion handling anywhere
+                       in src/ before this).
+      */}
+      <MotionConfig reducedMotion={theme.motion === "reduced" ? "always" : "user"}>
+        {children}
+      </MotionConfig>
+    </ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

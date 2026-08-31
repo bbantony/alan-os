@@ -1500,3 +1500,136 @@ it down the page or hide it entirely like any other panel.
 If you turned Money off for an account, its outlook can't mention money — not
 because it's been told not to, but because the money is never handed to it in the
 first place. Same for tasks, calendar, workout and shopping.
+
+## Weight steps — the +/- buttons on a set
+
+**Settings → Workout → Weight steps.**
+
+While you're logging a set there's a small **−** and **+** either side of the weight.
+This setting decides how far one tap moves it.
+
+Tap one of the presets, or **Custom** to type your own number:
+
+| If your unit is | The presets are | Default |
+| --- | --- | --- |
+| lbs | 1, 2.5, 5, 10 | **2.5** |
+| kg | 0.5, 1, 1.25, 2.5, 5 | **1** |
+
+The line underneath always tells you where you've landed — *"Now moving in steps
+of 2.5 lbs"* — and a message confirms it when you change it, because the change
+itself isn't visible from the Settings screen.
+
+**Set it to the smallest pair of plates you actually own.** If the lightest
+plates on your rack are 2.5 lb each, one tap should move the bar by 5 lb, so set
+it to 5. If you train somewhere with 1.25 kg plates, set 2.5 kg. The point is
+that every tap lands on a weight you can really load.
+
+This also feeds the suggestion the app makes when you beat your last session — if
+it thinks you're ready for more, it adds exactly one of these steps rather than
+some number you can't actually make up with plates.
+
+### Why this needed fixing
+
+The buttons used to move the weight by **1.1 lbs**, which is not a weight any
+plate combination makes.
+
+The cause was a units mix-up rather than a rounding error. The app stores every
+weight in kilograms and converts for display. Someone had written "move by 2.5
+pounds", the code correctly converted that to 1.13 kilograms — and then
+subtracted that 1.13 from a number that was still in pounds. Two different
+units, treated as if they were the same thing.
+
+Both halves are fixed: the buttons now genuinely move 2.5 lb (or whatever you
+set), and the two conversions are kept clearly apart in the code so they can't be
+swapped again.
+
+## Receipts now remember what the scan actually said
+
+When you photograph a receipt, the app reads it and fills in the shop, the date and the items. You
+then correct anything it got wrong and tap approve.
+
+Until now, your corrections were written **over** what the scan read — so the moment you approved a
+receipt, there was no record of what the app had originally seen. That mattered for one practical
+reason: it was impossible to tell whether receipt scanning was doing a good job or a bad one, which
+is the only way to judge whether it's worth the pennies it costs.
+
+The app now keeps both: what the scan said, and what you corrected it to. Nothing looks different
+day to day — this is a record kept underneath.
+
+**One thing that can't be undone.** Receipts you approved **before 26 August 2026** had their
+original scan overwritten already, and there's no way to get it back. Those receipts are perfectly
+fine and their transactions are correct — they just have no record of what the scan originally
+read. Everything from that date onward keeps both.
+
+## Talking to the assistant, and what it can now change
+
+**Assistant** (in the More menu). There's a microphone button next to the text box — tap it and
+talk, and the words appear as you say them. Tap the red square to stop, or just hit send. If you
+don't see a microphone, your browser doesn't support it; typing works the same.
+
+### It can now change things, not just answer
+
+It used to be able to add a task, tick one off, log a simple expense, and add shopping items. That
+was all. It can now:
+
+| You say | What it does |
+| --- | --- |
+| "Log bench press, 135 for 8, three sets" | Records the whole session, creating the exercise if it's new |
+| "Log $42 at Superstore on groceries" | Logs the spend and moves the account balance |
+| "Set my groceries budget to $600 a month" | Creates or changes that budget |
+| "Put $200 towards the India trip" | Adds to that savings goal |
+| "Move the dentist task to next Tuesday" | Reschedules it |
+| "That Superstore one was actually $38" | Corrects the amount and fixes the balance |
+| "That coffee should be under Eating out" | Moves it to the right category |
+| "Tick off my stretching routine" | Marks it done for today |
+| "Take bread off the shopping list" | Removes it |
+| "Delete the task about the car" | **Asks you first**, then deletes it |
+
+### Two safety rules it follows
+
+**It asks before deleting anything.** It will tell you what it's about to remove and wait. It never
+deletes and then tells you afterwards.
+
+**It won't guess between two similar things.** If you say "delete the visa one" and you have two
+things it could mean, it stops and lists them rather than picking. This is deliberate — the same
+loose matching that helpfully finds "Visa Infinite" when you say "visa" would be dangerous when
+the next step is deleting something.
+
+### One thing worth knowing about cost
+
+Every extra thing it can do makes each question slightly more expensive, because the list of what
+it can do is sent along with your question every time. The tools were grouped to keep that down —
+renaming, rescheduling and deleting a task are one tool, not three. But if your AI spending climbs
+after this, that's why. Settings → AI & cost shows the running total, and you can lower the monthly
+ceiling there.
+
+## Logging money: one screen, four kinds
+
+Tap the **+** on the Money screen. Type the amount, then pick what kind it is:
+
+- **Spent** — an ordinary purchase.
+- **Received** — money in: salary, a refund, someone paying you back.
+- **Moved** — between two of your own accounts. Paying the credit card, moving cash into savings.
+
+**Moved is the new one, and it's worth understanding why it's separate.** When you pay $500 off
+your credit card, you haven't spent $500 — you've moved it. If the app filed that as spending it
+would eat $500 of your budget and show up in your reports as if the money were gone. So a transfer
+is recorded on both accounts and then deliberately left out of every budget, every report, and
+safe-to-spend. The screen says so while you're doing it.
+
+Two things it won't do:
+
+- **Transfer between accounts in different currencies.** That needs an exchange rate, and guessing
+  one would put a wrong number in your books. Use **Send money home** instead, which asks you for
+  the rate.
+- **Transfer to the same account.** It'll tell you to pick a different one.
+
+### The category fills itself in
+
+For Spent and Received, start typing where it was and the category appears on its own. It works out
+what you usually file that shop under — if Superstore has been Groceries eleven times, it's
+Groceries — and it tells you why underneath, so it doesn't look like a glitch.
+
+If it's never seen the shop before it makes a sensible guess from the name (Petro-Canada is
+Transport, Tim Hortons is Takeout). If it has no idea, it leaves it blank rather than guessing
+wrong. **It never overwrites a category you picked yourself.**

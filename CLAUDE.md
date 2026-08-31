@@ -90,3 +90,13 @@ lifespan.
 
 - 22 Aug 2026 — subagent workflow installed (codebase-scout, test-runner,
   unit-reviewer) and the Session protocol section above added.
+- 26 Aug 2026 — `npm test` now exists and is not optional. The protocol above
+  had told test-runner to run it since 22 Aug while no such script existed, so
+  that instruction was quietly doing nothing; the full-codebase audit listed it
+  as a finding. It runs node's own test runner over `tests/*.test.mts` — no
+  framework, no new dependency, native TypeScript stripping. Scope is
+  deliberate: the PURE money, date and unit helpers, where a wrong answer is
+  silent and expensive and there is no database to stand up. Every case in
+  there is a bug that was genuinely in this codebase. Anything needing Supabase
+  stays with the `qa` agent's end-to-end pass. Add to it whenever a maths or
+  parsing bug is fixed; do not chase coverage of UI components.

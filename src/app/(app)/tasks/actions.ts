@@ -8,6 +8,7 @@ import { nudgeInstant } from "@/lib/tasks/nudge";
 import { todayInAppTimezone, addDaysToDateString, zonedTimeToUtc } from "@/lib/time";
 import { syncToGcal, removeFromGcal } from "@/lib/gcal/sync";
 import type { Task, TaskCategory, TaskHorizon } from "@/lib/tasks/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -275,7 +276,7 @@ export async function updateTask(input: {
     })
     .eq("id", input.id)
     .eq("user_id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   if (existingTask && !existingTask.parent_task_id) {
     await syncToGcal({

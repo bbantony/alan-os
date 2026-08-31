@@ -1,9 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { todayInAppTimezone, addDaysToDateString } from "@/lib/time";
+import { todayInAppTimezone, addDaysToDateString, zonedTimeToUtc } from "@/lib/time";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import { formatCents } from "@/lib/finance/money";
+import { toStoredKg } from "@/lib/workout/units";
 import { currentPeriodBounds } from "@/lib/finance/period";
 import type { ModuleId, ModuleAccess } from "@/lib/permissions";
 import {
@@ -12,6 +13,7 @@ import {
   type TaskCategory,
   type TaskHorizon,
 } from "@/lib/tasks/types";
+import { friendlyDbError } from "@/lib/db-errors";
 import type { FunctionDeclaration, ToolParameterSchema } from "./gemini";
 
 /**
@@ -115,7 +117,13 @@ const listTasks: AiTool = {
       .order("due_at", { ascending: true, nullsFirst: false })
       .limit(60);
 
-    if (filter === "overdue") query = query.lt("due_at", `${today}T00:00:00Z`);
+    // Winnipeg midnight, not UTC midnight — `${today}T00:00:00Z` counted
+    // anything due between midnight and 6am local as already overdue.
+    const [ty, tm, td] = today.split("-").map(Number);
+    const todayStartUtc = zonedTimeToUtc({
+      year: ty, month: tm, day: td, hour: 0, minute: 0, second: 0,
+    }).toISOString();
+    if (filter === "overdue") query = query.lt("due_at", todayStartUtc);
     if (filter === "today") query = query.in("horizon", ["now", "today"]);
     if (filter === "this_week") query = query.in("horizon", ["now", "today", "this_week"]);
 
@@ -174,8 +182,23 @@ const createTask: AiTool = {
     const dueDate = asString(args.due_date);
     const dueTime = asString(args.due_time) ?? "09:00";
     // Stored UTC, displayed in Winnipeg — the app's rule everywhere.
+    //
+    // This used to paste a literal `-05:00` onto the string. That is Central
+    // DAYLIGHT time, so from November to March — five months a year — every
+    // task the assistant created was due an hour earlier than asked for.
+    // `zonedTimeToUtc` handles the switch, and it was already imported into
+    // this file's own dependency. Never hardcode an offset for a named zone.
+    const [hh, mm] = dueTime.split(":").map(Number);
+    const [yy, mo, dd] = (dueDate ?? "").split("-").map(Number);
     const dueAt = dueDate
-      ? new Date(`${dueDate}T${dueTime}:00-05:00`).toISOString()
+      ? zonedTimeToUtc({
+          year: yy,
+          month: mo,
+          day: dd,
+          hour: Number.isFinite(hh) ? hh : 9,
+          minute: Number.isFinite(mm) ? mm : 0,
+          second: 0,
+        }).toISOString()
       : null;
 
     const { data, error } = await ctx.supabase
@@ -190,7 +213,7 @@ const createTask: AiTool = {
       })
       .select("id, title, horizon, due_at")
       .single();
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error) ?? "That didn't save." };
     return { created: data };
   },
 };
@@ -296,6 +319,8 @@ const moneyOverview: AiTool = {
         .eq("user_id", ctx.userId)
         .eq("category_id", b.category_id)
         .eq("currency", "CAD")
+        // Not spending — see migration 0037.
+        .is("transfer_group_id", null)
         .gte("txn_date", start)
         .lt("txn_date", end);
       const spent = ((spentRows as { amount_cents: number }[]) ?? []).reduce(
@@ -409,6 +434,7 @@ const spendingByCategory: AiTool = {
       .select("amount_cents, category_id, categories(name, kind)")
       .eq("user_id", ctx.userId)
       .eq("currency", "CAD")
+      .is("transfer_group_id", null)
       .gte("txn_date", from)
       .lte("txn_date", to);
 
@@ -511,10 +537,23 @@ const logExpense: AiTool = {
       return { error: "There are no accounts set up yet, so there's nowhere to log it." };
     }
 
+    // A named account that does not match is a QUESTION, not a fallback. This
+    // used to silently drop the transaction onto accountList[0], so asking to
+    // log something to "the visa" with no matching account put it on chequing
+    // with a cheerful confirmation. Money on the wrong account is worse than
+    // no money logged.
     const accountName = asString(args.account);
-    const account = accountName
-      ? matchByName(accountList, accountName, (a) => a.name) ?? accountList[0]
-      : accountList[0];
+    let account = accountList[0];
+    if (accountName) {
+      const matched = matchByName(accountList, accountName, (a) => a.name);
+      if (!matched) {
+        return {
+          error: `No account matching "${accountName}".`,
+          available_accounts: accountList.map((a) => a.name),
+        };
+      }
+      account = matched;
+    }
 
     const categoryList = ((categories as { id: string; name: string; kind: string }[]) ?? []).filter(
       (c) => c.kind === (isIncome ? "income" : "expense")
@@ -538,13 +577,28 @@ const logExpense: AiTool = {
       txn_date: asString(args.date) ?? todayInAppTimezone(),
       source: "quick_capture",
     });
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error) ?? "That didn't save." };
 
+    // One statement in the database rather than read-add-write from here, so
+    // two concurrent logs cannot each read the same starting balance and have
+    // the second erase the first. See migration 0035.
     const delta = balanceDeltaCents(amountCents, isIncome, account.type as "chequing" | "credit_card" | "investment" | "cash");
-    await ctx.supabase
-      .from("accounts")
-      .update({ current_balance_cents: account.current_balance_cents + delta })
-      .eq("id", account.id);
+    const { error: balanceError } = await ctx.supabase.rpc("adjust_account_balance", {
+      p_account_id: account.id,
+      p_delta_cents: delta,
+    });
+    if (balanceError) {
+      // Told to the model so it tells the person, rather than confirming a
+      // clean "logged it" over a balance that never moved.
+      return {
+        warning: "The transaction was saved but the account balance did not update.",
+        logged: {
+          amount: formatCents(amountCents, account.currency as "CAD" | "INR"),
+          category: category.name,
+          account: account.name,
+        },
+      };
+    }
 
     return {
       logged: {
@@ -652,7 +706,7 @@ const addShopping: AiTool = {
         checked: false,
       }))
     );
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error) ?? "That didn't save." };
     return { added: names };
   },
 };
@@ -699,6 +753,667 @@ const workoutSummary: AiTool = {
 };
 
 // ---------------------------------------------------------------------------
+// Writes that change or remove things
+// ---------------------------------------------------------------------------
+//
+// Alan asked for an assistant he can "talk/write to directly and have it make
+// changes for me in the app". Asked what it should be allowed to touch, he
+// picked everything on the list: workouts, all of money, tasks/routines/
+// shopping, and deleting and editing as well as adding.
+//
+// TWO THINGS THAT DID NOT CHANGE, because widening what it can do makes both
+// matter more, not less:
+//
+//   - Every tool still runs on `ctx.supabase`, the person's own session. RLS
+//     is still what stops it touching another account, not a prompt.
+//   - Tools are still filtered by module before the model is shown them.
+//
+// AND ONE NEW RULE. Anything DESTRUCTIVE resolves its target with
+// `matchOneStrictly` rather than `matchByName`. The loose matcher exists so
+// "the visa" finds "Visa Infinite", which is right for reading and for adding.
+// It is wrong for deleting: it returns a best guess where there was no clear
+// winner, and the model has no way to know the difference. The strict matcher
+// refuses and hands back the candidates instead, so the assistant asks rather
+// than destroys.
+
+/**
+ * Exactly one match, or an explanation. Never a best guess.
+ *
+ * `null` name-match semantics differ from `matchByName` on purpose — see the
+ * note above. Use this for anything the person cannot trivially undo.
+ */
+function matchOneStrictly<T>(
+  candidates: T[],
+  needle: string,
+  getName: (t: T) => string
+): { match: T } | { error: string; candidates?: string[] } {
+  const key = needle.trim().toLowerCase();
+  if (!key) return { error: "Which one?" };
+
+  const exact = candidates.filter((c) => getName(c).toLowerCase() === key);
+  if (exact.length === 1) return { match: exact[0] };
+  if (exact.length > 1) {
+    return { error: `More than one is called "${needle}".`, candidates: exact.map(getName) };
+  }
+
+  const partial = candidates.filter((c) => getName(c).toLowerCase().includes(key));
+  if (partial.length === 1) return { match: partial[0] };
+  if (partial.length === 0) {
+    return { error: `Nothing matching "${needle}".`, candidates: candidates.slice(0, 12).map(getName) };
+  }
+  return {
+    error: `"${needle}" could mean more than one thing — say which.`,
+    candidates: partial.slice(0, 12).map(getName),
+  };
+}
+
+/** The account's display unit, needed to read a spoken weight correctly. */
+async function weightUnitFor(ctx: ToolContext): Promise<"kg" | "lbs"> {
+  const { data } = await ctx.supabase
+    .from("profiles")
+    .select("weight_unit")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+  return (data?.weight_unit as "kg" | "lbs") ?? "lbs";
+}
+
+const updateTask: AiTool = {
+  name: "update_task",
+  description:
+    "Change or delete an existing task: rename it, move its due date, change when it sits in the list, or remove it. Find it by what the person called it.",
+  module: "tasks",
+  writes: true,
+  parameters: obj(
+    {
+      title: str("The task's current title, or close to it."),
+      action: {
+        type: "STRING",
+        description: "What to do to it.",
+        enum: ["rename", "reschedule", "move", "delete"],
+      },
+      new_title: str("The new title. Only for rename."),
+      due_date: str("New due date as YYYY-MM-DD. Only for reschedule."),
+      due_time: str("New time as HH:mm, 24-hour. Only with due_date."),
+      horizon: {
+        type: "STRING",
+        description: "Where it should sit in the list. Only for move.",
+        enum: ["now", "today", "this_week", "this_month", "someday"],
+      },
+    },
+    ["title", "action"]
+  ),
+  async run(ctx, args) {
+    const needle = asString(args.title);
+    const action = asString(args.action);
+    if (!needle) return { error: "Which task?" };
+
+    const { data: open } = await ctx.supabase
+      .from("tasks")
+      .select("id, title, due_at, horizon")
+      .eq("user_id", ctx.userId)
+      .is("completed_at", null)
+      .limit(200);
+
+    const found = matchOneStrictly(
+      (open as { id: string; title: string }[]) ?? [],
+      needle,
+      (t) => t.title
+    );
+    if ("error" in found) return found;
+    const task = found.match;
+
+    if (action === "delete") {
+      const { error } = await ctx.supabase
+        .from("tasks")
+        .delete()
+        .eq("id", task.id)
+        .eq("user_id", ctx.userId);
+      if (error) return { error: friendlyDbError(error) ?? "Couldn't delete that." };
+      return { deleted: task.title };
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (action === "rename") {
+      const nextTitle = asString(args.new_title);
+      if (!nextTitle) return { error: "Rename it to what?" };
+      patch.title = nextTitle;
+    } else if (action === "reschedule") {
+      const dueDate = asString(args.due_date);
+      if (!dueDate) return { error: "Move it to which date?" };
+      const dueTime = asString(args.due_time) ?? "09:00";
+      const [hh, mm] = dueTime.split(":").map(Number);
+      const [yy, mo, dd] = dueDate.split("-").map(Number);
+      // zonedTimeToUtc, never a hardcoded offset — see createTask above.
+      patch.due_at = zonedTimeToUtc({
+        year: yy,
+        month: mo,
+        day: dd,
+        hour: Number.isFinite(hh) ? hh : 9,
+        minute: Number.isFinite(mm) ? mm : 0,
+        second: 0,
+      }).toISOString();
+    } else if (action === "move") {
+      const horizon = asString(args.horizon);
+      if (!TASK_HORIZONS.includes(horizon as TaskHorizon)) {
+        return { error: `Not a place a task can sit. Use one of: ${TASK_HORIZONS.join(", ")}.` };
+      }
+      patch.horizon = horizon;
+    } else {
+      return { error: "Say whether to rename, reschedule, move or delete it." };
+    }
+
+    const { error } = await ctx.supabase
+      .from("tasks")
+      .update(patch)
+      .eq("id", task.id)
+      .eq("user_id", ctx.userId);
+    if (error) return { error: friendlyDbError(error) ?? "Couldn't change that." };
+    return { updated: task.title, changed: patch };
+  },
+};
+
+const manageShoppingItem: AiTool = {
+  name: "manage_shopping_item",
+  description:
+    "Tick something off the shopping list, or take it off the list entirely. Use add_shopping_items to put things on.",
+  module: "shopping",
+  writes: true,
+  parameters: obj(
+    {
+      name: str("The item, or close to it."),
+      action: {
+        type: "STRING",
+        description: "Tick it off as bought, or remove it from the list.",
+        enum: ["check_off", "uncheck", "remove"],
+      },
+    },
+    ["name", "action"]
+  ),
+  async run(ctx, args) {
+    const needle = asString(args.name);
+    const action = asString(args.action) ?? "check_off";
+    if (!needle) return { error: "Which item?" };
+
+    const { data: items } = await ctx.supabase
+      .from("shopping_items")
+      .select("id, name, checked")
+      .eq("user_id", ctx.userId)
+      .eq("on_list", true)
+      .limit(200);
+
+    const found = matchOneStrictly(
+      (items as { id: string; name: string }[]) ?? [],
+      needle,
+      (i) => i.name
+    );
+    if ("error" in found) return found;
+
+    const patch =
+      action === "remove"
+        ? { on_list: false }
+        : { checked: action !== "uncheck" };
+    const { error } = await ctx.supabase
+      .from("shopping_items")
+      .update(patch)
+      .eq("id", found.match.id)
+      .eq("user_id", ctx.userId);
+    if (error) return { error: friendlyDbError(error) ?? "Couldn't change that." };
+    return { item: found.match.name, action };
+  },
+};
+
+const logWorkout: AiTool = {
+  name: "log_workout",
+  description:
+    "Record a training session that has already happened — exercises with their sets, or a run. Only use when the person says what they actually did.",
+  module: "workout",
+  writes: true,
+  parameters: obj(
+    {
+      date: str("Date as YYYY-MM-DD. Defaults to today."),
+      notes: str("Anything they said about how it went."),
+      exercises: {
+        type: "ARRAY",
+        description:
+          "The lifts. Each needs a name and its sets. Weights are in the person's own unit — do not convert.",
+        items: obj(
+          {
+            name: str("Exercise name, e.g. Bench Press."),
+            sets: {
+              type: "ARRAY",
+              description: "One entry per set.",
+              items: obj({
+                reps: num("How many reps."),
+                weight: num("Weight per set, in their display unit. 0 for bodyweight."),
+              }),
+            },
+          },
+          ["name", "sets"]
+        ),
+      },
+    },
+    ["exercises"]
+  ),
+  async run(ctx, args) {
+    const rawExercises = Array.isArray(args.exercises) ? args.exercises : [];
+    if (rawExercises.length === 0) return { error: "What did you do?" };
+
+    const unit = await weightUnitFor(ctx);
+    const workoutDate = asString(args.date) ?? todayInAppTimezone();
+
+    // The exercise library is per-account since 0008 (`user_id` NOT NULL, and
+    // `created_by` dropped in the same migration), so this is a plain
+    // own-rows read. An unknown name is matched loosely first and only
+    // created if it really isn't there — otherwise "bench" and "Bench Press"
+    // become two exercises and the history splits in half.
+    const { data: library } = await ctx.supabase
+      .from("exercises")
+      .select("id, name")
+      .eq("user_id", ctx.userId)
+      .limit(500);
+    const known = (library as { id: string; name: string }[]) ?? [];
+
+    const { data: workout, error: workoutError } = await ctx.supabase
+      .from("workouts")
+      .insert({
+        user_id: ctx.userId,
+        workout_date: workoutDate,
+        type: "resistance",
+        notes: asString(args.notes),
+      })
+      .select("id")
+      .single();
+    if (workoutError || !workout) {
+      return { error: friendlyDbError(workoutError) ?? "Couldn't save that session." };
+    }
+
+    const logged: { exercise: string; sets: number }[] = [];
+    for (const rawEx of rawExercises) {
+      const ex = rawEx as { name?: unknown; sets?: unknown };
+      const name = asString(ex.name);
+      if (!name) continue;
+      const sets = Array.isArray(ex.sets) ? ex.sets : [];
+      if (sets.length === 0) continue;
+
+      let exerciseId = matchByName(known, name, (e) => e.name)?.id;
+      if (!exerciseId) {
+        const { data: created } = await ctx.supabase
+          .from("exercises")
+          .insert({ user_id: ctx.userId, name, muscle_group: "other", equipment: "other" })
+          .select("id, name")
+          .single();
+        if (!created) continue;
+        exerciseId = created.id as string;
+        known.push({ id: created.id as string, name: created.name as string });
+      }
+
+      const rows = sets.map((rawSet, i) => {
+        const set = rawSet as { reps?: unknown; weight?: unknown };
+        const weight = asNumber(set.weight) ?? 0;
+        return {
+          workout_id: workout.id,
+          exercise_id: exerciseId,
+          set_number: i + 1,
+          reps: Math.max(0, Math.round(asNumber(set.reps) ?? 0)),
+          // Stored in kg always; the model was told to speak in the person's
+          // own unit and NOT to convert, so the conversion happens here where
+          // the unit is actually known.
+          weight_kg: toStoredKg(weight, unit),
+        };
+      });
+      const { error: setError } = await ctx.supabase.from("workout_sets").insert(rows);
+      if (!setError) logged.push({ exercise: name, sets: rows.length });
+    }
+
+    if (logged.length === 0) {
+      // Don't leave an empty session behind.
+      await ctx.supabase.from("workouts").delete().eq("id", workout.id).eq("user_id", ctx.userId);
+      return { error: "None of those exercises had any sets on them." };
+    }
+
+    return { logged: { date: workoutDate, exercises: logged } };
+  },
+};
+
+const manageBudget: AiTool = {
+  name: "manage_budget",
+  description:
+    "Set or change a monthly spending limit for a category. Use get_money_overview first to see what already exists.",
+  module: "money",
+  writes: true,
+  parameters: obj(
+    {
+      category: str("Category name, e.g. Groceries."),
+      amount: num("The limit in dollars. Omit to remove the budget."),
+      period: {
+        type: "STRING",
+        description: "How often it resets. Defaults to monthly.",
+        enum: ["weekly", "biweekly", "monthly"],
+      },
+      remove: { type: "BOOLEAN", description: "True to switch the budget off." },
+    },
+    ["category"]
+  ),
+  async run(ctx, args) {
+    const categoryName = asString(args.category);
+    if (!categoryName) return { error: "A budget for what?" };
+
+    const { data: categories } = await ctx.supabase
+      .from("categories")
+      .select("id, name, kind")
+      .eq("user_id", ctx.userId)
+      .eq("kind", "expense")
+      .eq("is_archived", false);
+    const list = (categories as { id: string; name: string }[]) ?? [];
+
+    const found = matchOneStrictly(list, categoryName, (c) => c.name);
+    if ("error" in found) return found;
+
+    if (args.remove === true) {
+      const { error } = await ctx.supabase
+        .from("budgets")
+        .update({ is_active: false })
+        .eq("user_id", ctx.userId)
+        .eq("category_id", found.match.id);
+      if (error) return { error: friendlyDbError(error) ?? "Couldn't change that." };
+      return { removed: found.match.name };
+    }
+
+    const amount = asNumber(args.amount);
+    if (!amount || amount <= 0) return { error: "How much a month?" };
+    const amountCents = Math.round(amount * 100);
+    const period = asString(args.period) ?? "monthly";
+
+    // `unique (user_id, category_id)` on budgets (0016), so this is an upsert
+    // rather than a create — asking for a budget that exists means change it.
+    const { error } = await ctx.supabase.from("budgets").upsert(
+      {
+        user_id: ctx.userId,
+        category_id: found.match.id,
+        amount_cents: amountCents,
+        period,
+        anchor_date: todayInAppTimezone(),
+        is_active: true,
+      },
+      { onConflict: "user_id,category_id" }
+    );
+    if (error) return { error: friendlyDbError(error) ?? "Couldn't save that budget." };
+    return {
+      budget: { category: found.match.name, limit: formatCents(amountCents), period },
+    };
+  },
+};
+
+const manageGoal: AiTool = {
+  name: "manage_goal",
+  description:
+    "Create a savings goal, or put money towards one that already exists.",
+  module: "money",
+  writes: true,
+  parameters: obj(
+    {
+      name: str("What the goal is called, e.g. Trip to India."),
+      action: {
+        type: "STRING",
+        description: "Make a new goal, or add money to an existing one.",
+        enum: ["create", "add_money"],
+      },
+      amount: num("For create, the target in dollars. For add_money, how much to put in."),
+      deadline: str("Target date as YYYY-MM-DD. Only for create, and optional."),
+    },
+    ["name", "action", "amount"]
+  ),
+  async run(ctx, args) {
+    const name = asString(args.name);
+    const action = asString(args.action);
+    const amount = asNumber(args.amount);
+    if (!name) return { error: "A goal for what?" };
+    if (!amount || amount <= 0) return { error: "How much?" };
+    const cents = Math.round(amount * 100);
+
+    if (action === "create") {
+      const { error } = await ctx.supabase.from("savings_goals").insert({
+        user_id: ctx.userId,
+        name,
+        target_cents: cents,
+        deadline: asString(args.deadline),
+      });
+      if (error) return { error: friendlyDbError(error) ?? "Couldn't create that goal." };
+      return { created: { name, target: formatCents(cents) } };
+    }
+
+    const { data: goals } = await ctx.supabase
+      .from("savings_goals")
+      .select("id, name, saved_cents, target_cents")
+      .eq("user_id", ctx.userId)
+      .eq("is_done", false);
+    const found = matchOneStrictly(
+      (goals as { id: string; name: string; saved_cents: number; target_cents: number }[]) ?? [],
+      name,
+      (g) => g.name
+    );
+    if ("error" in found) return found;
+
+    const nextSaved = found.match.saved_cents + cents;
+    const { error } = await ctx.supabase
+      .from("savings_goals")
+      .update({ saved_cents: nextSaved, is_done: nextSaved >= found.match.target_cents })
+      .eq("id", found.match.id)
+      .eq("user_id", ctx.userId);
+    if (error) return { error: friendlyDbError(error) ?? "Couldn't add that." };
+    return {
+      goal: found.match.name,
+      added: formatCents(cents),
+      saved: formatCents(nextSaved),
+      target: formatCents(found.match.target_cents),
+      done: nextSaved >= found.match.target_cents,
+    };
+  },
+};
+
+const updateTransaction: AiTool = {
+  name: "update_transaction",
+  description:
+    "Fix or remove something already logged — put it in a different category, correct the amount, or delete it. Use list_transactions first to find it.",
+  module: "money",
+  writes: true,
+  parameters: obj(
+    {
+      merchant: str("Where it was spent, as logged."),
+      date: str("The date it is logged under, YYYY-MM-DD. Narrows it down."),
+      action: {
+        type: "STRING",
+        description: "What to do to it.",
+        enum: ["recategorise", "fix_amount", "delete"],
+      },
+      category: str("New category name. Only for recategorise."),
+      amount: num("The correct amount in dollars. Only for fix_amount."),
+    },
+    ["merchant", "action"]
+  ),
+  async run(ctx, args) {
+    const merchant = asString(args.merchant);
+    const action = asString(args.action);
+    if (!merchant) return { error: "Which transaction?" };
+
+    let query = ctx.supabase
+      .from("transactions")
+      .select("id, merchant, amount_cents, currency, txn_date, account_id, category_id")
+      .eq("user_id", ctx.userId)
+      .order("txn_date", { ascending: false })
+      .limit(50);
+    const onDate = asString(args.date);
+    if (onDate) query = query.eq("txn_date", onDate);
+
+    const { data } = await query;
+    const rows = (data as {
+      id: string;
+      merchant: string | null;
+      amount_cents: number;
+      currency: string;
+      txn_date: string;
+      account_id: string;
+      category_id: string;
+    }[]) ?? [];
+
+    const found = matchOneStrictly(
+      rows.filter((r) => r.merchant),
+      merchant,
+      (r) => r.merchant ?? ""
+    );
+    if ("error" in found) {
+      return {
+        ...found,
+        hint: "Give the date as well if there is more than one.",
+      };
+    }
+    const txn = found.match;
+    const describe = `${txn.merchant} ${formatCents(txn.amount_cents, txn.currency as "CAD" | "INR")} on ${txn.txn_date}`;
+
+    if (action === "delete") {
+      const { error: delError } = await ctx.supabase
+        .from("transactions")
+        .delete()
+        .eq("id", txn.id)
+        .eq("user_id", ctx.userId);
+      if (delError) return { error: friendlyDbError(delError) ?? "Couldn't delete that." };
+
+      // Reverse its effect on the balance, reading the direction from the
+      // CATEGORY rather than trusting anything passed in — same rule
+      // deleteTransaction in money/actions.ts follows.
+      const { data: account } = await ctx.supabase
+        .from("accounts")
+        .select("id, type")
+        .eq("id", txn.account_id)
+        .maybeSingle();
+      const { data: category } = await ctx.supabase
+        .from("categories")
+        .select("kind")
+        .eq("id", txn.category_id)
+        .maybeSingle();
+      if (account) {
+        const delta = balanceDeltaCents(
+          txn.amount_cents,
+          category?.kind === "income",
+          account.type as "chequing" | "credit_card" | "investment" | "cash"
+        );
+        await ctx.supabase.rpc("adjust_account_balance", {
+          p_account_id: account.id,
+          p_delta_cents: -delta,
+        });
+      }
+      return { deleted: describe };
+    }
+
+    if (action === "recategorise") {
+      const categoryName = asString(args.category);
+      if (!categoryName) return { error: "Into which category?" };
+      const { data: categories } = await ctx.supabase
+        .from("categories")
+        .select("id, name")
+        .eq("user_id", ctx.userId)
+        .eq("is_archived", false);
+      const cat = matchOneStrictly(
+        (categories as { id: string; name: string }[]) ?? [],
+        categoryName,
+        (c) => c.name
+      );
+      if ("error" in cat) return cat;
+      const { error } = await ctx.supabase
+        .from("transactions")
+        .update({ category_id: cat.match.id })
+        .eq("id", txn.id)
+        .eq("user_id", ctx.userId);
+      if (error) return { error: friendlyDbError(error) ?? "Couldn't move that." };
+      return { moved: describe, into: cat.match.name };
+    }
+
+    if (action === "fix_amount") {
+      const amount = asNumber(args.amount);
+      if (!amount || amount <= 0) return { error: "What should it be?" };
+      const nextCents = Math.round(amount * 100);
+      const { error } = await ctx.supabase
+        .from("transactions")
+        .update({ amount_cents: nextCents })
+        .eq("id", txn.id)
+        .eq("user_id", ctx.userId);
+      if (error) return { error: friendlyDbError(error) ?? "Couldn't change that." };
+
+      // The balance has to move by the DIFFERENCE, in the same direction the
+      // original went.
+      const { data: account } = await ctx.supabase
+        .from("accounts")
+        .select("id, type")
+        .eq("id", txn.account_id)
+        .maybeSingle();
+      const { data: category } = await ctx.supabase
+        .from("categories")
+        .select("kind")
+        .eq("id", txn.category_id)
+        .maybeSingle();
+      if (account) {
+        const isIncome = category?.kind === "income";
+        const accountType = account.type as "chequing" | "credit_card" | "investment" | "cash";
+        const before = balanceDeltaCents(txn.amount_cents, isIncome, accountType);
+        const after = balanceDeltaCents(nextCents, isIncome, accountType);
+        await ctx.supabase.rpc("adjust_account_balance", {
+          p_account_id: account.id,
+          p_delta_cents: after - before,
+        });
+      }
+      return {
+        corrected: describe,
+        now: formatCents(nextCents, txn.currency as "CAD" | "INR"),
+      };
+    }
+
+    return { error: "Say whether to recategorise it, fix the amount, or delete it." };
+  },
+};
+
+const completeRoutine: AiTool = {
+  name: "complete_routine",
+  description: "Tick a repeating routine off for today. Use list_routines to see them.",
+  module: "tasks",
+  writes: true,
+  parameters: obj({ title: str("The routine's name, or close to it.") }, ["title"]),
+  async run(ctx, args) {
+    const needle = asString(args.title);
+    if (!needle) return { error: "Which routine?" };
+
+    const { data: routines } = await ctx.supabase
+      .from("routines")
+      .select("id, title")
+      .eq("user_id", ctx.userId)
+      .eq("active", true);
+    const found = matchOneStrictly(
+      (routines as { id: string; title: string }[]) ?? [],
+      needle,
+      (r) => r.title
+    );
+    if ("error" in found) return found;
+
+    const today = todayInAppTimezone();
+    const { data: steps } = await ctx.supabase
+      .from("routine_steps")
+      .select("id")
+      .eq("routine_id", found.match.id);
+
+    const { error } = await ctx.supabase.from("routine_completions").upsert(
+      {
+        routine_id: found.match.id,
+        user_id: ctx.userId,
+        completed_date: today,
+        steps_done: ((steps as { id: string }[]) ?? []).map((s) => s.id),
+      },
+      { onConflict: "user_id,routine_id,completed_date" }
+    );
+    if (error) return { error: friendlyDbError(error) ?? "Couldn't tick that off." };
+    return { completed: found.match.title, date: today };
+  },
+};
+
+// ---------------------------------------------------------------------------
 // The registry
 // ---------------------------------------------------------------------------
 
@@ -716,6 +1431,14 @@ export const ALL_TOOLS: AiTool[] = [
   listShopping,
   addShopping,
   workoutSummary,
+  // Added when Alan asked for an assistant that can actually change things.
+  updateTask,
+  completeRoutine,
+  manageShoppingItem,
+  logWorkout,
+  manageBudget,
+  manageGoal,
+  updateTransaction,
 ];
 
 /** Only the tools this account is allowed to use — see the note at the top. */

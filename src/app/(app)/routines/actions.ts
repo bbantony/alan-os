@@ -9,6 +9,7 @@ import { isDueOnDate, firstReminderInstant, type RecurrenceOptions, buildRRuleSt
 import { syncToGcal, removeFromGcal } from "@/lib/gcal/sync";
 import type { TaskCategory } from "@/lib/tasks/types";
 import type { Routine, RoutineCompletion, RoutineStep, RoutineWithProgress } from "@/lib/routines/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -97,7 +98,7 @@ export async function createRoutine(input: {
     rrule,
     time_of_day: input.timeOfDay ?? null,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   const stepTitles = input.steps.length > 0 ? input.steps : [input.title.trim()];
   await supabase.from("routine_steps").insert(
@@ -138,7 +139,7 @@ export async function createRoutine(input: {
     });
   }
 
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
   revalidatePath("/today");
   return {};
 }
@@ -175,7 +176,7 @@ export async function updateRoutine(input: {
     })
     .eq("id", input.id)
     .eq("user_id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   const newStepTitles = (input.steps.length > 0 ? input.steps : [trimmedTitle]).map((s) => s.trim());
   const { data: currentSteps } = await supabase
@@ -184,11 +185,46 @@ export async function updateRoutine(input: {
     .eq("routine_id", input.id)
     .order("sort_order", { ascending: true });
   const currentTitles = (currentSteps ?? []).map((s) => s.title as string);
+  // UPDATED IN PLACE, not deleted and re-inserted. The old version dropped
+  // every step and created new ones with fresh UUIDs on any title change —
+  // and `routine_completions.steps_done` stores step IDs, so simply renaming
+  // a routine wiped out today's ticked-off steps and reset the "2 of 5"
+  // caption on something already done. Matching by sort_order keeps the IDs
+  // stable, so only genuinely added or removed steps change identity.
   if (JSON.stringify(currentTitles) !== JSON.stringify(newStepTitles)) {
-    await supabase.from("routine_steps").delete().eq("routine_id", input.id);
-    await supabase.from("routine_steps").insert(
-      newStepTitles.map((title, i) => ({ routine_id: input.id, title, sort_order: i }))
-    );
+    const { data: existingRows } = await supabase
+      .from("routine_steps")
+      .select("id, sort_order")
+      .eq("routine_id", input.id)
+      .order("sort_order", { ascending: true });
+    const existing = (existingRows as { id: string; sort_order: number }[]) ?? [];
+
+    // Rename the ones that already exist at each position.
+    for (let i = 0; i < Math.min(existing.length, newStepTitles.length); i++) {
+      if (currentTitles[i] !== newStepTitles[i]) {
+        await supabase
+          .from("routine_steps")
+          .update({ title: newStepTitles[i] })
+          .eq("id", existing[i].id);
+      }
+    }
+    // Genuinely new positions.
+    if (newStepTitles.length > existing.length) {
+      await supabase.from("routine_steps").insert(
+        newStepTitles.slice(existing.length).map((title, i) => ({
+          routine_id: input.id,
+          title,
+          sort_order: existing.length + i,
+        }))
+      );
+    }
+    // Positions that no longer exist.
+    if (existing.length > newStepTitles.length) {
+      await supabase
+        .from("routine_steps")
+        .delete()
+        .in("id", existing.slice(newStepTitles.length).map((r) => r.id));
+    }
   }
 
   const { data: existingReminder } = await supabase
@@ -231,7 +267,7 @@ export async function updateRoutine(input: {
     reminderMinutesBefore: input.remindMe && input.timeOfDay ? 0 : null,
   });
 
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
   revalidatePath("/today");
   return {};
 }
@@ -252,26 +288,35 @@ export async function archiveRoutine(input: { id: string }) {
     await removeFromGcal({ supabase, userId: user.id, table: "routines", rowId: input.id, existingEventId: existing.gcal_event_id });
   }
 
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
   revalidatePath("/today");
 }
 
 export async function completeRoutineToday(input: {
   routineId: string;
   stepsDone: string[];
-}): Promise<{ streak: { current: number; longest: number } }> {
+}): Promise<{ streak: { current: number; longest: number }; error?: string }> {
   const { supabase, user } = await requireUser();
   const today = todayInAppTimezone();
 
-  await supabase.from("routine_completions").upsert(
+  // The error is CHECKED. This upsert names a constraint that only exists once
+  // migration 0035 is applied, so before then it fails — and it used to fail
+  // SILENTLY, leaving the tick on screen and nothing in the database.
+  const { error: completionError } = await supabase.from("routine_completions").upsert(
     {
       routine_id: input.routineId,
       user_id: user.id,
       completed_date: today,
       steps_done: input.stepsDone,
     },
-    { onConflict: "routine_id,completed_date" }
+    { onConflict: "user_id,routine_id,completed_date" }
   );
+  if (completionError) {
+    return {
+      error: friendlyDbError(completionError) ?? "That didn't save. Try again.",
+      streak: { current: 0, longest: 0 },
+    };
+  }
 
   const { data: completions } = await supabase
     .from("routine_completions")
@@ -280,22 +325,45 @@ export async function completeRoutineToday(input: {
     .eq("user_id", user.id);
 
   const streak = computeStreak((completions ?? []).map((c) => c.completed_date as string), today);
-  revalidatePath("/tasks");
+  revalidatePath("/plan");
   revalidatePath("/today");
   return { streak };
 }
 
-export async function uncompleteRoutineToday(input: { routineId: string }) {
+export async function uncompleteRoutineToday(
+  input: { routineId: string }
+): Promise<{ streak: { current: number; longest: number }; error?: string }> {
   const { supabase, user } = await requireUser();
   const today = todayInAppTimezone();
-  await supabase
+  const { error } = await supabase
     .from("routine_completions")
     .delete()
     .eq("routine_id", input.routineId)
     .eq("user_id", user.id)
     .eq("completed_date", today);
-  revalidatePath("/tasks");
+  if (error) {
+    return {
+      streak: { current: 0, longest: 0 },
+      error: friendlyDbError(error) ?? "That didn't save. Try again.",
+    };
+  }
+
+  // Recomputed and returned: un-ticking today changes the streak, and the
+  // caller previously had to guess (routine-section decremented it by one,
+  // which is wrong across a forgiven miss).
+  const { data: completions } = await supabase
+    .from("routine_completions")
+    .select("completed_date")
+    .eq("routine_id", input.routineId)
+    .eq("user_id", user.id);
+  const streak = computeStreak(
+    (completions ?? []).map((c) => c.completed_date as string),
+    today
+  );
+
+  revalidatePath("/plan");
   revalidatePath("/today");
+  return { streak };
 }
 
 // The "you keep adding this — make it a routine?" nudge: a task title

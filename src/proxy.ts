@@ -59,7 +59,15 @@ export async function proxy(request: NextRequest) {
       .eq("id", user.id)
       .single();
     const pathname = request.nextUrl.pathname;
-    if (profile && !canAccessPath({ role: profile.role, moduleAccess: profile.module_access }, pathname)) {
+    // FAILS CLOSED. This used to be `if (profile && !canAccessPath(...))`, so
+    // any hiccup reading the profile — a timeout, a blip — skipped the gate
+    // entirely and let the request through. A guard that disappears exactly
+    // when the database is unhappy is not a guard. `/today` is always
+    // reachable, so redirecting there cannot lock anyone out.
+    const allowed = profile
+      ? canAccessPath({ role: profile.role, moduleAccess: profile.module_access }, pathname)
+      : pathname === "/today";
+    if (!allowed) {
       const url = request.nextUrl.clone();
       url.pathname = "/today";
       return NextResponse.redirect(url);

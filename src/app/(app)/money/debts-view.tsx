@@ -108,7 +108,7 @@ export function DebtsView({
               type="button"
               onClick={() => setShowForm(true)}
               aria-label="New debt"
-              className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+              className="tap-press tap-reach flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
             >
               <Plus className="size-4" strokeWidth={3} />
             </button>
@@ -133,7 +133,7 @@ export function DebtsView({
               <button
                 type="button"
                 onClick={() => setConfirmingDelete(d)}
-                className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+                className="tap-press tap-target shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
                 aria-label={`Delete ${d.name}`}
               >
                 <Trash2 className="size-4" />
@@ -181,22 +181,36 @@ export function DebtsView({
 
         {result && (
           <>
-            <div className="grid grid-cols-2 gap-px border-t-2 border-rule bg-hairline">
-              <div className="bg-surface p-3">
-                <p className="micro-sm text-muted-foreground">Debt-free in</p>
-                <p className="stat mt-1 text-xl">
-                  {result.monthsToPayoff >= 600
-                    ? "600+ mo"
-                    : `${Math.floor(result.monthsToPayoff / 12)}y ${result.monthsToPayoff % 12}m`}
+            {/* When the minimums don't cover the interest the simulation runs
+                to its 50-year cap, and `totalInterestPaidCents` is then just
+                whatever accrued over 600 months — this used to render it as
+                fact ($1,373,494,258.53 beside a correct "600+ mo"). A plan
+                that never finishes has no interest total worth printing. */}
+            {result.neverPaysOff ? (
+              <div className="border-t-2 border-rule bg-destructive p-3 text-destructive-foreground">
+                <p className="micro-sm">Never, at these payments</p>
+                <p className="mt-1 text-sm font-semibold">
+                  The minimum payments don&apos;t cover the interest, so the balance grows
+                  faster than it&apos;s paid down. Raise a minimum or add something extra
+                  each month to see a real payoff date.
                 </p>
               </div>
-              <div className="bg-surface p-3">
-                <p className="micro-sm text-muted-foreground">Interest paid</p>
-                <p className="stat mt-1 text-xl text-destructive">
-                  {formatCents(result.totalInterestPaidCents)}
-                </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-px border-t-2 border-rule bg-hairline">
+                <div className="bg-surface p-3">
+                  <p className="micro-sm text-muted-foreground">Debt-free in</p>
+                  <p className="stat mt-1 text-xl">
+                    {`${Math.floor(result.monthsToPayoff / 12)}y ${result.monthsToPayoff % 12}m`}
+                  </p>
+                </div>
+                <div className="bg-surface p-3">
+                  <p className="micro-sm text-muted-foreground">Interest paid</p>
+                  <p className="stat mt-1 text-xl text-destructive">
+                    {formatCents(result.totalInterestPaidCents)}
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {result.payoffOrder.length > 0 && (
               <div className="border-t-2 border-rule">

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppTimezone } from "@/lib/time";
+import { friendlyDbError } from "@/lib/db-errors";
 import {
   sessionBests,
   detectNewPrs,
@@ -108,7 +109,7 @@ export async function addExercise(input: {
 
   if (error) {
     if (error.code === "23505") return { exercise: null, error: "That exercise already exists." };
-    return { exercise: null, error: error.message };
+    return { exercise: null, error: friendlyDbError(error) ?? "That didn't save. Try again." };
   }
 
   revalidatePath("/workout/new");
@@ -130,7 +131,7 @@ export async function updateExercise(input: {
 
   if (error) {
     if (error.code === "23505") return { error: "That exercise already exists." };
-    return { error: error.message };
+    return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   }
 
   revalidatePath("/settings/workout");
@@ -152,7 +153,7 @@ export async function deleteExercise(input: { id: string }): Promise<{ error?: s
     if (error.code === "23503") {
       return { error: "Can't delete — you've already logged workouts with this exercise." };
     }
-    return { error: error.message };
+    return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   }
 
   revalidatePath("/settings/workout");
@@ -259,7 +260,7 @@ export async function logWorkout(input: {
     .select("id")
     .single();
 
-  if (error || !workout) throw new Error(error?.message ?? "Could not save workout");
+  if (error || !workout) throw new Error(friendlyDbError(error) ?? "Could not save workout");
   const workoutId = workout.id as string;
 
   const setRows = input.exercises.flatMap((ex) =>
@@ -366,7 +367,7 @@ export async function logRun(input: {
     .select("id")
     .single();
 
-  if (error || !workout) throw new Error(error?.message ?? "Could not save run");
+  if (error || !workout) throw new Error(friendlyDbError(error) ?? "Could not save run");
   const workoutId = workout.id as string;
 
   await supabase.from("runs").insert({

@@ -142,14 +142,14 @@ export function ExerciseManager({
                   <div className="flex shrink-0 items-center gap-3">
                     <button
                       onClick={() => startEdit(exercise)}
-                      className="tap-press text-muted-foreground/50 hover:text-foreground"
+                      className="tap-press tap-target text-muted-foreground/50 hover:text-foreground"
                       aria-label="Edit exercise"
                     >
                       <Pencil className="size-4" />
                     </button>
                     <button
                       onClick={() => handleDelete(exercise)}
-                      className="tap-press text-muted-foreground/40 hover:text-destructive"
+                      className="tap-press tap-target text-muted-foreground/40 hover:text-destructive"
                       aria-label="Delete exercise"
                     >
                       <Trash2 className="size-4" />

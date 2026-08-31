@@ -59,7 +59,7 @@ export function MoneySettings({ initialCategories }: { initialCategories: Catego
               <span className="flex-1 text-sm font-medium">{cat.name}</span>
               <button
                 onClick={() => handleDelete(cat.id)}
-                className="tap-press shrink-0 text-muted-foreground/40 hover:text-destructive"
+                className="tap-press tap-target shrink-0 text-muted-foreground/40 hover:text-destructive"
                 aria-label={`Archive ${cat.name}`}
                 disabled={isPending}
               >

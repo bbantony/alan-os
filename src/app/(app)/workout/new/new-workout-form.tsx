@@ -42,11 +42,16 @@ import { saveDraft, type WorkoutDraft } from "../personal-actions";
 import { ExercisePanel } from "./exercise-panel";
 import { ExercisePicker } from "./exercise-picker";
 
-function suggestionFor(history: ExerciseHistoryEntry[], unit: WeightUnit): DraftSet {
+function suggestionFor(
+  history: ExerciseHistoryEntry[],
+  unit: WeightUnit,
+  weightIncrement: number | null
+): DraftSet {
   const lastSets = history[0]?.sets ?? [];
   const suggestion = suggestNextWeight(
     lastSets.map((s) => ({ reps: s.reps, weightKg: s.weight_kg })),
-    unit
+    unit,
+    weightIncrement
   );
   return suggestion
     ? { reps: suggestion.reps, weightKg: suggestion.weightKg }
@@ -60,6 +65,7 @@ export function NewWorkoutForm({
   exercises,
   recentExerciseIds,
   weightUnit: initialWeightUnit,
+  weightIncrement,
   todayDate,
   initialDraft,
   startExerciseIds,
@@ -68,6 +74,8 @@ export function NewWorkoutForm({
   exercises: Exercise[];
   recentExerciseIds: string[];
   weightUnit: WeightUnit;
+  /** Settings → Workout, in the display unit. Null = 2.5 lb / 1 kg. */
+  weightIncrement: number | null;
   todayDate: string;
   /** An unfinished session to pick back up, if there is one. */
   initialDraft: WorkoutDraft | null;
@@ -165,7 +173,7 @@ export function NewWorkoutForm({
         setDraftExercises((prev) =>
           prev.map((d) =>
             d.exerciseId === ex.exerciseId && d.sets.length === 0
-              ? { ...d, sets: [suggestionFor(history, unit)] }
+              ? { ...d, sets: [suggestionFor(history, unit, weightIncrement)] }
               : d
           )
         );
@@ -237,7 +245,7 @@ export function NewWorkoutForm({
       setDraftExercises((prev) =>
         prev.map((ex) =>
           ex.exerciseId === exercise.id && ex.sets.length === 0
-            ? { ...ex, sets: [suggestionFor(history, unit)] }
+            ? { ...ex, sets: [suggestionFor(history, unit, weightIncrement)] }
             : ex
         )
       );
@@ -270,7 +278,7 @@ export function NewWorkoutForm({
         if (ex.exerciseId !== exerciseId) return ex;
         const last =
           ex.sets[ex.sets.length - 1] ??
-          suggestionFor(historyByExercise[exerciseId] ?? [], unit);
+          suggestionFor(historyByExercise[exerciseId] ?? [], unit, weightIncrement);
         return { ...ex, sets: [...ex.sets, { ...last }] };
       })
     );
@@ -589,6 +597,7 @@ export function NewWorkoutForm({
                     exercise={activeExercise}
                     history={historyByExercise[activeExercise.exerciseId] ?? []}
                     unit={unit}
+                    weightIncrement={weightIncrement}
                     onChangeSet={(i, set) => updateSet(activeExercise.exerciseId, i, set)}
                     onRemoveSet={(i) => removeSet(activeExercise.exerciseId, i)}
                     onDuplicateLastSet={() => duplicateLastSet(activeExercise.exerciseId)}

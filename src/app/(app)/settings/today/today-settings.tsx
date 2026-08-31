@@ -89,7 +89,7 @@ export function TodaySettings({ initial }: { initial: Preferences }) {
               onClick={() => move(i, -1)}
               disabled={saving || i === 0}
               aria-label={`Move ${TODAY_PANEL_LABELS[id]} up`}
-              className="tap-press flex size-7 items-center justify-center transition-colors hover:bg-muted disabled:opacity-25"
+              className="tap-press tap-reach flex size-7 items-center justify-center transition-colors hover:bg-muted disabled:opacity-25"
             >
               <ArrowUp className="size-3.5" strokeWidth={2.5} />
             </button>
@@ -98,7 +98,7 @@ export function TodaySettings({ initial }: { initial: Preferences }) {
               onClick={() => move(i, 1)}
               disabled={saving || i === order.length - 1}
               aria-label={`Move ${TODAY_PANEL_LABELS[id]} down`}
-              className="tap-press flex size-7 items-center justify-center border-l border-hairline transition-colors hover:bg-muted disabled:opacity-25"
+              className="tap-press tap-reach flex size-7 items-center justify-center border-l border-hairline transition-colors hover:bg-muted disabled:opacity-25"
             >
               <ArrowDown className="size-3.5" strokeWidth={2.5} />
             </button>
@@ -109,7 +109,7 @@ export function TodaySettings({ initial }: { initial: Preferences }) {
             onClick={() => toggle(id)}
             disabled={saving}
             aria-label={`Hide ${TODAY_PANEL_LABELS[id]}`}
-            className="tap-press shrink-0 text-muted-foreground transition-colors hover:text-destructive"
+            className="tap-press tap-target shrink-0 text-muted-foreground transition-colors hover:text-destructive"
           >
             <Eye className="size-4" />
           </button>
@@ -143,7 +143,7 @@ export function TodaySettings({ initial }: { initial: Preferences }) {
                 onClick={() => toggle(id)}
                 disabled={saving}
                 aria-label={`Show ${TODAY_PANEL_LABELS[id]}`}
-                className="tap-press shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                className="tap-press tap-target shrink-0 text-muted-foreground transition-colors hover:text-foreground"
               >
                 <EyeOff className="size-4" />
               </button>

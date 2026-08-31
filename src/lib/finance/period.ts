@@ -30,9 +30,16 @@ export function currentPeriodBounds(period: BudgetPeriod, anchorDate: string, to
     const anchorDay = Number(anchorDate.slice(8, 10));
     const [ty, tm, td] = today.split("-").map(Number);
 
+    // Compared against the anchor CLAMPED TO THIS MONTH, not the raw anchor.
+    // With a raw 31 and today 28 Feb, `28 < 31` sent the period start back to
+    // 31 Jan and made the end 28 Feb — and `end` is exclusive, so 28 February
+    // fell outside its own current period. Everything spent that day was
+    // invisible to budgets and to safe-to-spend, then reappeared on 1 March.
+    const anchorThisMonth = Math.min(anchorDay, daysInMonth(ty, tm));
+
     let startYear = ty;
     let startMonth = tm;
-    if (td < anchorDay) {
+    if (td < anchorThisMonth) {
       startMonth -= 1;
       if (startMonth === 0) {
         startMonth = 12;

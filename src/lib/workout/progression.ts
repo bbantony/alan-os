@@ -15,7 +15,9 @@ const HYPERTROPHY_REP_TARGET = 8;
 // actually hit last time. Deliberately simple, no history beyond "last session."
 export function suggestNextWeight(
   lastSets: SetInput[],
-  unit: WeightUnit
+  unit: WeightUnit,
+  /** Settings -> Workout, in the display unit. Null = the unit's default. */
+  weightIncrement?: number | null
 ): OverloadSuggestion | null {
   if (lastSets.length === 0) return null;
 
@@ -24,7 +26,10 @@ export function suggestNextWeight(
   const minRepsAtTop = Math.min(...setsAtTop.map((s) => s.reps));
 
   if (minRepsAtTop >= HYPERTROPHY_REP_TARGET) {
-    return { weightKg: topWeight + smallestIncrementKg(unit), reps: HYPERTROPHY_REP_TARGET };
+    return {
+      weightKg: topWeight + smallestIncrementKg(unit, weightIncrement),
+      reps: HYPERTROPHY_REP_TARGET,
+    };
   }
   return { weightKg: topWeight, reps: minRepsAtTop };
 }

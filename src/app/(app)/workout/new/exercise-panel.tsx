@@ -24,6 +24,7 @@ export function ExercisePanel({
   exercise,
   history,
   unit,
+  weightIncrement,
   onChangeSet,
   onRemoveSet,
   onDuplicateLastSet,
@@ -32,6 +33,7 @@ export function ExercisePanel({
   exercise: DraftExercise;
   history: ExerciseHistoryEntry[];
   unit: WeightUnit;
+  weightIncrement: number | null;
   onChangeSet: (index: number, set: DraftSet) => void;
   onRemoveSet: (index: number) => void;
   onDuplicateLastSet: () => void;
@@ -49,7 +51,7 @@ export function ExercisePanel({
         <button
           type="button"
           onClick={onRemoveExercise}
-          className="tap-press shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
+          className="tap-press tap-target shrink-0 text-muted-foreground/50 transition-colors hover:text-destructive"
           aria-label={`Remove ${exercise.exerciseName}`}
         >
           <Trash2 className="size-4" />
@@ -96,6 +98,7 @@ export function ExercisePanel({
             set={set}
             unit={unit}
             equipment={exercise.equipment}
+            weightIncrement={weightIncrement}
             onChange={(next) => onChangeSet(i, next)}
             onRemove={() => onRemoveSet(i)}
           />

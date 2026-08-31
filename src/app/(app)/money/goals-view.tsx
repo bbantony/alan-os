@@ -162,7 +162,7 @@ export function GoalsView({
                 type="button"
                 onClick={() => setShowForm(true)}
                 aria-label="New goal"
-                className="tap-press flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
+                className="tap-press tap-reach flex size-7 items-center justify-center border-2 border-rule bg-surface transition-colors hover:bg-foreground hover:text-background"
               >
                 <Plus className="size-4" strokeWidth={3} />
               </button>
@@ -212,7 +212,7 @@ export function GoalsView({
                     <button
                       type="button"
                       onClick={() => setConfirmingDelete(g)}
-                      className="tap-press text-muted-foreground/50 transition-colors hover:text-destructive"
+                      className="tap-press tap-target text-muted-foreground/50 transition-colors hover:text-destructive"
                       aria-label={`Delete ${g.name}`}
                     >
                       <Trash2 className="size-4" />
