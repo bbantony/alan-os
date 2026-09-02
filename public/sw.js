@@ -1,7 +1,7 @@
-// Bumped to v2 when the notification badge was added — the activate handler
-// below deletes any cache whose name doesn't match, so a version change is
-// what makes existing installs pick up the new shell list.
-const CACHE_NAME = "alan-os-shell-v2";
+// Bumped to v3 when launcher shortcuts were added to the manifest — the
+// activate handler below deletes any cache whose name doesn't match, so a
+// version change is what makes existing installs pick up the new shell list.
+const CACHE_NAME = "alan-os-shell-v3";
 const SHELL_URLS = [
   "/",
   "/manifest.json",

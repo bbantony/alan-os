@@ -4169,3 +4169,137 @@ something", written when it could do four things. It now says it can log, add an
 "nobody can find the assistant", because an audit reads code and this is only visible if you try to
 use the app. The verification loop this session was lint, build, tests and a code reviewer — all of
 which passed on a feature sitting three taps deep behind a hamburger.
+
+---
+
+## 52. "What's left?" — the audit board re-counted, and a correction
+
+**What Alan asked for.** A cold-start review of where the audit stands: what the remaining
+findings actually are, in plain English, and what to do first. No code changed by this entry.
+
+**The count in PROGRESS.md was stale.** It said 68 open, which is simply 108 − 40. The published
+audit board (artifact `7d063e36`, last updated 27 Aug) marks **76 items still open** — 40 closed
+against 116 rows, of which 5 are the criticals repeated in the ranked-first section. Nobody
+reconciled the two numbers after entries 47-51. The board is the live record; 68 was arithmetic.
+
+**PROGRESS.md's claim that none of the remaining findings is data-losing is wrong**, and that is
+the correction worth recording. Four of them lose work you have already typed:
+
+- `today/focus-panel.tsx:140` — the evening ritual shows "Plan set — Tomorrow is decided" without
+  checking the save. `calendar/actions.ts:136` returns nothing and swallows both of its own
+  database errors.
+- `lib/offline/shopping-db.ts:76` — outbox keyed on `crypto.randomUUID()`, read back with
+  `getAll` (key order). Re-verified this session: still `db.put("outbox", mutation)` with no
+  sequence, still `db.getAll("outbox")`.
+- `shopping/shopping-list.tsx:148` — refreshes from the server after a *failed* flush, and the
+  refresh clears the local store first.
+- `lib/offline/shopping-sync.ts:46` — re-verified: `catch { return { flushed, failed: true } }`,
+  no attempt counter, no set-aside. One permanently-failing mutation blocks the queue forever.
+
+**Five spot-checks run against the current tree rather than trusted from the artifact**, because a
+three-day-old finding list is a claim, not a fact:
+
+- `money/actions.ts` — CONFIRMED open. `logTransaction` computes its delta from `input.isIncome`
+  (line 272, browser-supplied); `deleteTransaction` computes it from `categories(kind)` (line 317,
+  database). Disagreement leaves the balance off by twice the amount.
+- `components/ui/calendar-grid.tsx` — CONFIRMED open. The grid owns `view` state internally
+  (`setView` at :74 and :97) and exposes no month-changed callback, so the Plan page cannot know
+  it needs to fetch.
+- The two offline shopping files above — CONFIRMED open.
+
+**Recommended order, given to Alan as three units** rather than a list of 76: (1) work that
+disappears — the four above plus the four screens that report success without checking; (2) money
+that comes out wrong — the balance drift, the one-day-early dates, the two reconcile faults;
+(3) things visibly broken when you use them — Plan calendar paging past a month, the barbell set
+that records 0 kg, weekly routine streaks stuck at 1, crew confetti firing up to nine times.
+
+**Not done, on purpose.** No fixes, and the board was not republished — the recount is here so the
+next session starts from the right number, and Alan chooses which unit to run.
+
+---
+
+## 53. HANDOFF.md — the cold-start briefing for the next session
+
+**What Alan asked for.** He is moving the work to a fresh session (Fable) and wants it to pick the
+project up cold: *"give it enough context about your findings and tell me what to do so that we can
+take this elsewhere since i want everything to be much better. also make it look a bit more refined
+and polished and utilize functions of Kvaesitso launcher on my Fold 7."*
+
+**`HANDOFF.md` written — 520 lines, at the repo root.** Structured so a session with no history can
+act from it: which docs to read in what order, where the project stands, the 40 closed / 76 open
+split, the hard constraints, the session protocol, and all 76 open findings grouped by theme with
+severity, `file:line` and the audit's suggested fix on every row (generated from the audit board's
+own data, not retyped).
+
+**Three things in it that are not in any other document:**
+
+1. **The four findings that lose typed work, named at the top** rather than buried at position 17 of
+   76 — the evening ritual's unchecked "Plan set" confirmation, the random-order offline replay, the
+   failed flush that clears the local store anyway, and the permanently-jammed sync queue.
+2. **"Verify before you fix."** Five findings were re-opened in the current tree before writing this;
+   all five were still real, and the file records both the method and the result so the next session
+   spot-checks rather than trusts a week-old list.
+3. **Section 6, the traps this codebase has already sprung** — the grep that misses generic calls,
+   `pg_attribute.attname` being `name` not `text`, `no-unused-vars` being a warning so `ALL CHECKS
+   PASS` can be true and wrong, a "verified empty" migration comment being a promise not a mechanism,
+   and the assistant that passed lint, build, tests and review while sitting three taps deep where
+   Alan could not find it. All of these cost a session to learn once.
+
+### Stream C — the Fold 7 and Kvaesitso, measured rather than assumed
+
+The state of the app on a large screen was counted, not guessed: **one `lg:` class in the entire
+codebase** (and it is a button height variant, not a layout), against 58 `md:` and 17 `sm:`, with
+`max-w-2xl` as the dominant container. `public/manifest.json` has **no `shortcuts`, no
+`share_target`, and `"orientation": "portrait-primary"`** — an orientation lock on a folding phone.
+So on the inner display the app is a 672px phone column in the middle of an 8" screen.
+
+Ordered for the next session: manifest `shortcuts` first (four entries, ~30 min, and Kvaesitso's
+global search surfaces Android app shortcuts), then `share_target` for receipts, then real two-pane
+layouts plus unlocking orientation, then a themed launcher icon.
+
+**One claim is flagged as unverified rather than stated as fact.** That Kvaesitso surfaces
+PWA-derived app shortcuts in search comes from its feature description ("apps, contacts, shortcuts,
+and useful actions"), not its own docs — every documentation URL tried on 2 Sep 2026 returned 404.
+The file says so, and says to confirm it on Alan's device before it goes into `MANUAL.md`.
+
+**The native Kvaesitso plugin is written up as a decision for Alan, not a task.** The SDK is
+Apache-2.0 and would put tasks and shopping items into launcher search, but it is a separate Kotlin
+Android project distributed as a sideloaded APK — a different toolchain, not a change to this repo.
+The briefing explicitly tells the next session to put it to him rather than start it.
+
+**Also published for Alan**, since he is reading this on a phone and about to clear the session:
+`claude.ai/code/artifact/5b139e52-6d52-47cf-8848-f2eb51c10d94` — the prompt to paste, the three
+streams in plain English, and a five-item checklist for telling whether the new session is behaving
+(did it read the briefing, did it show a plan first, did it re-verify the finding, did it ask about
+the plugin, did it write to this file). Built in the app's own Swiss Instrument language.
+
+**No code changed.** `HANDOFF.md` is the only file added.
+
+## 54. Launcher shortcuts — long-press the icon, land in the form (2 Sep 2026)
+
+**What Alan asked for:** tighten the whole app up, make it feel seamless and polished, and make
+it properly use the Fold 7 and the Kvaesitso launcher — starting with the launcher shortcuts
+(HANDOFF.md Stream C, item 1) because it's half an hour and he'll feel it straight away.
+
+**What changed:**
+
+1. `public/manifest.json` — added a `shortcuts` array with four entries, each pointing at an
+   address the target screen already knew how to handle (no page code needed changing):
+   - **Log expense** → `/money?new=1` (the Money page reads `?new=1` and opens the quick-log form)
+   - **Add task** → `/plan?view=list&new=1` (pins the list view *and* focuses the new-task field —
+     the unit-reviewer caught that without `view=list`, a Calendar or Agenda default view in
+     Settings would make this shortcut silently do nothing)
+   - **Start workout** → `/workout/new` (a dedicated page; no parameter needed)
+   - **Shopping list** → `/shopping?new=1` (focuses the add-item field)
+   All four reuse `/icons/icon-192.png` as the shortcut icon; per-action mini-icons were judged
+   not worth delaying the win for and can come later.
+2. `public/sw.js` — cache name bumped `alan-os-shell-v2` → `alan-os-shell-v3` (comment updated to
+   say why). The shell list includes `/manifest.json`, so the bump is what makes an installed
+   phone re-fetch the changed manifest instead of serving its cached copy forever.
+
+**Deliberately not done here:** `share_target` (Stream C item 2) and the large-screen layouts —
+they are their own units. The claim that Kvaesitso's *search* surfaces these shortcuts stays out
+of MANUAL.md until Alan confirms it on the actual phone (HANDOFF.md flags it as unverified; the
+long-press menu itself is standard Android behaviour). Checks: test-runner ALL CHECKS PASS;
+unit-reviewer failed the first pass (missing changelog entry, the `view=list` gap above) and both
+findings were fixed in the same session.
