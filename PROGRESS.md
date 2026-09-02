@@ -925,7 +925,16 @@ the same way.
   into an ordinary outcome of a second tap — and 33 sites were returning `error.message` straight
   to the screen. Every constraint added from here needs a line in that mapper.
 
-### Still open (68 findings), none of them data-losing
+### Still open (76 findings) — and four of them DO lose work
+
+**Corrected 30 Aug 2026 (CHANGELOG entry 52).** This heading used to read "68 findings, none of
+them data-losing". Both halves were wrong. 68 was arithmetic (108 - 40); the published audit board
+marks **76** rows still open. And four of them lose work already typed: the evening ritual's
+"Plan set" confirmation appears without checking the save (`today/focus-panel.tsx:140`), the
+offline shopping outbox replays in random order (`lib/offline/shopping-db.ts:76`), a failed sync
+clears the local store anyway (`shopping/shopping-list.tsx:148`), and one permanently-failing
+change blocks the queue forever (`lib/offline/shopping-sync.ts:46`). All four re-verified against
+the tree on 30 Aug. Do these before any consolidation work.
 Mostly consolidation: six duplicate short-date formatters, the shopping list's private toast
 system, `requireUser()` copy-pasted 18 times. Two behaviours worth doing first: the Plan calendar
 does not load data when you page past the preloaded month window, and `getUsageSummary` discards
