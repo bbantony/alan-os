@@ -7,6 +7,9 @@ import { projectPayoff } from "../src/lib/finance/debt-payoff.ts";
 import { incrementInDisplayUnit, smallestIncrementKg } from "../src/lib/workout/units.ts";
 import { friendlyDbError } from "../src/lib/db-errors.ts";
 import { guessCategoryForMerchant, normaliseMerchant } from "../src/lib/finance/categorise.ts";
+import { balanceDeltaCents } from "../src/lib/finance/balance.ts";
+import { adjustmentFor, appBalanceOnDate, reconcileGapCents } from "../src/lib/finance/reconcile.ts";
+import { formatDateOnlyInAppTimezone } from "../src/lib/time.ts";
 
 /**
  * The first tests in this project.
@@ -304,4 +307,109 @@ test("nothing recognisable guesses nothing rather than guessing badly", () => {
 
 test("merchant spellings are normalised the same way everywhere", () => {
   assert.equal(normaliseMerchant("  Tim   HORTONS "), "tim hortons");
+});
+
+// ---------------------------------------------------------------------------
+// Balance deltas and the reconcile gap
+// ---------------------------------------------------------------------------
+//
+// Added 2 Sep 2026 with the balance-drift fixes. The bug these guard against
+// was real: `logExpense` computed its balance move from a browser-sent
+// income/expense flag while `deleteTransaction` derived it from the category's
+// `kind` in the database — so a flag that disagreed with the category moved
+// the balance one way on log and a different way on delete, and the drift
+// stuck to the account forever. Both actions now derive direction from
+// `categories.kind` and feed it through `balanceDeltaCents`; these tests pin
+// down what that function must do for each account type.
+
+test("an expense on a normal account takes money away", () => {
+  assert.equal(balanceDeltaCents(1250, false, "chequing"), -1250);
+  assert.equal(balanceDeltaCents(1250, false, "cash"), -1250);
+});
+
+test("income on a normal account adds money", () => {
+  assert.equal(balanceDeltaCents(1250, true, "chequing"), 1250);
+});
+
+test("a credit card's balance is what's OWED, so the signs flip", () => {
+  // Spending on the card means owing more (balance up); a payment or refund
+  // means owing less (balance down).
+  assert.equal(balanceDeltaCents(1250, false, "credit_card"), 1250);
+  assert.equal(balanceDeltaCents(1250, true, "credit_card"), -1250);
+});
+
+test("the amount's own sign never smuggles a direction in", () => {
+  // Direction comes ONLY from the income flag — a negative amount from any
+  // caller must not double-flip the move.
+  assert.equal(balanceDeltaCents(-1250, false, "chequing"), -1250);
+  assert.equal(balanceDeltaCents(-1250, true, "credit_card"), -1250);
+});
+
+test("the reconcile gap is statement minus app, computed server-side", () => {
+  // `finishReconciliation` used to accept the app-side balance from the
+  // browser and subtract two client-sent numbers; the gap — the size of the
+  // correcting transaction — is now this helper fed with a server-derived
+  // app balance.
+  assert.equal(reconcileGapCents(50000, 48000), 2000);
+  assert.equal(reconcileGapCents(48000, 50000), -2000);
+  assert.equal(reconcileGapCents(48000, 48000), 0);
+});
+
+test("the app balance on the statement date rewinds later transactions", () => {
+  // Live chequing balance $100 after a $20 expense dated AFTER the statement:
+  // on the statement date the app must have believed $120.
+  assert.equal(
+    appBalanceOnDate({
+      currentBalanceCents: 10000,
+      accountType: "chequing",
+      transactionsAfterDate: [{ amount_cents: 2000, is_income: false }],
+    }),
+    12000
+  );
+  // Same rewind on a credit card runs the owed-balance signs backwards.
+  assert.equal(
+    appBalanceOnDate({
+      currentBalanceCents: 10000,
+      accountType: "credit_card",
+      transactionsAfterDate: [{ amount_cents: 2000, is_income: false }],
+    }),
+    8000
+  );
+});
+
+test("the posted adjustment always closes exactly the gap it was made for", () => {
+  // Whatever direction `adjustmentFor` picks, pushing its transaction through
+  // balanceDeltaCents must move the balance by precisely the difference —
+  // on every account type, in both directions. This is the property the
+  // whole reconcile flow rests on.
+  for (const accountType of ["chequing", "credit_card", "cash", "investment"] as const) {
+    for (const differenceCents of [2000, -2000]) {
+      const adj = adjustmentFor(differenceCents, accountType);
+      assert.ok(adj, `no adjustment for ${differenceCents} on ${accountType}`);
+      assert.equal(
+        balanceDeltaCents(adj.amountCents, adj.isIncome, accountType),
+        differenceCents,
+        `${accountType} gap of ${differenceCents} not closed`
+      );
+    }
+  }
+  assert.equal(adjustmentFor(0, "chequing"), null);
+});
+
+// ---------------------------------------------------------------------------
+// Date-only rendering
+// ---------------------------------------------------------------------------
+
+test("a bare YYYY-MM-DD renders as that same calendar day in Winnipeg", () => {
+  // The bug this pins down: `new Date("2026-09-02")` is UTC *midnight*, which
+  // in Winnipeg is the evening of 1 September — so transaction and statement
+  // dates rendered a day early. The helper anchors bare dates to midday UTC
+  // before formatting. en-CA with 2-digit fields formats back to YYYY-MM-DD,
+  // which makes the round trip exact and locale-proof.
+  const ymd = { year: "numeric", month: "2-digit", day: "2-digit" } as const;
+  assert.equal(formatDateOnlyInAppTimezone("2026-09-02", ymd), "2026-09-02");
+  // Deep winter too — the offset is CST there, not CDT, and must not matter.
+  assert.equal(formatDateOnlyInAppTimezone("2026-01-01", ymd), "2026-01-01");
+  // And the exact shape of the original bug, shown not to happen.
+  assert.notEqual(formatDateOnlyInAppTimezone("2026-09-02", ymd), "2026-09-01");
 });

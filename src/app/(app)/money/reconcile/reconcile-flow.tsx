@@ -83,7 +83,13 @@ export function ReconcileFlow({
   const [addedKeys, setAddedKeys] = useState<Set<string>>(new Set());
   const [rowCategory, setRowCategory] = useState<Record<string, string>>({});
 
-  const [result, setResult] = useState<{ cleared: number; adjusted: number; balance: number } | null>(null);
+  const [result, setResult] = useState<{
+    cleared: number;
+    adjusted: number;
+    balance: number;
+    serverDifference: number;
+    declinedCorrection: boolean;
+  } | null>(null);
 
   const account = accounts.find((a) => a.id === accountId);
   const statementBalanceCents = dollarsToCents(Number(statementBalance) || 0);
@@ -149,7 +155,8 @@ export function ReconcileFlow({
 
   function buildBankRows() {
     if (!mapping) return;
-    const useDebitCredit = mapping.amountCol === null && mapping.debitCol !== null;
+    const useDebitCredit =
+      mapping.amountCol === null && (mapping.debitCol !== null || mapping.creditCol !== null);
     const rows: BankRow[] = [];
     const ask: typeof pendingRows = [];
     let unreadable = 0;
@@ -281,7 +288,6 @@ export function ReconcileFlow({
       accountId,
       statementDate,
       statementBalanceCents,
-      appBalanceCents,
       clearedTransactionIds: clearedIds,
       postAdjustment,
       note: null,
@@ -295,6 +301,11 @@ export function ReconcileFlow({
       cleared: res.clearedCount ?? 0,
       adjusted: res.adjustedCents ?? 0,
       balance: res.newBalanceCents ?? 0,
+      serverDifference: res.differenceCents ?? 0,
+      // Whether Alan tapped "Finish without correcting" while looking at a
+      // real gap — the done screen must not confuse that deliberate choice
+      // with the books moving underneath him during the check.
+      declinedCorrection: !postAdjustment && differenceCents !== 0,
     });
     setStep("done");
   }
@@ -307,9 +318,13 @@ export function ReconcileFlow({
         <PanelHead title="Done" />
         <div className="flex flex-col gap-3 px-3 py-4">
           <p className="text-sm">
-            {result.adjusted === 0
-              ? "Everything matched — no correction was needed."
-              : `Corrected by ${formatCents(Math.abs(result.adjusted))}. Your ${account?.name} balance now matches the bank.`}
+            {result.adjusted !== 0
+              ? `Corrected by ${formatCents(Math.abs(result.adjusted), data?.currency)}. Your ${account?.name} balance now matches the bank.`
+              : result.serverDifference === 0
+                ? "Everything matched — no correction was needed."
+                : result.declinedCorrection
+                  ? `Finished without correcting — the ${formatCents(Math.abs(result.serverDifference), data?.currency)} gap is recorded with this reconcile.`
+                  : `The books moved while you were checking: the recorded gap is ${formatCents(Math.abs(result.serverDifference), data?.currency)} and no correction was posted. Run a reconcile again to settle it.`}
           </p>
           <Micro>
             {result.cleared} transaction{result.cleared === 1 ? "" : "s"} confirmed against this
@@ -446,6 +461,20 @@ export function ReconcileFlow({
                     value={mapping?.debitCol ?? -1}
                     onChange={(v) =>
                       setMapping((m) => (m ? { ...m, debitCol: v === -1 ? null : v } : m))
+                    }
+                    allowNone
+                  />
+                  {/* Banks that split money out into its own column split
+                      money in the same way. The row-reading code always knew
+                      how to use this column — the picker for it was just
+                      missing, so deposits vanished unless the auto-guess
+                      happened to find the header. */}
+                  <ColumnPicker
+                    label="Or money in"
+                    headers={csvHeaders}
+                    value={mapping?.creditCol ?? -1}
+                    onChange={(v) =>
+                      setMapping((m) => (m ? { ...m, creditCol: v === -1 ? null : v } : m))
                     }
                     allowNone
                   />

@@ -224,12 +224,24 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
     }
     setImportedCount(result.imported ?? 0);
     setStep("done");
-    toast.success(`Imported ${result.imported ?? 0} transactions`);
+    if (result.skipped) {
+      toast.success(
+        `Imported ${result.imported ?? 0} transactions — ${result.skipped} couldn't be matched to your categories and ${result.skipped === 1 ? "was" : "were"} skipped`
+      );
+    } else {
+      toast.success(`Imported ${result.imported ?? 0} transactions`);
+    }
   }
 
   function categoriesFor(isIncome: boolean) {
     return categories.filter((c) => c.kind === (isIncome ? "income" : "expense"));
   }
+
+  // What the Import button must count: exactly the rows handleImport sends —
+  // ticked AND given a category. Ticked rows without one are skipped, and
+  // that gets said out loud next to the button rather than discovered later.
+  const importableCount = candidates.filter((c) => selected[c.tempId] && rowCategory[c.tempId]).length;
+  const uncategorisedCount = candidates.filter((c) => selected[c.tempId] && !rowCategory[c.tempId]).length;
 
   return (
     <div className="space-y-3 border-t-2 border-rule pt-4">
@@ -513,12 +525,29 @@ export function CsvImport({ accounts, categories }: { accounts: Account[]; categ
 
           {error && <p className="text-xs text-destructive">{error}</p>}
 
+          {/* The button promises exactly the set handleImport sends: ticked
+              AND categorised. It used to count every ticked row, so "Import
+              12" could quietly save 9. */}
+          {uncategorisedCount > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {uncategorisedCount === 1
+                ? "1 ticked row has no category and will be skipped."
+                : `${uncategorisedCount} ticked rows have no category and will be skipped.`}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={reset}>
               Cancel
             </Button>
-            <Button type="button" className="flex-1" disabled={loading} onClick={handleImport}>
-              {loading ? "Importing…" : `Import ${Object.values(selected).filter(Boolean).length} transactions`}
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={loading || importableCount === 0}
+              onClick={handleImport}
+            >
+              {loading
+                ? "Importing…"
+                : `Import ${importableCount} ${importableCount === 1 ? "transaction" : "transactions"}`}
             </Button>
           </div>
         </div>

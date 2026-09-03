@@ -41,6 +41,7 @@ export function MoneyShell({
   initialRecurring,
   lastReconciled,
   goalPlans,
+  defaultAccountId = null,
   autoOpenQuickLog = false,
 }: {
   initialAccounts: Account[];
@@ -55,6 +56,11 @@ export function MoneyShell({
   initialRecurring: RecurringTransaction[];
   lastReconciled: string | null;
   goalPlans: GoalPlan[];
+  /**
+   * The "Default account" money preference, already validated by the server
+   * against the live account list. Null means first in the list.
+   */
+  defaultAccountId?: string | null;
   /** Set by the `?new=1` link the app-wide quick-add sends here. */
   autoOpenQuickLog?: boolean;
 }) {
@@ -197,6 +203,7 @@ export function MoneyShell({
             recurring={recurring}
             onRecurringChanged={setRecurring}
             lastReconciled={lastReconciled}
+            defaultAccountId={defaultAccountId}
           />
         )}
         {tab === "budgets" && (
@@ -209,6 +216,7 @@ export function MoneyShell({
             goalPlans={goalPlans}
             accounts={accounts}
             categories={categories}
+            defaultAccountId={defaultAccountId}
           />
         )}
         {tab === "debts" && <DebtsView debts={debts} onChanged={setDebts} />}
@@ -220,6 +228,7 @@ export function MoneyShell({
           accounts={accounts}
           categories={categories}
           recentMerchants={recentMerchants}
+          initialAccountId={defaultAccountId}
           onClose={() => setShowQuickLog(false)}
           onLogged={(txn, updatedAccount) => {
             setTransactions((prev) => [txn, ...prev]);

@@ -4397,3 +4397,74 @@ honest version: a *changed* set of shortcuts needs a reinstall to show up prompt
 **Lesson for future sessions:** any future edit to `manifest.json` that changes shortcuts,
 icons, or share targets will NOT appear on Alan's phone for days unless he reinstalls. Plan the
 messaging accordingly — say so up front instead of "wait a minute".
+
+## 57. Money that comes out wrong — the six worst, fixed (2 Sep 2026)
+
+**What Alan asked for:** "do all" on the tightening roadmap — this is Stream A item 2, the six
+HIGH money findings, with his approval to wire the default-account setting and remove the two
+dead ones.
+
+**What changed:**
+
+1. **The drifting balance.** `logExpense` trusted the browser's word on whether a transaction
+   was income or spending; `deleteTransaction` asked the database. They now both ask the
+   database (`categories.kind`), so logging and deleting the same transaction is always a
+   perfect undo — and a transaction can no longer be filed under another user's category on
+   this path. Found along the way: `addMissingTransaction` in the reconcile flow had the
+   identical bug and got the identical fix.
+2. **Transactions a day early.** Bare dates were rendered at UTC midnight, which is the
+   previous evening in Winnipeg. New shared helper `formatDateOnlyInAppTimezone` in
+   `lib/time.ts` (the midday-anchor trick, once, with a test covering summer and winter);
+   both sites in `overview-view.tsx` use it; a sweep found no other bare-date callers.
+3. **Reconcile stops trusting the browser.** `finishReconciliation` no longer accepts the
+   app-side balance from the client — it recomputes it server-side with the same rewind the
+   reconcile screen uses (nuance: the *live* balance would have broken mid-month reconciles,
+   so it rewinds to the statement date). The gap maths was extracted into a pure
+   `reconcileGapCents` helper with tests, including a property test that the adjustment always
+   closes the gap exactly on all four account types in both directions.
+4. **Deposits no longer vanish.** The reconcile mapping step gained the missing "Or money in"
+   column picker (statements with separate debit/credit columns), and the row-reader now
+   engages split-column mode when *either* column is mapped — previously a credit-only mapping
+   read nothing.
+5. **The Import button tells the truth.** It counts exactly the rows that will import
+   (ticked AND categorised) and says how many ticked rows will be skipped for having no
+   category.
+6. **Settings that do something.** "Default account" is now read: the quick-log keypad,
+   receipt review, repeating payments, remittances and goal habits all start on it (validated
+   server-side; a deleted account falls back safely; the remittance form re-validates against
+   its CAD-only list). Its hint text now says all that. The two settings nothing read —
+   payday anchor day and reconcile reminder — are gone from the screen and the preferences
+   type, per Alan's ok; stale stored JSON is ignored harmlessly. Also: merchant-remembered
+   category suggestions now only fill in when their kind matches the Spent/Received toggle,
+   so the on-screen optimistic balance move can never disagree with the server's.
+
+**Tests:** eight new cases in `tests/money-and-units.test.mts` — balance direction on normal
+and credit-card accounts, sign handling, the reconcile gap and rewind, the closing-adjustment
+property, and the Winnipeg calendar-day rendering in both DST seasons.
+
+**QA round, same unit (finished 3 Sep after a usage-limit interruption):** QA traced every flow
+and found real problems, all now fixed: (1) the quick-log form was the one money form of five
+that didn't re-check its seeded account, so a deleted default account made Save crash silently
+with the button stuck on "Saving…" — now guarded like the others, and a dropped connection
+re-enables the button with a plain message; (2) the CSV import still trusted the browser's word
+on category and direction — the exact hole this unit closed elsewhere — it now verifies every
+category is yours in one query, derives direction from the category itself, skips rows that
+don't check out, and reports the skipped count truthfully in the toast; (3) receipt approval had
+the same pattern in miniature (hardcoded direction, unverified categories) and got the same fix;
+(4) the reconcile done-screen could say "Everything matched" when the books had moved during the
+check — it now speaks from the server's own measured gap and says plainly when a gap was
+recorded but no correction posted; (5) the Import button is disabled at zero. QA also confirmed
+the log-then-delete round trip nets to exactly zero on all four account types, the DST date
+rendering, and the split-column CSV mapping. One finding was deliberately NOT patched here:
+**transfer legs don't record their direction** (both legs of a transfer are written identically
+except the account), so deleting one leg drifts the balance by double and the reconcile rewind
+mis-signs incoming legs — pre-existing, real money, and needs a small migration to fix honestly.
+It is the next unit.
+
+**Reviewer round on the QA fixes:** one of the five was itself flawed — the new "books moved
+while you were checking" message also appeared after the deliberate "Finish without correcting"
+button, telling Alan something false after a routine choice. The done screen now remembers
+whether he was looking at a real gap and chose to finish anyway ("Finished without correcting —
+the gap is recorded") and reserves the books-moved warning for genuine drift. The reviewer also
+caught the gap amounts printing with a $ sign regardless of the account's currency — all three
+done-screen amounts now carry the account currency.

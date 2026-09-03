@@ -49,12 +49,16 @@ export function GoalsView({
   goalPlans,
   accounts,
   categories,
+  defaultAccountId = null,
 }: {
   goals: SavingsGoal[];
   onChanged: (updater: (prev: SavingsGoal[]) => SavingsGoal[]) => void;
   goalPlans: GoalPlan[];
   accounts: Account[];
   categories: Category[];
+  /** The "Default account" money preference, already validated by the server.
+      Seeds the goal-habit panel's account picker, same as quick-log. */
+  defaultAccountId?: string | null;
 }) {
   const [plans, setPlans] = useState(goalPlans);
   const [showForm, setShowForm] = useState(false);
@@ -134,6 +138,7 @@ export function GoalsView({
         plans={plans}
         accounts={accounts}
         categories={categories}
+        initialAccountId={defaultAccountId}
         onSetUp={(goalId) =>
           setPlans((prev) =>
             prev.map((p) => (p.goalId === goalId ? { ...p, alreadySetUp: true } : p))

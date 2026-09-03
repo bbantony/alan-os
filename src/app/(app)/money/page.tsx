@@ -12,6 +12,7 @@ import { getPendingReceipts } from "./receipt-actions";
 import { getRecurringTransactions, postDueRecurringTransactions } from "./recurring-actions";
 import { getReconciliationHistory } from "./reconcile-actions";
 import { getGoalPlans } from "./goal-actions";
+import { getPreferences } from "@/app/(app)/settings/preferences-actions";
 import { MoneyShell } from "./money-shell";
 
 export default async function MoneyPage({
@@ -31,6 +32,7 @@ export default async function MoneyPage({
     accounts, categories, transactions, budgets, goals, debts, merchants, remittance, receipts, recurring,
     reconciliations,
     goalPlans,
+    preferences,
   ] = await Promise.all([
       searchParams,
       getAccounts(),
@@ -45,7 +47,17 @@ export default async function MoneyPage({
       getRecurringTransactions(),
       getReconciliationHistory(1),
       getGoalPlans(),
+      getPreferences(),
     ]);
+
+  // The "Default account" setting (Settings → Money). Validated against the
+  // accounts that actually exist, so a preference pointing at a deleted
+  // account falls back to the old behaviour (first in the list) rather than
+  // seeding the form with an id that matches nothing.
+  const defaultAccountId =
+    preferences.defaultAccountId && accounts.some((a) => a.id === preferences.defaultAccountId)
+      ? preferences.defaultAccountId
+      : null;
 
   return (
     <MoneyShell
@@ -61,6 +73,7 @@ export default async function MoneyPage({
       initialRecurring={recurring}
       lastReconciled={reconciliations[0]?.statement_date ?? null}
       goalPlans={goalPlans}
+      defaultAccountId={defaultAccountId}
       autoOpenQuickLog={isNew === "1"}
     />
   );

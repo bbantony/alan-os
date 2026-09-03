@@ -139,8 +139,22 @@ export async function buildCsvCandidates(input: { rows: RawCsvRow[] }): Promise<
 
 export async function importCsvTransactions(input: {
   accountId: string;
-  rows: { txnDate: string; merchant: string; amountCents: number; isIncome: boolean; categoryId: string }[];
-}): Promise<{ imported?: number; error?: string }> {
+  rows: {
+    txnDate: string;
+    merchant: string;
+    amountCents: number;
+    /**
+     * Still sent by the review screen, but the server no longer consults it —
+     * the direction of each row's balance move is derived from the category's
+     * `kind` below, exactly as logExpense and deleteTransaction do. A
+     * browser-supplied flag that disagreed with the category made the balance
+     * drift: the import filed the move one way, deleting the row reversed it
+     * the other way, and the difference stuck to the account forever.
+     */
+    isIncome: boolean;
+    categoryId: string;
+  }[];
+}): Promise<{ imported?: number; skipped?: number; error?: string }> {
   const { supabase, user } = await requireUser();
   if (input.rows.length === 0) return { error: "Nothing selected to import." };
 
@@ -152,10 +166,35 @@ export async function importCsvTransactions(input: {
     .maybeSingle();
   if (!account) return { error: "Couldn't find that account." };
 
+  // One user-scoped query for every distinct category the rows reference.
+  // Scoping to the user also stops a row being filed under another user's
+  // category id — the foreign key alone would have accepted it, because FK
+  // checks bypass RLS. The fetched `kind` decides each row's balance
+  // direction below.
+  const categoryIds = [...new Set(input.rows.map((r) => r.categoryId))];
+  const { data: ownedCategories, error: categoriesError } = await supabase
+    .from("categories")
+    .select("id, kind")
+    .in("id", categoryIds)
+    .eq("user_id", user.id);
+  if (categoriesError) {
+    return { error: friendlyDbError(categoriesError) ?? "That didn't save. Try again." };
+  }
+  const kindById = new Map((ownedCategories ?? []).map((c) => [c.id as string, c.kind as string]));
+
+  // Rows pointing at a category that isn't this user's are skipped, not
+  // fatal — the rest of the import still lands, and the skipped count goes
+  // back to the caller so the reported numbers stay truthful.
+  const rows = input.rows.filter((r) => kindById.has(r.categoryId));
+  const skipped = input.rows.length - rows.length;
+  if (rows.length === 0) {
+    return { error: "None of those rows used one of your categories, so nothing was imported." };
+  }
+
   // The account's own currency, not a hardcoded "CAD" — importing an Indian
   // statement used to label every row Canadian, which then counted straight
   // into the CAD budgets and reports at 60x its real value.
-  const inserts = input.rows.map((r) => ({
+  const inserts = rows.map((r) => ({
     user_id: user.id,
     account_id: input.accountId,
     category_id: r.categoryId,
@@ -169,8 +208,12 @@ export async function importCsvTransactions(input: {
   const { error } = await supabase.from("transactions").insert(inserts);
   if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
-  const totalDelta = input.rows.reduce(
-    (sum, r) => sum + balanceDeltaCents(r.amountCents, r.isIncome, account.type as AccountType),
+  // Direction from the database's own category rows, mirroring exactly what
+  // deleteTransaction will derive when reversing each row — the two must
+  // agree or the balance drifts.
+  const totalDelta = rows.reduce(
+    (sum, r) =>
+      sum + balanceDeltaCents(r.amountCents, kindById.get(r.categoryId) === "income", account.type as AccountType),
     0
   );
   // Atomic — see migration 0035. An import moves the balance by the sum of
@@ -187,5 +230,5 @@ export async function importCsvTransactions(input: {
 
   revalidatePath("/money");
   revalidatePath("/today");
-  return { imported: input.rows.length };
+  return { imported: rows.length, skipped };
 }

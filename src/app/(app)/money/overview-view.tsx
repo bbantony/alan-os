@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Micro } from "@/components/ui/tag";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { formatInAppTimezone } from "@/lib/time";
+import { formatDateOnlyInAppTimezone } from "@/lib/time";
 import { formatCents } from "@/lib/finance/money";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/finance/types";
@@ -36,6 +36,7 @@ export function OverviewView({
   receipts,
   recurring,
   lastReconciled,
+  defaultAccountId = null,
   onAccountsChanged,
   onTransactionDeleted,
   onReceiptsChanged,
@@ -50,6 +51,9 @@ export function OverviewView({
   recurring: RecurringTransaction[];
   /** Statement date of the most recent reconciliation, any account. */
   lastReconciled: string | null;
+  /** The "Default account" money preference, already validated by the server.
+      Seeds every form here that picks an account, same as quick-log. */
+  defaultAccountId?: string | null;
   onAccountsChanged: (updater: (prev: Account[]) => Account[]) => void;
   onTransactionDeleted: (id: string) => void;
   onReceiptsChanged: (updater: (prev: Receipt[]) => Receipt[]) => void;
@@ -75,7 +79,7 @@ export function OverviewView({
   const cadAccounts = accounts.filter((a) => a.currency === "CAD");
 
   const lastReconciledLabel = lastReconciled
-    ? `Last checked against a statement dated ${formatInAppTimezone(`${lastReconciled}T12:00:00Z`, {
+    ? `Last checked against a statement dated ${formatDateOnlyInAppTimezone(lastReconciled, {
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -294,6 +298,7 @@ export function OverviewView({
         recurring={recurring}
         accounts={accounts}
         categories={categories}
+        initialAccountId={defaultAccountId}
         onChanged={onRecurringChanged}
       />
 
@@ -398,7 +403,7 @@ export function OverviewView({
                       {t.merchant || category?.name || "Transaction"}
                     </p>
                     <p className="micro-sm mt-0.5 truncate text-muted-foreground">
-                      {formatInAppTimezone(t.txn_date, { month: "short", day: "numeric" })}
+                      {formatDateOnlyInAppTimezone(t.txn_date, { month: "short", day: "numeric" })}
                       {category && ` · ${category.name}`}
                     </p>
                   </div>
@@ -481,6 +486,7 @@ export function OverviewView({
       {showRemittanceForm && cadAccounts.length > 0 && (
         <RemittanceForm
           accounts={cadAccounts}
+          initialAccountId={defaultAccountId}
           onClose={() => setShowRemittanceForm(false)}
           onLogged={(updatedAccount) => {
             onAccountsChanged((prev) =>
@@ -496,6 +502,7 @@ export function OverviewView({
           receipt={reviewingReceipt}
           accounts={accounts}
           categories={categories}
+          initialAccountId={defaultAccountId}
           onClose={() => setReviewingReceipt(null)}
           onDiscarded={(receiptId) => {
             onReceiptsChanged((prev) => prev.filter((r) => r.id !== receiptId));

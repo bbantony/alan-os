@@ -243,17 +243,36 @@ export async function logExpense(input: {
   merchant: string | null;
   note: string | null;
   txnDate: string;
+  /**
+   * Still sent by the form for its own optimistic UI, but the server no longer
+   * consults it — the direction of the balance move is derived from the
+   * category's `kind` below. A browser-supplied flag that disagreed with the
+   * category made the balance drift: logging filed the move one way, deleting
+   * the same transaction reversed it the other way (delete has always derived
+   * from `categories.kind`), and the difference stuck to the account forever.
+   */
   isIncome: boolean;
 }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
 
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("id, type, current_balance_cents")
-    .eq("id", input.accountId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [{ data: account }, { data: category }] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("id, type, current_balance_cents")
+      .eq("id", input.accountId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    // Scoped to the user, which also stops a transaction being filed under
+    // another user's category id on this path.
+    supabase
+      .from("categories")
+      .select("id, kind")
+      .eq("id", input.categoryId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
   if (!account) return { error: "Couldn't find that account." };
+  if (!category) return { error: "Couldn't find that category." };
 
   const { error } = await supabase.from("transactions").insert({
     id: input.id,
@@ -269,7 +288,11 @@ export async function logExpense(input: {
   });
   if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
-  const delta = balanceDeltaCents(input.amountCents, input.isIncome, account.type as AccountType);
+  // Direction from the database's own category row, mirroring exactly what
+  // deleteTransaction will derive when reversing this — the two must agree or
+  // the balance drifts.
+  const isIncome = (category.kind as string) === "income";
+  const delta = balanceDeltaCents(input.amountCents, isIncome, account.type as AccountType);
   // Atomic. Read-add-write from here let two concurrent changes each read the
   // same starting balance, with the second silently erasing the first — while
   // both transactions stayed in the ledger. See migration 0035.

@@ -1,4 +1,4 @@
-import { daysInMonth } from "./period";
+import { daysInMonth } from "./period.ts";
 import type { RecurrenceFrequency } from "./types";
 
 // Date maths for recurring money — rent, salary, subscriptions.

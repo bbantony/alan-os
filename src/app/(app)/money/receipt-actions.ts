@@ -302,6 +302,23 @@ export async function approveReceipt(input: {
       .eq("user_id", user.id);
   }
 
+  // Every category the line items point at, fetched user-scoped in one query.
+  // The FK alone would accept another user's category id (FK checks bypass
+  // RLS), and the `kind` decides the balance direction below the same way
+  // logExpense and deleteTransaction derive it — the server never takes the
+  // browser's word for which way money moved.
+  const lineCategoryIds = [...new Set(items.map((li) => li.category_id!))];
+  const { data: ownedCategories, error: lineCategoriesError } = await supabase
+    .from("categories")
+    .select("id, kind")
+    .in("id", lineCategoryIds)
+    .eq("user_id", user.id);
+  if (lineCategoriesError || (ownedCategories ?? []).length !== lineCategoryIds.length) {
+    await releaseClaim();
+    return { error: "Couldn't find one of those categories." };
+  }
+  const lineKindById = new Map((ownedCategories ?? []).map((c) => [c.id as string, c.kind as string]));
+
   let totalCents = 0;
   let insertedTransactions: Transaction[];
   // try/finally around the write section. Every RETURNED error already
@@ -363,7 +380,18 @@ export async function approveReceipt(input: {
 
     // One statement in the database instead of read-add-write from here, so a
     // concurrent log can't read the same starting balance and erase this one.
-    const delta = balanceDeltaCents(totalCents, false, account.type as AccountType);
+    // Direction comes from each transaction's own category kind — the same
+    // source deleteTransaction will use to reverse it, so the two always agree.
+    const delta = insertedTransactions.reduce(
+      (sum, t) =>
+        sum +
+        balanceDeltaCents(
+          t.amount_cents,
+          lineKindById.get(t.category_id) === "income",
+          account.type as AccountType
+        ),
+      0
+    );
     const { data: updatedBalance, error: balanceError } = await supabase.rpc(
       "adjust_account_balance",
       { p_account_id: account.id, p_delta_cents: delta }

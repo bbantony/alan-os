@@ -968,3 +968,17 @@ semantics are now explicit: a server "no" reverts and explains, a network drop q
 **Still open: ~70 of the audit board's 76.** Known leftovers flagged by the reviewer for a later
 unit: `task-detail-dialog.tsx` and `today-console.tsx` still ignore the errors the task actions
 now return; `setTaskCompleted` still doesn't revalidate /plan on a plain complete.
+
+## 3 Sep 2026 — The six worst money bugs, closed
+
+CHANGELOG entry 57, full ritual (test-runner, unit-reviewer twice, QA trace). Balance
+log/delete round-trips now net to zero on all four account types; recent transactions no
+longer show a day early (shared `formatDateOnlyInAppTimezone`, DST-tested); reconcile
+recomputes its gap server-side and its done screen tells the truth in all four states;
+split debit/credit statements keep their deposits; the Import button counts and reports
+honestly and the CSV/receipt paths verify categories server-side; the default-account
+setting is real and the two dead money settings are gone. Eight new tests.
+
+**Next: transfers don't record their direction** (QA found it): both legs are written
+identically, so deleting one leg drifts the balance by double and the reconcile rewind
+mis-signs incoming legs. Needs migration 0038. In progress.

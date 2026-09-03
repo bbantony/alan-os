@@ -42,12 +42,18 @@ export function QuickLogForm({
   accounts,
   categories,
   recentMerchants,
+  initialAccountId = null,
   onClose,
   onLogged,
 }: {
   accounts: Account[];
   categories: Category[];
   recentMerchants: MerchantMemory[];
+  /**
+   * The "Default account" money preference, validated server-side against the
+   * live account list before it gets here. Null means first in the list.
+   */
+  initialAccountId?: string | null;
   onClose: () => void;
   onLogged: (txn: Transaction, updatedAccount: Account) => void;
 }) {
@@ -62,9 +68,18 @@ export function QuickLogForm({
   const [kind, setKind] = useState<TxnKind>("spent");
   const isIncome = kind === "received";
   const isTransfer = kind === "moved";
-  const [toAccountId, setToAccountId] = useState(accounts[1]?.id ?? accounts[0]?.id ?? "");
   const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  // Re-validated against the live list, like every other money form — the
+  // preference can name an account deleted since it was saved.
+  const seededAccountId =
+    accounts.find((a) => a.id === initialAccountId)?.id ?? accounts[0]?.id ?? "";
+  const [accountId, setAccountId] = useState(seededAccountId);
+  // For "Moved": any account other than the from-side, so the default is never
+  // a same-account transfer (which the server rejects). Matters now that the
+  // from-side can start as any account via the default-account preference.
+  const [toAccountId, setToAccountId] = useState(
+    accounts.find((a) => a.id !== seededAccountId)?.id ?? accounts[0]?.id ?? ""
+  );
   const [merchant, setMerchant] = useState("");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayInAppTimezone());
@@ -100,8 +115,21 @@ export function QuickLogForm({
 
   function pickMerchantSuggestion(m: MerchantMemory) {
     setMerchant(m.merchant);
-    setCategoryId(m.categoryId);
-    setAutoGuess({ categoryId: m.categoryId, source: "learned", count: m.count });
+    // The remembered category only comes along if its kind agrees with the
+    // Spent/Received toggle. The optimistic balance move on this screen goes
+    // by the toggle while the server goes by the category itself — a
+    // remembered income category quietly filled in on a "Spent" entry would
+    // make the number on screen disagree with the saved one. A mismatched
+    // memory fills nothing (and clears any earlier guess, which was for
+    // whatever was typed before, not this merchant).
+    const remembered = categories.find((c) => c.id === m.categoryId);
+    if (remembered && remembered.kind === (isIncome ? "income" : "expense")) {
+      setCategoryId(m.categoryId);
+      setAutoGuess({ categoryId: m.categoryId, source: "learned", count: m.count });
+    } else if (autoGuess !== null) {
+      setCategoryId(null);
+      setAutoGuess(null);
+    }
   }
 
   /**
@@ -166,24 +194,34 @@ export function QuickLogForm({
     }
 
     if (!categoryId) return;
+    const account = accounts.find((a) => a.id === accountId);
+    if (!account) {
+      setError("That account doesn't exist any more — pick another one.");
+      return;
+    }
     setSaving(true);
     setError(null);
 
     const id = crypto.randomUUID();
-    const account = accounts.find((a) => a.id === accountId)!;
-    const result = await logExpense({
-      id,
-      accountId,
-      categoryId,
-      amountCents,
-      currency: account.currency,
-      merchant: merchant.trim() || null,
-      note: note.trim() || null,
-      txnDate: date,
-      isIncome,
-    });
-
-    setSaving(false);
+    let result: Awaited<ReturnType<typeof logExpense>>;
+    try {
+      result = await logExpense({
+        id,
+        accountId,
+        categoryId,
+        amountCents,
+        currency: account.currency,
+        merchant: merchant.trim() || null,
+        note: note.trim() || null,
+        txnDate: date,
+        isIncome,
+      });
+    } catch {
+      setError("Couldn't save — check your connection and try again.");
+      return;
+    } finally {
+      setSaving(false);
+    }
     if (result.error) {
       setError(result.error);
       return;

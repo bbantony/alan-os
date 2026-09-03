@@ -79,10 +79,13 @@ export interface Preferences {
   shoppingSort: ShoppingSort;
 
   // Money
+  //
+  // `paydayAnchorDay` and `reconcileReminder` used to live here too. Both
+  // saved and were read by nothing — dead switches. Removed 2 Sep 2026 with
+  // Alan's approval; stale keys in already-stored preference JSON are simply
+  // ignored by resolvePreferences, which only reads the keys it knows.
   defaultAccountId: string | null;
-  paydayAnchorDay: number | null;
   recurringAutoPost: boolean;
-  reconcileReminder: boolean;
 
   /**
    * Workout — how much the +/- buttons move the weight, IN THE DISPLAY UNIT
@@ -134,9 +137,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   shoppingSort: "category",
 
   defaultAccountId: null,
-  paydayAnchorDay: null,
   recurringAutoPost: true,
-  reconcileReminder: true,
 
   // Null = 2.5 lb / 1 kg, matching what the steppers were always meant to do.
   weightIncrement: null,
@@ -236,12 +237,7 @@ export function resolvePreferences(raw: unknown): Preferences {
     shoppingSort: oneOf(p.shoppingSort, ["category", "alphabetical", "recent"] as const, d.shoppingSort),
 
     defaultAccountId: typeof p.defaultAccountId === "string" ? p.defaultAccountId : null,
-    paydayAnchorDay:
-      p.paydayAnchorDay === null || p.paydayAnchorDay === undefined
-        ? null
-        : num(p.paydayAnchorDay, 1, 1, 31),
     recurringAutoPost: bool(p.recurringAutoPost, d.recurringAutoPost),
-    reconcileReminder: bool(p.reconcileReminder, d.reconcileReminder),
 
     // Not clamped through `num`, which rounds to whole numbers — 2.5 is the
     // single most likely value here. Bounded to something a plate could

@@ -10,10 +10,9 @@ import {
 import type { Account } from "@/lib/finance/types";
 import type { Preferences } from "@/lib/preferences";
 
-const DAY_OPTIONS = [
-  { value: "none", label: "Not set" },
-  ...Array.from({ length: 31 }, (_, i) => ({ value: String(i + 1), label: `${i + 1}` })),
-];
+// "Payday" and "Monthly reminder to check the bank" used to live here too.
+// Both saved a preference that nothing anywhere read — a switch wired to no
+// wire. Removed 2 Sep 2026 with Alan's approval rather than left lying.
 
 export function MoneyPreferences({
   initial,
@@ -29,7 +28,7 @@ export function MoneyPreferences({
       <SettingsGroup title="Logging">
         <PreferenceChoice
           label="Default account"
-          hint="What the quick-log keypad picks before you change it."
+          hint="Where new entries start out — the quick-log keypad, receipts, repeating payments, remittances — until you pick a different account."
           value={prefs.defaultAccountId ?? "none"}
           options={[
             { value: "none", label: "First in the list" },
@@ -38,32 +37,17 @@ export function MoneyPreferences({
           onSaved={setPrefs}
           patch={(v) => ({ defaultAccountId: v === "none" ? null : v })}
           stacked
-        />
-        <PreferenceChoice
-          label="Payday"
-          hint="New budgets start their period on this day of the month. Short months are handled — the 31st becomes the 28th in February."
-          value={prefs.paydayAnchorDay === null ? "none" : String(prefs.paydayAnchorDay)}
-          options={DAY_OPTIONS}
-          onSaved={setPrefs}
-          patch={(v) => ({ paydayAnchorDay: v === "none" ? null : Number(v) })}
           last
         />
       </SettingsGroup>
 
-      <SettingsGroup title="Repeating and checking">
+      <SettingsGroup title="Repeating">
         <PreferenceSwitch
           label="Repeating payments post themselves"
           hint="Rent, salary and subscriptions log automatically when they come due. Turn this off and they'll wait to be added by hand."
           value={prefs.recurringAutoPost}
           onSaved={setPrefs}
           patch={(v) => ({ recurringAutoPost: v })}
-        />
-        <PreferenceSwitch
-          label="Monthly reminder to check the bank"
-          hint="A nudge once a month to reconcile your accounts against a real statement."
-          value={prefs.reconcileReminder}
-          onSaved={setPrefs}
-          patch={(v) => ({ reconcileReminder: v })}
           last
         />
       </SettingsGroup>

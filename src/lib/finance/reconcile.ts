@@ -1,5 +1,5 @@
 import type { AccountType } from "./types";
-import { balanceDeltaCents } from "./balance";
+import { balanceDeltaCents } from "./balance.ts";
 
 // Matching a bank statement against what the app has logged.
 //
@@ -116,6 +116,21 @@ export function appBalanceOnDate(input: {
     0
   );
   return input.currentBalanceCents - effectAfter;
+}
+
+/**
+ * The gap a reconciliation exists to close: what the bank statement says minus
+ * what the app believed the balance was on the statement date.
+ *
+ * Positive means the bank says more than the app (on a chequing account, money
+ * you have that the app missed; on a credit card, debt the app missed — the
+ * sign interpretation is `adjustmentFor`'s job, not this one's). Trivial
+ * arithmetic, but it is THE number the whole flow reports and corrects by, so
+ * it lives here as a pure function with tests rather than inline in a server
+ * action.
+ */
+export function reconcileGapCents(statementBalanceCents: number, appBalanceCents: number): number {
+  return statementBalanceCents - appBalanceCents;
 }
 
 export interface Adjustment {

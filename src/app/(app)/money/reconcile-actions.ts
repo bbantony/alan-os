@@ -8,6 +8,7 @@ import {
   ADJUSTMENT_CATEGORY,
   adjustmentFor,
   appBalanceOnDate,
+  reconcileGapCents,
   type AppTxn,
 } from "@/lib/finance/reconcile";
 import type { AccountType, Category } from "@/lib/finance/types";
@@ -138,17 +139,33 @@ export async function addMissingTransaction(input: {
   amountCents: number;
   merchant: string;
   txnDate: string;
+  /**
+   * Ignored for the balance move — the direction comes from the category's
+   * `kind`, same as logExpense and deleteTransaction, so what this adds is
+   * exactly what a later delete would reverse.
+   */
   isIncome: boolean;
 }): Promise<{ transaction?: AppTxn; error?: string }> {
   const { supabase, user } = await requireUser();
 
-  const { data: account } = await supabase
-    .from("accounts")
-    .select("id, type, currency, current_balance_cents")
-    .eq("id", input.accountId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const [{ data: account }, { data: category }] = await Promise.all([
+    supabase
+      .from("accounts")
+      .select("id, type, currency, current_balance_cents")
+      .eq("id", input.accountId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    // Scoped to the user — also stops the row being filed under another
+    // user's category id.
+    supabase
+      .from("categories")
+      .select("id, kind")
+      .eq("id", input.categoryId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
   if (!account) return { error: "Couldn't find that account." };
+  if (!category) return { error: "Couldn't find that category." };
 
   const { data, error } = await supabase
     .from("transactions")
@@ -166,7 +183,8 @@ export async function addMissingTransaction(input: {
     .single();
   if (error || !data) return { error: friendlyDbError(error) ?? "Couldn't add that." };
 
-  const delta = balanceDeltaCents(input.amountCents, input.isIncome, account.type as AccountType);
+  const isIncome = (category.kind as string) === "income";
+  const delta = balanceDeltaCents(input.amountCents, isIncome, account.type as AccountType);
   // Atomic — see migration 0035. This is the "Add it" button in the reconcile
   // flow, which is the most double-tappable control in the module.
   const { error: balanceError } = await supabase.rpc("adjust_account_balance", {
@@ -177,7 +195,7 @@ export async function addMissingTransaction(input: {
     return { error: "Added, but the account balance didn't update. Check it on the Money screen." };
   }
 
-  return { transaction: { ...data, is_income: input.isIncome } as AppTxn };
+  return { transaction: { ...data, is_income: isIncome } as AppTxn };
 }
 
 async function findOrCreateAdjustmentCategory(
@@ -208,6 +226,12 @@ export interface FinishResult {
   clearedCount?: number;
   adjustedCents?: number;
   newBalanceCents?: number;
+  /**
+   * The gap the SERVER measured when it finished — not the one the screen
+   * showed. They can differ if the books moved between compare and finish,
+   * and the done screen must speak from this one.
+   */
+  differenceCents?: number;
 }
 
 /**
@@ -225,7 +249,6 @@ export async function finishReconciliation(input: {
   accountId: string;
   statementDate: string;
   statementBalanceCents: number;
-  appBalanceCents: number;
   clearedTransactionIds: string[];
   postAdjustment: boolean;
   note: string | null;
@@ -240,7 +263,35 @@ export async function finishReconciliation(input: {
     .maybeSingle();
   if (!account) return { error: "Couldn't find that account." };
 
-  const differenceCents = input.statementBalanceCents - input.appBalanceCents;
+  // The app-side balance is recomputed HERE, from the database, rather than
+  // accepted from the browser. It used to arrive as an input alongside the
+  // statement balance, which meant the size of the correcting transaction —
+  // and therefore the account's final balance — was whatever the client said
+  // it was: a stale tab or a tampered request could move real money by any
+  // amount. The statement balance legitimately stays user input (it's typed
+  // off a piece of paper); the app's own side never was.
+  //
+  // Same rewind as getReconcileData: live balance minus the effect of
+  // everything dated after the statement, so a mid-month reconcile compares
+  // like with like.
+  const { data: afterRows } = await supabase
+    .from("transactions")
+    .select("amount_cents, categories(kind)")
+    .eq("user_id", user.id)
+    .eq("account_id", input.accountId)
+    .gt("txn_date", input.statementDate);
+  const appBalanceCents = appBalanceOnDate({
+    currentBalanceCents: account.current_balance_cents as number,
+    accountType: account.type as AccountType,
+    transactionsAfterDate: (
+      (afterRows as unknown as { amount_cents: number; categories: { kind: string } | null }[]) ?? []
+    ).map((t) => ({
+      amount_cents: t.amount_cents,
+      is_income: t.categories?.kind === "income",
+    })),
+  });
+
+  const differenceCents = reconcileGapCents(input.statementBalanceCents, appBalanceCents);
   const adjustment = input.postAdjustment ? adjustmentFor(differenceCents, account.type as AccountType) : null;
 
   // The record goes in first so the adjustment transaction can point back at
@@ -253,7 +304,7 @@ export async function finishReconciliation(input: {
       account_id: input.accountId,
       statement_date: input.statementDate,
       statement_balance_cents: input.statementBalanceCents,
-      app_balance_cents: input.appBalanceCents,
+      app_balance_cents: appBalanceCents,
       difference_cents: differenceCents,
       cleared_count: input.clearedTransactionIds.length,
       note: input.note,
@@ -343,6 +394,7 @@ export async function finishReconciliation(input: {
     clearedCount: input.clearedTransactionIds.length,
     adjustedCents: adjustment ? differenceCents : 0,
     newBalanceCents,
+    differenceCents,
   };
 }
 

@@ -20,6 +20,7 @@ export function ReceiptReviewDialog({
   receipt,
   accounts,
   categories,
+  initialAccountId = null,
   onClose,
   onDiscarded,
   onApproved,
@@ -27,6 +28,9 @@ export function ReceiptReviewDialog({
   receipt: Receipt;
   accounts: Account[];
   categories: Category[];
+  /** The "Default account" money preference, already validated by the server.
+      Null means first in the list, same as quick-log. */
+  initialAccountId?: string | null;
   onClose: () => void;
   onDiscarded: (receiptId: string) => void;
   /** `updatedBalanceCents` is null when the balance move failed — the receipt
@@ -46,7 +50,9 @@ export function ReceiptReviewDialog({
   const [txnDate, setTxnDate] = useState(
     receipt.txn_date_guess ?? todayInAppTimezone()
   );
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [accountId, setAccountId] = useState(
+    accounts.find((a) => a.id === initialAccountId)?.id ?? accounts[0]?.id ?? ""
+  );
   const [items, setItems] = useState<ReceiptLineItem[]>(
     receipt.line_items.length > 0
       ? receipt.line_items

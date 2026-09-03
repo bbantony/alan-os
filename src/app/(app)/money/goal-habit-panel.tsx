@@ -30,17 +30,23 @@ export function GoalHabitPanel({
   plans,
   accounts,
   categories,
+  initialAccountId = null,
   onSetUp,
 }: {
   plans: GoalPlan[];
   accounts: Account[];
   categories: Category[];
+  /** The "Default account" money preference, already validated by the server.
+      Null means first in the list, same as quick-log. */
+  initialAccountId?: string | null;
   onSetUp: (goalId: string) => void;
 }) {
   const outstanding = plans.filter((p) => !p.alreadySetUp && !p.reached);
   const [openId, setOpenId] = useState<string | null>(null);
   const [frequency, setFrequency] = useState<RecurrenceFrequency>("monthly");
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [accountId, setAccountId] = useState(
+    accounts.find((a) => a.id === initialAccountId)?.id ?? accounts[0]?.id ?? ""
+  );
   const [categoryId, setCategoryId] = useState("");
   const [addRoutine, setAddRoutine] = useState(true);
   const [saving, setSaving] = useState(false);

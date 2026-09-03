@@ -15,14 +15,21 @@ import { getFxRate, logRemittance } from "./actions";
 
 export function RemittanceForm({
   accounts,
+  initialAccountId = null,
   onClose,
   onLogged,
 }: {
   accounts: Account[];
+  /** The "Default account" money preference, already validated by the server.
+      Re-checked against `accounts` here because this form only receives the
+      CAD ones — a non-CAD default falls back to first in the list. */
+  initialAccountId?: string | null;
   onClose: () => void;
   onLogged: (updatedAccount: Account) => void;
 }) {
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [accountId, setAccountId] = useState(
+    accounts.find((a) => a.id === initialAccountId)?.id ?? accounts[0]?.id ?? ""
+  );
   const [cad, setCad] = useState("");
   const [inr, setInr] = useState("");
   const [note, setNote] = useState("");

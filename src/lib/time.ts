@@ -22,6 +22,19 @@ export function formatInAppTimezone(
   return new Intl.DateTimeFormat("en-CA", { ...options, timeZone }).format(date);
 }
 
+// For bare YYYY-MM-DD values (transaction dates, statement dates — columns
+// with no time component at all). Handing one straight to `new Date()` parses
+// it as UTC *midnight*, which in Winnipeg is the previous evening — so the
+// date renders one day early. Pinning it to midday UTC keeps it on the same
+// calendar day in every timezone this app could plausibly be read from.
+export function formatDateOnlyInAppTimezone(
+  dateOnly: string,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
+  timeZone: string = APP_TIMEZONE
+): string {
+  return formatInAppTimezone(`${dateOnly}T12:00:00Z`, options, timeZone);
+}
+
 export function todayInAppTimezone(timeZone: string = APP_TIMEZONE): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone,

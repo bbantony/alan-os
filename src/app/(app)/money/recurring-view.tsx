@@ -53,11 +53,15 @@ export function RecurringView({
   recurring,
   accounts,
   categories,
+  initialAccountId = null,
   onChanged,
 }: {
   recurring: RecurringTransaction[];
   accounts: Account[];
   categories: Category[];
+  /** The "Default account" money preference, already validated by the server.
+      Null means first in the list, same as quick-log. */
+  initialAccountId?: string | null;
   onChanged: (updater: (prev: RecurringTransaction[]) => RecurringTransaction[]) => void;
 }) {
   const [showForm, setShowForm] = useState(false);
@@ -67,12 +71,17 @@ export function RecurringView({
   const categoryById = new Map(categories.map((c) => [c.id, c]));
   const accountById = new Map(accounts.map((a) => [a.id, a]));
 
+  // Where the account picker starts: the default-account preference if it's
+  // in the list, else first in the list — same rule as the quick-log keypad.
+  const startingAccountId =
+    accounts.find((a) => a.id === initialAccountId)?.id ?? accounts[0]?.id ?? "";
+
   // Form state.
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [kind, setKind] = useState<"expense" | "income">("expense");
   const [categoryId, setCategoryId] = useState("");
-  const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
+  const [accountId, setAccountId] = useState(startingAccountId);
   const [frequency, setFrequency] = useState<RecurrenceFrequency>("monthly");
   const [anchorDate, setAnchorDate] = useState(today);
   const [endDate, setEndDate] = useState("");
@@ -87,7 +96,7 @@ export function RecurringView({
     setAmount("");
     setKind("expense");
     setCategoryId("");
-    setAccountId(accounts[0]?.id ?? "");
+    setAccountId(startingAccountId);
     setFrequency("monthly");
     setAnchorDate(today);
     setEndDate("");
