@@ -4378,3 +4378,22 @@ clobbered. (2) One sentence in the new MANUAL.md section claimed shortcuts can b
 of Kvaesitso's long-press menu and pinned — a launcher-specific behaviour nobody has verified
 on the actual phone, exactly the kind of claim HANDOFF.md says to hold back — so it was
 removed until Alan confirms it on the Fold 7.
+
+## 56. Shortcuts confirmed on the phone — and the reinstall lesson (2 Sep 2026)
+
+**What happened:** Alan tested entry 54's shortcuts on the Fold 7. First result: long-press
+showed only "Site settings", and Kvaesitso search found nothing. The deployed site was verified
+to be serving all four shortcuts, so the cause was Android's installed copy: Android bakes the
+shortcut menu into the installed app at install time and only re-checks the manifest every few
+days. A one-minute uninstall/reinstall (Settings → Apps → Alan OS → Uninstall, then Chrome →
+site → Install) picked up the new manifest and **both now work: the long-press menu and
+Kvaesitso search both surface the shortcuts** — the claim HANDOFF.md flagged as unverified is
+now confirmed on the actual device.
+
+**What changed in the repo:** MANUAL.md's shortcuts section now includes the Kvaesitso search
+tip (confirmed, no longer held back) and replaces the vague "give it a minute" advice with the
+honest version: a *changed* set of shortcuts needs a reinstall to show up promptly.
+
+**Lesson for future sessions:** any future edit to `manifest.json` that changes shortcuts,
+icons, or share targets will NOT appear on Alan's phone for days unless he reinstalls. Plan the
+messaging accordingly — say so up front instead of "wait a minute".

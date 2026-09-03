@@ -1644,8 +1644,16 @@ shortcuts. Each one skips the front door and lands you straight where the typing
 - **Start workout** — opens a fresh workout session.
 - **Shopping list** — opens the list with the add-item box focused.
 
-If the menu doesn't show the shortcuts yet, open the app once and give it a minute — your
-phone re-reads the app's details on a visit, not instantly.
+These also show up in **Kvaesitso's search** — type "expense" (or "task", "workout",
+"shopping") into the launcher's search bar and the shortcut appears alongside your apps.
+That's the fastest route in the whole system: swipe up, type three letters, tap, and
+you're in the form. (Confirmed working on the Fold 7, 2 Sep 2026.)
+
+One thing to know: your phone bakes this shortcut menu in when the app is installed and
+only re-checks every few days. So if a future update *changes* the shortcuts and they
+don't appear, the quick fix is a one-minute reinstall: Settings → Apps → Alan OS →
+Uninstall, then open the site in Chrome and tap Install from the three-dot menu. Nothing
+is lost — everything lives in your account, not in the icon.
 
 ## The app stopped taking your word for it
 
