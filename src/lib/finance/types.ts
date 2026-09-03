@@ -56,6 +56,10 @@ export interface Transaction {
   txn_date: string;
   source: TransactionSource;
   receipt_id: string | null;
+  /** Set on both legs of a transfer between own accounts (migration 0037); null on ordinary rows. */
+  transfer_group_id: string | null;
+  /** 'out' on the sending leg, 'in' on the receiving leg (migration 0038); null on ordinary rows and pre-0038 transfer legs. */
+  transfer_direction: "in" | "out" | null;
   created_at: string;
 }
 

@@ -4468,3 +4468,51 @@ whether he was looking at a real gap and chose to finish anyway ("Finished witho
 the gap is recorded") and reserves the books-moved warning for genuine drift. The reviewer also
 caught the gap amounts printing with a $ sign regardless of the account's currency — all three
 done-screen amounts now carry the account currency.
+
+## 58. Transfers record their direction (3 Sep 2026)
+
+**What led here:** the QA pass on entry 57 found that both legs of a transfer were written
+identically except for the account — nothing recorded which side received the money. Deleting
+the incoming leg of a $100 transfer therefore moved the receiving balance +$100 instead of
+−$100 (a $200 drift, plus an orphaned other leg), and the reconcile rewind mis-signed incoming
+legs the same way. The data genuinely couldn't answer "which way did this go", so the fix is a
+schema change, not a patch.
+
+**What changed:**
+
+1. **Migration 0038** (applied to production and verified; production had exactly zero transfer
+   rows, so no legacy data exists): `transactions.transfer_direction` ('in'/'out', only ever on
+   transfer legs, enforced by a check constraint), `log_transfer` now stamps 'out' on the
+   sending leg and 'in' on the receiving leg, and a new atomic `delete_transfer` function
+   removes both legs and reverses both balance moves from each leg's own direction — exactly
+   mirroring how they were applied.
+2. **Deleting a transfer deletes the transfer**, not one confusing half: the delete
+   confirmation says plainly that both sides will be removed from both accounts, both rows
+   leave the screen, and the toast says so. (`deleteTransaction` routes transfer legs to the
+   atomic function; ordinary rows are unchanged.)
+3. **The reconcile maths respects direction**: both the on-screen numbers and the server-side
+   rewind derive a transfer leg's direction from its own column via a new pure helper
+   `txnIsIncome` in `lib/finance/balance.ts` — tested for all five cases (ordinary
+   income/expense, transfer in/out, and the legacy direction-less fallback, which is pure
+   insurance since production has no such rows).
+4. **Transfer rows now read as what they are**: "Moved in from {account}" / "Moved to
+   {account}" with direction arrows, instead of showing the hidden "Misc" holder category.
+5. Three new plain-English mappings in `lib/db-errors.ts` for the new constraint and the two
+   `delete_transfer` exceptions.
+
+**Flagged for a future unit, not smuggled in:** the accounts panel repaints balances on the
+next data load rather than instantly after a delete — pre-existing behaviour shared by
+ordinary deletes, noted by the frontend pass.
+
+**QA round on the unit:** no money-corrupting defect found — the round-trip arithmetic was
+verified sign-by-sign for all four account-type pairings, and the live database was checked
+read-only (functions byte-identical to the migration, constraint present, zero legacy rows).
+One finding fixed before shipping: the Money screen ignored the fresh data a refresh delivers
+(its state kept the first values it ever saw), so after deleting a transfer the two account
+balances sat stale until a full reload — the screen now adopts the server's data whenever it
+re-arrives, which also puts a row back if its delete failed. Recorded for their proper streams
+rather than smuggled in: a theoretical two-device double-delete race (needs a row-lock in a
+future migration; unreachable from the UI), transfer legs in the reconcile ticking list reading
+"Transaction" in green (polish stream), function EXECUTE grants not revoked from PUBLIC
+(security stream — applies to earlier RPCs too), and the Timeline ledger showing transfers as
+two "Misc" events (pre-existing since 0037).

@@ -7,7 +7,7 @@ import { projectPayoff } from "../src/lib/finance/debt-payoff.ts";
 import { incrementInDisplayUnit, smallestIncrementKg } from "../src/lib/workout/units.ts";
 import { friendlyDbError } from "../src/lib/db-errors.ts";
 import { guessCategoryForMerchant, normaliseMerchant } from "../src/lib/finance/categorise.ts";
-import { balanceDeltaCents } from "../src/lib/finance/balance.ts";
+import { balanceDeltaCents, txnIsIncome } from "../src/lib/finance/balance.ts";
 import { adjustmentFor, appBalanceOnDate, reconcileGapCents } from "../src/lib/finance/reconcile.ts";
 import { formatDateOnlyInAppTimezone } from "../src/lib/time.ts";
 
@@ -394,6 +394,51 @@ test("the posted adjustment always closes exactly the gap it was made for", () =
     }
   }
   assert.equal(adjustmentFor(0, "chequing"), null);
+});
+
+// ---------------------------------------------------------------------------
+// Which way a transaction moved money
+// ---------------------------------------------------------------------------
+//
+// Added 3 Sep 2026 with the transfer-direction fix (migration 0038). The bug:
+// a transfer's two legs shared one expense holder category, and both delete
+// and the reconcile rewind derived direction from `categories.kind` — so the
+// INCOMING leg of a $100 transfer was treated as an expense, and deleting it
+// moved the receiving balance +$100 instead of -$100. `txnIsIncome` is now
+// the single place that rule lives; both reconcile paths feed through it.
+
+test("an ordinary row's direction comes from its category kind", () => {
+  assert.equal(
+    txnIsIncome({ kind: "income", transferGroupId: null, transferDirection: null }),
+    true
+  );
+  assert.equal(
+    txnIsIncome({ kind: "expense", transferGroupId: null, transferDirection: null }),
+    false
+  );
+});
+
+test("a transfer leg's direction is its own column, never its holder category", () => {
+  // Both legs carry kind "expense" — that's the bug this exists to prevent.
+  assert.equal(
+    txnIsIncome({ kind: "expense", transferGroupId: "g", transferDirection: "in" }),
+    true
+  );
+  assert.equal(
+    txnIsIncome({ kind: "expense", transferGroupId: "g", transferDirection: "out" }),
+    false
+  );
+});
+
+test("a legacy direction-less transfer leg keeps the old category behaviour", () => {
+  // Pre-0038 legs never recorded which side received the money; there is
+  // nothing truer to fall back on than the category kind, wrong as it was.
+  // Production had zero such rows when 0038 shipped — this pins the fallback
+  // so it stays deliberate, not accidental.
+  assert.equal(
+    txnIsIncome({ kind: "expense", transferGroupId: "g", transferDirection: null }),
+    false
+  );
 });
 
 // ---------------------------------------------------------------------------

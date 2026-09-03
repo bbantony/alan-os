@@ -313,15 +313,38 @@ export async function logExpense(input: {
 // nothing and check nothing, so the row vanished from the screen and a
 // "Transaction deleted" message appeared whether or not anything happened —
 // and if the balance reversal failed, the balance stayed wrong with no trace.
-export async function deleteTransaction(input: { id: string }): Promise<{ error?: string }> {
+export async function deleteTransaction(input: {
+  id: string;
+}): Promise<{ error?: string; deletedTransfer?: boolean }> {
   const { supabase, user } = await requireUser();
   const { data: txn } = await supabase
     .from("transactions")
-    .select("account_id, amount_cents, category_id, categories(kind)")
+    .select("account_id, amount_cents, category_id, transfer_group_id, categories(kind)")
     .eq("id", input.id)
     .eq("user_id", user.id)
     .maybeSingle();
   if (!txn) return { error: "That transaction is already gone." };
+
+  // A transfer leg never travels alone. Deleting one leg through the ordinary
+  // path below reversed its balance move from `categories.kind` — an expense
+  // holder category on BOTH legs — so the incoming leg of a $100 transfer
+  // moved the receiving balance +$100 instead of -$100, and the other leg
+  // stayed behind pointing at nothing. `delete_transfer` (migration 0038)
+  // removes both rows and reverses both balance moves from each leg's own
+  // recorded direction, atomically.
+  if (txn.transfer_group_id) {
+    const { error: transferError } = await supabase.rpc("delete_transfer", {
+      p_group_id: txn.transfer_group_id,
+    });
+    if (transferError) {
+      return { error: friendlyDbError(transferError) ?? "Couldn't remove that transfer — try again." };
+    }
+    revalidatePath("/money");
+    revalidatePath("/today");
+    // Both legs are gone — the UI should say so, because the person tapped
+    // delete on one row and two disappeared.
+    return { deletedTransfer: true };
+  }
 
   const { error: deleteError } = await supabase
     .from("transactions")

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Scale, Send, Trash2, Upload, Wallet } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Pencil, Plus, Scale, Send, Trash2, Upload, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { Panel, PanelHead, PanelEmpty, PanelRow } from "@/components/ui/panel";
@@ -111,6 +111,7 @@ export function OverviewView({
   async function handleDeleteTransaction() {
     if (!confirmingTransaction) return;
     const id = confirmingTransaction.id;
+    const groupId = confirmingTransaction.transfer_group_id;
     setConfirmingTransaction(null);
     onTransactionDeleted(id);
     // deleteTransaction returns { error } now. Discarding it meant the row
@@ -120,6 +121,19 @@ export function OverviewView({
     if (result?.error) {
       toast.error(result.error);
       router.refresh();
+      return;
+    }
+    // A transfer leg never travels alone: the server deleted both rows and
+    // reversed both balance moves, so the sibling leg has to leave the list
+    // too — one row was tapped and two are gone, and the toast says so.
+    if (result?.deletedTransfer && groupId) {
+      for (const t of transactions) {
+        if (t.transfer_group_id === groupId) onTransactionDeleted(t.id);
+      }
+      // Both account balances changed server-side; resync the same way the
+      // error path above does.
+      router.refresh();
+      toast.success("Transfer removed from both accounts");
       return;
     }
     toast.success("Transaction deleted");
@@ -380,6 +394,21 @@ export function OverviewView({
               const category = categoryById.get(t.category_id);
               const Icon = getFinanceIcon(category?.icon ?? "");
               const isIncome = category?.kind === "income";
+              // A transfer leg carries a hidden holder category ("Misc") only
+              // because the column is NOT NULL — its name and colour would be
+              // a lie here, so transfer rows say what they are instead. The
+              // other account's name comes from the sibling leg when it's
+              // still in this list. Legacy legs from before migration 0038
+              // have no direction and keep the old rendering.
+              const isTransfer = t.transfer_direction !== null;
+              const sibling = isTransfer
+                ? transactions.find(
+                    (x) => x.transfer_group_id === t.transfer_group_id && x.id !== t.id
+                  )
+                : undefined;
+              const otherAccount =
+                (sibling && accounts.find((a) => a.id === sibling.account_id)?.name) ||
+                "another account";
               return (
                 <li
                   key={t.id}
@@ -390,28 +419,44 @@ export function OverviewView({
                 >
                   {/* The category colour is user-chosen data, so it stays a
                       literal — but it's now a framed square swatch rather than
-                      a soft tinted circle, so it sits inside the language. */}
-                  <span
-                    className="flex size-8 shrink-0 items-center justify-center border-2 border-rule"
-                    style={{ backgroundColor: category?.color ?? undefined }}
-                  >
-                    <Icon className="size-4 text-white mix-blend-difference" />
-                  </span>
+                      a soft tinted circle, so it sits inside the language.
+                      Transfer legs get a direction arrow in a plain frame
+                      instead: their holder category's colour means nothing. */}
+                  {isTransfer ? (
+                    <span className="flex size-8 shrink-0 items-center justify-center border-2 border-rule text-muted-foreground">
+                      {t.transfer_direction === "in" ? (
+                        <ArrowDownLeft className="size-4" />
+                      ) : (
+                        <ArrowUpRight className="size-4" />
+                      )}
+                    </span>
+                  ) : (
+                    <span
+                      className="flex size-8 shrink-0 items-center justify-center border-2 border-rule"
+                      style={{ backgroundColor: category?.color ?? undefined }}
+                    >
+                      <Icon className="size-4 text-white mix-blend-difference" />
+                    </span>
+                  )}
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm">
-                      {t.merchant || category?.name || "Transaction"}
+                      {isTransfer
+                        ? t.transfer_direction === "in"
+                          ? `Moved in from ${otherAccount}`
+                          : `Moved to ${otherAccount}`
+                        : t.merchant || category?.name || "Transaction"}
                     </p>
                     <p className="micro-sm mt-0.5 truncate text-muted-foreground">
                       {formatDateOnlyInAppTimezone(t.txn_date, { month: "short", day: "numeric" })}
-                      {category && ` · ${category.name}`}
+                      {isTransfer ? " · Between your accounts" : category && ` · ${category.name}`}
                     </p>
                   </div>
 
                   <span
                     className={cn("shrink-0 text-sm font-bold tabular", isIncome && "text-ok")}
                   >
-                    {isIncome ? "+" : "−"}
+                    {isIncome || t.transfer_direction === "in" ? "+" : "−"}
                     {formatCents(t.amount_cents, t.currency)}
                   </span>
 
@@ -470,13 +515,24 @@ export function OverviewView({
 
       <ConfirmDialog
         open={Boolean(confirmingTransaction)}
-        title="Delete this transaction?"
+        title={
+          confirmingTransaction?.transfer_group_id
+            ? "Delete this transfer?"
+            : "Delete this transaction?"
+        }
         description={
           confirmingTransaction
-            ? `${confirmingTransaction.merchant || categoryById.get(confirmingTransaction.category_id)?.name || "Transaction"} — ${formatCents(
-                confirmingTransaction.amount_cents,
-                confirmingTransaction.currency
-              )}. The account balance goes back up by the same amount.`
+            ? confirmingTransaction.transfer_group_id
+              ? // Deleting one leg deletes both — that has to be said out
+                // loud before it happens, same as the account cascade above.
+                `Moving ${formatCents(
+                  confirmingTransaction.amount_cents,
+                  confirmingTransaction.currency
+                )} made an entry in each account. Deleting removes both sides, and both account balances go back to where they were.`
+              : `${confirmingTransaction.merchant || categoryById.get(confirmingTransaction.category_id)?.name || "Transaction"} — ${formatCents(
+                  confirmingTransaction.amount_cents,
+                  confirmingTransaction.currency
+                )}. The account balance goes back up by the same amount.`
             : undefined
         }
         onConfirm={handleDeleteTransaction}

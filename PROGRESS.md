@@ -982,3 +982,15 @@ setting is real and the two dead money settings are gone. Eight new tests.
 **Next: transfers don't record their direction** (QA found it): both legs are written
 identically, so deleting one leg drifts the balance by double and the reconcile rewind
 mis-signs incoming legs. Needs migration 0038. In progress.
+
+## 3 Sep 2026 — Transfers record their direction (migration 0038, applied)
+
+CHANGELOG entry 58, full ritual. Both legs of a transfer now carry 'in'/'out'; deleting a
+transfer removes both sides atomically and reverses both balances exactly (verified
+sign-by-sign on all four account-type pairings, and against the live database); the
+reconcile maths respects direction via the tested `txnIsIncome` helper; transfer rows read
+"Moved in from / Moved to". Production had zero transfer rows, so no legacy data. Bonus:
+the Money screen now adopts refreshed server data, ending the stale-balances-after-delete
+behaviour. Recorded for later streams: PUBLIC execute grants on RPCs (security), transfer
+labels in the reconcile list and Timeline ledger (polish), a theoretical two-device
+delete race (needs a row lock).

@@ -43,6 +43,14 @@ const BY_CONSTRAINT: Record<string, string> = {
   budgets_amount_positive: "Enter a budget amount bigger than zero.",
   savings_goals_target_positive: "Enter a goal amount bigger than zero.",
   transactions_amount_positive: "Enter an amount bigger than zero.",
+  transactions_transfer_direction_valid:
+    "Something about that transfer didn't add up. Reload the page and try again.",
+  // Not constraints — tokens raised by delete_transfer (migration 0038). The
+  // matcher below searches the whole message text, so they work the same way.
+  transfer_direction_missing:
+    "This transfer was logged before directions were recorded — log an opposite transfer to cancel it out.",
+  transfer_legs_incomplete:
+    "One half of this transfer is missing, so it can't be removed as a pair. Check both accounts on the Money screen.",
 };
 
 // Fallbacks by SQLSTATE class, used when the constraint isn't one we named.

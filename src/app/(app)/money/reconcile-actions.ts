@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { balanceDeltaCents } from "@/lib/finance/balance";
+import { balanceDeltaCents, txnIsIncome } from "@/lib/finance/balance";
 import {
   ADJUSTMENT_CATEGORY,
   adjustmentFor,
@@ -61,7 +61,9 @@ export async function getReconcileData(input: {
   const [{ data: txns }, { data: categories }, { data: lastRec }] = await Promise.all([
     supabase
       .from("transactions")
-      .select("id, txn_date, amount_cents, merchant, category_id, categories(kind)")
+      .select(
+        "id, txn_date, amount_cents, merchant, category_id, transfer_group_id, transfer_direction, categories(kind)"
+      )
       .eq("user_id", user.id)
       .eq("account_id", input.accountId)
       .order("txn_date", { ascending: false })
@@ -87,6 +89,8 @@ export async function getReconcileData(input: {
     amount_cents: number;
     merchant: string | null;
     category_id: string;
+    transfer_group_id: string | null;
+    transfer_direction: string | null;
     reconciled_at: string | null;
     categories: { kind: string } | null;
   }[]) ?? []).map((t) => ({
@@ -95,7 +99,15 @@ export async function getReconcileData(input: {
     amount_cents: t.amount_cents,
     merchant: t.merchant,
     category_id: t.category_id,
-    is_income: t.categories?.kind === "income",
+    // A transfer leg's direction comes from its own column, not its holder
+    // category (which is an expense category on BOTH legs) — deriving it from
+    // the category mis-signed incoming legs in the rewind below. See
+    // txnIsIncome for the legacy (pre-0038, direction-less) fallback.
+    is_income: txnIsIncome({
+      kind: t.categories?.kind,
+      transferGroupId: t.transfer_group_id,
+      transferDirection: t.transfer_direction,
+    }),
   }));
 
   // Split at the statement date: everything after it is rewound out of the
@@ -276,7 +288,7 @@ export async function finishReconciliation(input: {
   // like with like.
   const { data: afterRows } = await supabase
     .from("transactions")
-    .select("amount_cents, categories(kind)")
+    .select("amount_cents, transfer_group_id, transfer_direction, categories(kind)")
     .eq("user_id", user.id)
     .eq("account_id", input.accountId)
     .gt("txn_date", input.statementDate);
@@ -284,10 +296,21 @@ export async function finishReconciliation(input: {
     currentBalanceCents: account.current_balance_cents as number,
     accountType: account.type as AccountType,
     transactionsAfterDate: (
-      (afterRows as unknown as { amount_cents: number; categories: { kind: string } | null }[]) ?? []
+      (afterRows as unknown as {
+        amount_cents: number;
+        transfer_group_id: string | null;
+        transfer_direction: string | null;
+        categories: { kind: string } | null;
+      }[]) ?? []
     ).map((t) => ({
       amount_cents: t.amount_cents,
-      is_income: t.categories?.kind === "income",
+      // Same rule as getReconcileData's mapping, from the same helper — a
+      // transfer leg's direction is its own column, never its holder category.
+      is_income: txnIsIncome({
+        kind: t.categories?.kind,
+        transferGroupId: t.transfer_group_id,
+        transferDirection: t.transfer_direction,
+      }),
     })),
   });
 

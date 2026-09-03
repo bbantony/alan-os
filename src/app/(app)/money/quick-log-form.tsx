@@ -240,6 +240,9 @@ export function QuickLogForm({
       txn_date: date,
       source: "manual",
       receipt_id: null,
+      // This form only logs ordinary expenses/income — never transfers.
+      transfer_group_id: null,
+      transfer_direction: null,
       created_at: new Date().toISOString(),
     };
     const delta = balanceDeltaCents(amountCents, isIncome, account.type);

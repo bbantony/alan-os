@@ -67,6 +67,23 @@ export function MoneyShell({
   const [tab, setTab] = useState<Tab>("overview");
   const [accounts, setAccounts] = useState(initialAccounts);
   const [transactions, setTransactions] = useState(initialTransactions);
+  // router.refresh() hands this component fresh props, but useState keeps its
+  // first value — so refreshed balances and rows never reached the screen and
+  // the figures sat stale until a full reload. Adopt the server's data
+  // whenever it re-arrives (the documented adjust-state-during-render
+  // pattern; an effect would paint the stale frame first). Server data
+  // re-arrives after a router.refresh() or any server action's revalidate —
+  // in both cases it is post-commit truth, so adopting it never fights an
+  // optimistic update (quick-log's echo lands only after its save returned).
+  const [prevInitial, setPrevInitial] = useState({ initialAccounts, initialTransactions });
+  if (
+    prevInitial.initialAccounts !== initialAccounts ||
+    prevInitial.initialTransactions !== initialTransactions
+  ) {
+    setPrevInitial({ initialAccounts, initialTransactions });
+    setAccounts(initialAccounts);
+    setTransactions(initialTransactions);
+  }
   const [budgets, setBudgets] = useState(initialBudgets);
   const [goals, setGoals] = useState(initialGoals);
   const [debts, setDebts] = useState(initialDebts);
