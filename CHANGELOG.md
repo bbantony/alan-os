@@ -4303,3 +4303,78 @@ of MANUAL.md until Alan confirms it on the actual phone (HANDOFF.md flags it as 
 long-press menu itself is standard Android behaviour). Checks: test-runner ALL CHECKS PASS;
 unit-reviewer failed the first pass (missing changelog entry, the `view=list` gap above) and both
 findings were fixed in the same session.
+
+## 55. Work that vanishes — the app stops claiming saves it never checked (2 Sep 2026)
+
+**What Alan asked for:** the second unit of the tightening pass — the four audit findings that
+could destroy something he'd already typed, plus the wider "screens claim success without
+checking" family (HANDOFF.md section 2, Stream A item 1).
+
+**What changed, backend (server actions):**
+
+1. `calendar/actions.ts` — `planTomorrow` now checks both of its saves and returns
+   `{ error? }`; previously it returned nothing and swallowed both database errors. If saving
+   the goals fails it stops rather than half-saving.
+2. `tasks/actions.ts` — `createTask`, `setTaskCompleted` and `deleteTask` now check their
+   database results and return the standard `{ error? }` shape (`setTaskCompleted` keeps its
+   `nextTask` field). A failed recurring-task spawn now reports itself instead of silently
+   dropping the next occurrence.
+3. `shopping/actions.ts` — `finishTrip` now accepts an explicit list of item IDs so a trip
+   finished offline clears the items ticked *at tap time*, not whatever is ticked when the
+   sync runs; both bulk mutations also gained explicit user-ID scoping (defense in depth on
+   top of RLS). All six mutations the offline queue replays (`addShoppingItem`, `setChecked`,
+   `setStaple`, `setItemCategory`, `deleteShoppingItem`, `addFromSuggestion`) now return
+   `{ error? }` — before this, a server rejection was silently discarded and the offline queue
+   deleted the change as if it had succeeded.
+
+**What changed, frontend:**
+
+4. `today/focus-panel.tsx` — the evening ritual only shows "Plan set — Tomorrow is decided"
+   after the save is confirmed. On failure the typed goals and reflection stay in the form
+   with a plain-English error; a network failure no longer leaves the button stuck on
+   "Saving…".
+5. `tasks/task-list.tsx` — add, add-subtask, complete and delete all check their result and
+   put the screen back the way it was (with the error shown) when the save fails. Delete
+   restores subtasks too, and its "Task deleted" toast now only fires on confirmed success.
+6. `lib/offline/shopping-db.ts` — offline changes are stamped with when they were made
+   (monotonic, same-millisecond safe) and replay in that order; previously they were keyed on
+   random UUIDs and replayed in UUID order, so a tick could arrive before the add it belonged
+   to and vanish. Database version bumped 1→2 with an upgrade that preserves any
+   already-queued changes. The finish-trip payload now carries the ticked item IDs.
+7. `lib/offline/shopping-sync.ts` — the queue distinguishes "the server rejected this"
+   (removed and reported to Alan by name and reason) from "the network failed" (kept, retried,
+   and set aside with a message after 5 failed attempts so one stuck change can never jam the
+   queue forever).
+8. `shopping/shopping-list.tsx` — a failed sync no longer triggers the refresh that cleared
+   the local store, so offline changes survive; rejections surface as a plain-English toast.
+   The online paths for all seven shopping mutations (including finish-trip) also now check
+   their result and revert the optimistic screen state on a server rejection — before, only
+   the offline replay path would have noticed.
+
+**Found along the way, left alone deliberately:** `setTaskCompleted` has never refreshed the
+Plan page on a plain complete/un-complete (only on the recurring-spawn path) — pre-existing,
+flagged for a later unit rather than smuggled into this one.
+
+**QA round on the same unit, same day:** the QA agent traced every flow and found three
+things, all fixed before shipping: (1) finishing a trip on flaky wifi could queue the trip but
+still refresh from the server, making the just-cleared cart visually reappear until the sync
+landed — the online-first helper now says whether a change was applied or queued, and a queued
+trip skips that refresh; (2) a failed quick-add restored the typed title but dropped the other
+options typed with it (task category/due date/repeat/nudge, shopping staple/quantity/category) —
+the error path now restores the whole form, reopening the options panel when needed; (3) the
+un-tick of a completed task was the one action in task-list.tsx still ignoring its result — now
+guarded with the same revert-and-explain idiom, so all five mutations in that file behave alike.
+Two informational findings (a harmless flush/refresh race and a theoretical same-millisecond
+ordering tie across two open tabs) were accepted as-is. The unit-reviewer also flagged, for a
+future unit, that task-detail-dialog.tsx and today-console.tsx still ignore the errors these
+actions now return — narrowed, not yet closed, and deliberately not smuggled into this one.
+
+**Reviewer round two, same unit:** the focused re-review found two more things, both fixed:
+(1) the restored-form fixes above had their own edge — if a save failed while Alan had already
+started typing the *next* entry, the restore could overwrite his new typing with the failed
+one's leftovers; both quick-add forms (tasks and shopping) now restore the failed entry only
+while the form is still empty and untouched, so nothing typed after a submit can ever be
+clobbered. (2) One sentence in the new MANUAL.md section claimed shortcuts can be dragged out
+of Kvaesitso's long-press menu and pinned — a launcher-specific behaviour nobody has verified
+on the actual phone, exactly the kind of claim HANDOFF.md says to hold back — so it was
+removed until Alan confirms it on the Fold 7.

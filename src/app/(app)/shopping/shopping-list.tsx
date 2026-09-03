@@ -51,21 +51,31 @@ import {
   type OutboxMutation,
 } from "@/lib/offline/shopping-db";
 import { flushOutbox } from "@/lib/offline/shopping-sync";
+import { toast } from "@/components/ui/toast";
 
 function isOnline() {
   return typeof navigator === "undefined" || navigator.onLine;
 }
 
-async function runOnlineFirst(mutation: OutboxMutation, action: () => Promise<unknown>) {
+async function runOnlineFirst(
+  mutation: OutboxMutation,
+  action: () => Promise<{ error?: string }>
+): Promise<{ error?: string; queued?: boolean }> {
   if (isOnline()) {
     try {
-      await action();
-      return;
+      // A returned error means the server looked at the change and refused
+      // it — that's permanent, so queueing a retry would be wrong. Hand it
+      // back so the caller can undo its optimistic update and say why.
+      return await action();
     } catch {
-      // fall through — queue it for later
+      // A throw means the network dropped it — temporary; queue it for later.
     }
   }
   await enqueueMutation(mutation);
+  // Queued is not applied: the caller must not treat this like a confirmed
+  // save (e.g. by refreshing from the server, which doesn't know about the
+  // change yet). The outbox flush reconciles when it actually lands.
+  return { queued: true };
 }
 
 export function ShoppingList({
@@ -108,6 +118,15 @@ export function ShoppingList({
   const [tripToast, setTripToast] = useState<string | null>(null);
   const hydrated = useRef(false);
 
+  // The add form's live state, readable inside async error paths where the
+  // closure only knows pre-submit values. A failed save must never overwrite
+  // anything typed after it was sent.
+  const addFormPristineRef = useRef(true);
+  useEffect(() => {
+    addFormPristineRef.current =
+      name === "" && quantity === "" && !categoryTouched && !isStapleDraft;
+  });
+
   const knownItemsMap = useMemo(() => buildKnownItemsMap(knownItems), [knownItems]);
 
   const refreshFromServer = useCallback(async () => {
@@ -126,6 +145,23 @@ export function ShoppingList({
     }
   }, []);
 
+  const syncAndRefresh = useCallback(async () => {
+    const result = await flushOutbox();
+    if (result.rejected.length > 0) {
+      const lines = result.rejected.map((r) => `${r.description} — ${r.reason}`);
+      toast.error(
+        result.rejected.length === 1
+          ? `One change made offline didn't go through: ${lines[0]}`
+          : "Some changes made offline didn't go through:",
+        result.rejected.length === 1 ? undefined : { description: lines.join(". ") }
+      );
+    }
+    // Only pull the server's list once nothing is left queued — refreshing
+    // wipes and rewrites the local cache, so doing it while changes are
+    // still waiting to sync would throw those changes away.
+    if (!result.failed) refreshFromServer();
+  }, [refreshFromServer]);
+
   useEffect(() => {
     if (!hydrated.current) {
       hydrated.current = true;
@@ -136,8 +172,7 @@ export function ShoppingList({
 
     async function handleOnline() {
       setOnline(true);
-      await flushOutbox();
-      refreshFromServer();
+      await syncAndRefresh();
     }
     function handleOffline() {
       setOnline(false);
@@ -145,13 +180,13 @@ export function ShoppingList({
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    flushOutbox().then(() => refreshFromServer());
+    queueMicrotask(() => void syncAndRefresh());
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [refreshFromServer]);
+  }, [syncAndRefresh]);
 
   function handleNameChange(value: string) {
     setName(value);
@@ -181,6 +216,7 @@ export function ShoppingList({
       created_at: new Date().toISOString(),
     };
 
+    const prevKnownItems = knownItems;
     setItems((prev) => [...prev, item]);
     if (categoryTouched) {
       setKnownItems((prev) => [
@@ -201,7 +237,7 @@ export function ShoppingList({
     setQuantity("");
     await putCachedItem(item);
 
-    await runOnlineFirst(
+    const result = await runOnlineFirst(
       {
         id: crypto.randomUUID(),
         type: "add",
@@ -226,6 +262,22 @@ export function ShoppingList({
           learnCategory: categoryTouched,
         })
     );
+    if (result.error) {
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      if (categoryTouched) setKnownItems(prevKnownItems);
+      await deleteCachedItem(id);
+      // Put the whole form back — but only while it still sits in its
+      // post-submit reset state. If he's already typing the next item, his
+      // new input wins and only the toast reports the failure.
+      if (addFormPristineRef.current) {
+        setName(trimmed);
+        setCategory(category);
+        setCategoryTouched(categoryTouched);
+        setIsStapleDraft(isStapleDraft);
+        setQuantity(quantity);
+      }
+      toast.error(result.error);
+    }
   }
 
   async function handleToggle(item: ShoppingItem) {
@@ -234,10 +286,15 @@ export function ShoppingList({
     setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
     await putCachedItem(updated);
 
-    await runOnlineFirst(
+    const result = await runOnlineFirst(
       { id: crypto.randomUUID(), type: "setChecked", payload: { id: item.id, checked: nextChecked } },
       () => setChecked({ id: item.id, checked: nextChecked })
     );
+    if (result.error) {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
+      await putCachedItem(item);
+      toast.error(result.error);
+    }
   }
 
   async function handleToggleStaple(item: ShoppingItem) {
@@ -245,14 +302,20 @@ export function ShoppingList({
     setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
     await putCachedItem(updated);
 
-    await runOnlineFirst(
+    const result = await runOnlineFirst(
       { id: crypto.randomUUID(), type: "setStaple", payload: { id: item.id, isStaple: updated.is_staple } },
       () => setStaple({ id: item.id, isStaple: updated.is_staple })
     );
+    if (result.error) {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
+      await putCachedItem(item);
+      toast.error(result.error);
+    }
   }
 
   async function handleRecategorize(item: ShoppingItem, categoryId: string) {
     const updated = { ...item, category_id: categoryId };
+    const prevKnownItems = knownItems;
     setItems((prev) => prev.map((i) => (i.id === item.id ? updated : i)));
     setKnownItems((prev) => [
       ...prev.filter((k) => k.item_name.toLowerCase() !== item.name.toLowerCase()),
@@ -265,32 +328,49 @@ export function ShoppingList({
       },
     ]);
     await putCachedItem(updated);
-    await runOnlineFirst(
+    const result = await runOnlineFirst(
       { id: crypto.randomUUID(), type: "setCategory", payload: { id: item.id, name: item.name, categoryId } },
       () => setItemCategory({ id: item.id, name: item.name, categoryId })
     );
+    if (result.error) {
+      setItems((prev) => prev.map((i) => (i.id === item.id ? item : i)));
+      setKnownItems(prevKnownItems);
+      await putCachedItem(item);
+      toast.error(result.error);
+    }
   }
 
   async function handleDelete(item: ShoppingItem) {
     setItems((prev) => prev.filter((i) => i.id !== item.id));
     await deleteCachedItem(item.id);
 
-    await runOnlineFirst(
+    const result = await runOnlineFirst(
       { id: crypto.randomUUID(), type: "delete", payload: { id: item.id } },
       () => deleteShoppingItem({ id: item.id })
     );
+    if (result.error) {
+      setItems((prev) => [...prev, item]);
+      await putCachedItem(item);
+      toast.error(result.error);
+    }
   }
 
-  async function handleAddSuggestion(item: ShoppingItem) {
+  async function handleAddSuggestion(item: StapleSuggestion) {
     const updated = { ...item, on_list: true, checked: false };
     setSuggestions((prev) => prev.filter((i) => i.id !== item.id));
     setItems((prev) => [...prev, updated]);
     await putCachedItem(updated);
 
-    await runOnlineFirst(
+    const result = await runOnlineFirst(
       { id: crypto.randomUUID(), type: "addFromSuggestion", payload: { id: item.id } },
       () => addFromSuggestion({ id: item.id })
     );
+    if (result.error) {
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setSuggestions((prev) => [...prev, item]);
+      await deleteCachedItem(item.id);
+      toast.error(result.error);
+    }
   }
 
   async function handleFinishTrip() {
@@ -311,11 +391,27 @@ export function ShoppingList({
     setTripToast(`Trip finished — ${parts.join(", ")}.`);
     setTimeout(() => setTripToast(null), 5000);
 
-    await runOnlineFirst(
-      { id: crypto.randomUUID(), type: "finishTrip", payload: {} },
-      () => finishTrip()
+    // Pin down exactly which items this trip covered, so a replay after
+    // being offline acts on these rows — not whatever's ticked by then.
+    const checkedIds = checkedItems.map((i) => i.id);
+    const result = await runOnlineFirst(
+      { id: crypto.randomUUID(), type: "finishTrip", payload: { itemIds: checkedIds } },
+      () => finishTrip(checkedIds)
     );
-    refreshFromServer();
+    if (result.error) {
+      // Put the trip back exactly as it was — items still ticked, still in
+      // the cart — and take down the celebration banner, so Alan sees what
+      // went wrong and can just press Finish trip again.
+      setItems((prev) => [...prev, ...checkedItems]);
+      for (const item of checkedItems) await putCachedItem(item);
+      setTripToast(null);
+      toast.error(result.error);
+      return;
+    }
+    // Only refresh when the trip was actually applied online. If it was
+    // queued, the server still has the items on the list — refreshing now
+    // would resurrect them; the flush's own refresh reconciles later.
+    if (!result.queued) refreshFromServer();
   }
 
   const categoriesById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);

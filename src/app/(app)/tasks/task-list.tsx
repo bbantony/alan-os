@@ -93,6 +93,20 @@ export function TaskList({
   const [quickMonthDay, setQuickMonthDay] = useState("1");
   const [quickNudge, setQuickNudge] = useState<number | null>(null);
 
+  // The quick-add form's live state, readable inside async error paths where
+  // the closure only knows pre-submit values. A failed save must never
+  // overwrite anything typed after it was sent.
+  const quickFormPristineRef = useRef(true);
+  useEffect(() => {
+    quickFormPristineRef.current =
+      title === "" &&
+      !showMoreOptions &&
+      quickCategory === "personal" &&
+      quickDueAt === "" &&
+      quickPreset === "none" &&
+      quickNudge === null;
+  });
+
   // Arriving from the app-wide quick-add should land with the cursor already
   // in the box — otherwise "add a task" costs a tap on the menu and another
   // on the field, which defeats the point of having the shortcut.
@@ -161,7 +175,7 @@ export function TaskList({
     setTitle("");
     const category = quickCategory;
     resetMoreOptions();
-    await createTask({
+    const result = await createTask({
       id,
       title: trimmed,
       horizon,
@@ -170,6 +184,32 @@ export function TaskList({
       rrule,
       notifyOffsetMinutes: dueAtIso ? quickNudge : null,
     });
+    if (result.error) {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      // Put the whole form back — but only while it still sits in its
+      // post-submit reset state. If he's already drafting the next task,
+      // his new input wins and only the toast reports the failure.
+      if (quickFormPristineRef.current) {
+        setTitle(trimmed);
+        setQuickCategory(category);
+        setQuickDueAt(quickDueAt);
+        setQuickPreset(quickPreset);
+        setQuickWeekday(quickWeekday);
+        setQuickIntervalDays(quickIntervalDays);
+        setQuickMonthDay(quickMonthDay);
+        setQuickNudge(quickNudge);
+        // Reopen the options panel if anything in it was set, so the
+        // restored drafts aren't hidden behind a collapsed panel.
+        setShowMoreOptions(
+          showMoreOptions ||
+            category !== "personal" ||
+            quickDueAt !== "" ||
+            quickPreset !== "none" ||
+            quickNudge !== null
+        );
+      }
+      toast.error(result.error);
+    }
   }
 
   // The bell on a row is a shortcut between "no reminder" and a sensible
@@ -215,13 +255,21 @@ export function TaskList({
     setTasks((prev) => [...prev, optimistic]);
     setSubtaskTitle("");
     setAddingSubtaskFor(null);
-    await createTask({
+    const result = await createTask({
       id,
       title: trimmed,
       horizon: parent.horizon,
       category: parent.category,
       parentTaskId: parent.id,
     });
+    if (result.error) {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      // Reopen the subtask form with the typing restored — unless he has
+      // already moved on to another one.
+      setSubtaskTitle((cur) => (cur === "" ? trimmed : cur));
+      setAddingSubtaskFor((cur) => cur ?? parent.id);
+      toast.error(result.error);
+    }
   }
 
   async function completeTask(task: Task) {
@@ -230,6 +278,20 @@ export function TaskList({
     setDoneTodayByHorizon((prev) => ({ ...prev, [task.horizon]: (prev[task.horizon] ?? 0) + 1 }));
     setCountedTaskIds((prev) => new Set(prev).add(task.id));
     const result = await setTaskCompleted({ id: task.id, completed: true });
+    if (result.error) {
+      setTasks((prev) => [...prev, task]);
+      setDoneTodayByHorizon((prev) => ({
+        ...prev,
+        [task.horizon]: Math.max(0, (prev[task.horizon] ?? 0) - 1),
+      }));
+      setCountedTaskIds((prev) => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
+      toast.error(result.error);
+      return;
+    }
     if (result.nextTask) {
       setTasks((prev) => [...prev, result.nextTask!]);
       toast.success(
@@ -248,8 +310,16 @@ export function TaskList({
   }
 
   async function handleDelete(task: Task) {
+    // Snapshot the task and its subtasks so a rejected delete can put back
+    // exactly what was taken away.
+    const removed = tasks.filter((t) => t.id === task.id || t.parent_task_id === task.id);
     setTasks((prev) => prev.filter((t) => t.id !== task.id && t.parent_task_id !== task.id));
-    await deleteTask({ id: task.id });
+    const result = await deleteTask({ id: task.id });
+    if (result.error) {
+      setTasks((prev) => [...prev, ...removed]);
+      toast.error(result.error);
+      return;
+    }
     toast.success("Task deleted");
   }
 
@@ -263,12 +333,13 @@ export function TaskList({
   }
 
   async function handleUndoComplete(task: Task) {
+    const wasCounted = countedTaskIds.has(task.id);
     setCompletedTasks((prev) => (prev ? prev.filter((t) => t.id !== task.id) : prev));
     setTasks((prev) => [...prev, { ...task, completed_at: null }]);
     // Only back out of today's count if this task was actually completed in
     // this same session — undoing something from a prior day (reachable via
     // this same Completed archive) shouldn't decrement today's tally.
-    if (countedTaskIds.has(task.id)) {
+    if (wasCounted) {
       setDoneTodayByHorizon((prev) => ({
         ...prev,
         [task.horizon]: Math.max(0, (prev[task.horizon] ?? 0) - 1),
@@ -279,7 +350,19 @@ export function TaskList({
         return next;
       });
     }
-    await setTaskCompleted({ id: task.id, completed: false });
+    const result = await setTaskCompleted({ id: task.id, completed: false });
+    if (result.error) {
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      setCompletedTasks((prev) => (prev ? [...prev, task] : prev));
+      if (wasCounted) {
+        setDoneTodayByHorizon((prev) => ({
+          ...prev,
+          [task.horizon]: (prev[task.horizon] ?? 0) + 1,
+        }));
+        setCountedTaskIds((prev) => new Set(prev).add(task.id));
+      }
+      toast.error(result.error);
+    }
   }
 
   const visibleSections = TASK_HORIZONS.filter((h) => {

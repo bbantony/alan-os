@@ -13,6 +13,7 @@ import type {
   ShoppingItem,
   ShoppingUnit,
 } from "@/lib/shopping/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 // How long before a staple comes back onto the list.
 //
@@ -134,9 +135,9 @@ export async function addShoppingItem(input: {
   quantity?: number | null;
   quantityUnit?: ShoppingUnit | null;
   learnCategory?: boolean;
-}) {
+}): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
-  await supabase.from("shopping_items").insert({
+  const { error } = await supabase.from("shopping_items").insert({
     id: input.id,
     user_id: user.id,
     name: input.name,
@@ -147,66 +148,97 @@ export async function addShoppingItem(input: {
     checked: false,
     on_list: true,
   });
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   if (input.learnCategory) {
+    // Best-effort: failing to memorise the category shouldn't fail the add.
     await learnCategory(supabase, user.id, input.name, input.categoryId);
   }
+  return {};
 }
 
-export async function setChecked(input: { id: string; checked: boolean }) {
+export async function setChecked(input: { id: string; checked: boolean }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
-  await supabase
+  const { error } = await supabase
     .from("shopping_items")
     .update({ checked: input.checked })
     .eq("id", input.id)
     .eq("user_id", user.id);
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
+  return {};
 }
 
-export async function setStaple(input: { id: string; isStaple: boolean }) {
+export async function setStaple(input: { id: string; isStaple: boolean }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
-  await supabase
+  const { error } = await supabase
     .from("shopping_items")
     .update({ is_staple: input.isStaple })
     .eq("id", input.id)
     .eq("user_id", user.id);
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
+  return {};
 }
 
-export async function setItemCategory(input: { id: string; name: string; categoryId: string }) {
+export async function setItemCategory(input: {
+  id: string;
+  name: string;
+  categoryId: string;
+}): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
-  await supabase
+  const { error } = await supabase
     .from("shopping_items")
     .update({ category_id: input.categoryId })
     .eq("id", input.id)
     .eq("user_id", user.id);
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
+  // Best-effort: the item moved; failing to memorise the choice is not worth
+  // reporting as a failure of the move itself.
   await learnCategory(supabase, user.id, input.name, input.categoryId);
+  return {};
 }
 
-export async function deleteShoppingItem(input: { id: string }) {
+export async function deleteShoppingItem(input: { id: string }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
-  await supabase.from("shopping_items").delete().eq("id", input.id).eq("user_id", user.id);
+  const { error } = await supabase.from("shopping_items").delete().eq("id", input.id).eq("user_id", user.id);
+  if (error) return { error: friendlyDbError(error) ?? "That didn't delete. Try again." };
+  return {};
 }
 
-export async function addFromSuggestion(input: { id: string }) {
+export async function addFromSuggestion(input: { id: string }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
-  await supabase
+  const { error } = await supabase
     .from("shopping_items")
     .update({ on_list: true, checked: false })
     .eq("id", input.id)
     .eq("user_id", user.id);
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
+  return {};
 }
 
-export async function finishTrip(): Promise<{ staples: number; oneOff: number }> {
+// `itemIds` exists for the offline queue: a trip finished in a dead spot must
+// clear the items that were ticked AT TAP TIME, not whatever happens to be
+// checked when the queue finally syncs. When IDs are passed, exactly those
+// rows are acted on (still scoped to the signed-in user); when omitted, the
+// online path keeps its original meaning — everything currently checked.
+export async function finishTrip(
+  itemIds?: string[]
+): Promise<{ staples: number; oneOff: number; error?: string }> {
   const { supabase, user } = await requireUser();
   const now = new Date().toISOString();
 
-  const { data: checkedItems } = await supabase
+  if (itemIds && itemIds.length === 0) return { staples: 0, oneOff: 0 };
+
+  let query = supabase
     .from("shopping_items")
     .select("id, name, is_staple")
-    .eq("user_id", user.id)
-    .eq("on_list", true)
-    .eq("checked", true);
+    .eq("user_id", user.id);
+  query = itemIds ? query.in("id", itemIds) : query.eq("on_list", true).eq("checked", true);
+  const { data: checkedItems, error: selectError } = await query;
 
+  if (selectError) {
+    return { staples: 0, oneOff: 0, error: friendlyDbError(selectError) ?? "That didn't save. Try again." };
+  }
   if (!checkedItems || checkedItems.length === 0) return { staples: 0, oneOff: 0 };
 
   const items = checkedItems as { id: string; name: string; is_staple: boolean }[];
@@ -219,7 +251,7 @@ export async function finishTrip(): Promise<{ staples: number; oneOff: number }>
   // scratch. No price: a hand-ticked trip doesn't know one. Receipts do, and
   // fill it in separately (money/receipt-actions.ts).
   const purchasedOn = todayInAppTimezone();
-  await supabase.from("shopping_purchases").insert(
+  const { error: purchaseError } = await supabase.from("shopping_purchases").insert(
     items.map((item) => ({
       user_id: user.id,
       item_name: item.name,
@@ -229,16 +261,32 @@ export async function finishTrip(): Promise<{ staples: number; oneOff: number }>
       source: "trip",
     }))
   );
+  // History failed to record: stop before clearing anything off the list, so
+  // a retry replays the whole trip instead of leaving purchases unrecorded.
+  if (purchaseError) {
+    return { staples: 0, oneOff: 0, error: friendlyDbError(purchaseError) ?? "That didn't save. Try again." };
+  }
 
   if (stapleIds.length > 0) {
-    await supabase
+    const { error } = await supabase
       .from("shopping_items")
       .update({ on_list: false, checked: false, last_purchased_at: now })
-      .in("id", stapleIds);
+      .in("id", stapleIds)
+      .eq("user_id", user.id);
+    if (error) {
+      return { staples: 0, oneOff: 0, error: friendlyDbError(error) ?? "That didn't save. Try again." };
+    }
   }
 
   if (nonStapleIds.length > 0) {
-    await supabase.from("shopping_items").delete().in("id", nonStapleIds);
+    const { error } = await supabase
+      .from("shopping_items")
+      .delete()
+      .in("id", nonStapleIds)
+      .eq("user_id", user.id);
+    if (error) {
+      return { staples: 0, oneOff: 0, error: friendlyDbError(error) ?? "That didn't save. Try again." };
+    }
   }
 
   return { staples: stapleIds.length, oneOff: nonStapleIds.length };

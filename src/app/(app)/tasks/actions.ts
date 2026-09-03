@@ -193,11 +193,11 @@ export async function createTask(input: {
   /** Minutes before `dueAt` to notify. `null`/omitted = don't. */
   notifyOffsetMinutes?: number | null;
   notes?: string | null;
-}) {
+}): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const offset = input.notifyOffsetMinutes ?? null;
 
-  await supabase.from("tasks").insert({
+  const { error } = await supabase.from("tasks").insert({
     id: input.id,
     user_id: user.id,
     title: input.title,
@@ -209,6 +209,10 @@ export async function createTask(input: {
     rrule: input.rrule ?? null,
     notify_offset_minutes: offset,
   });
+  // If the task itself didn't save there is nothing to hang a nudge or a
+  // calendar entry off — report it rather than carrying on against a row
+  // that doesn't exist.
+  if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
   await syncTaskNudge(
     supabase,
@@ -239,6 +243,7 @@ export async function createTask(input: {
   }
 
   revalidatePath("/plan");
+  return {};
 }
 
 // Full-detail editor (horizon/category/due date/repeat/notes) — everything
@@ -309,15 +314,19 @@ export async function updateTask(input: {
 // mainstream to-do app uses: Things, Todoist) rather than the task just
 // vanishing forever — computed with the exact same DST-aware rrule math
 // reminders already rely on.
-export async function setTaskCompleted(input: { id: string; completed: boolean }): Promise<{ nextTask?: Task }> {
+export async function setTaskCompleted(input: {
+  id: string;
+  completed: boolean;
+}): Promise<{ nextTask?: Task; error?: string }> {
   const { supabase, user } = await requireUser();
 
   if (!input.completed) {
-    await supabase
+    const { error } = await supabase
       .from("tasks")
       .update({ completed_at: null })
       .eq("id", input.id)
       .eq("user_id", user.id);
+    if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
 
     // Un-ticking brings the nudge back, but only if its moment hasn't already
     // passed — reviving a notification for a time that's already gone by would
@@ -340,11 +349,12 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
     .eq("user_id", user.id)
     .maybeSingle();
 
-  await supabase
+  const { error: completeError } = await supabase
     .from("tasks")
     .update({ completed_at: new Date().toISOString() })
     .eq("id", input.id)
     .eq("user_id", user.id);
+  if (completeError) return { error: friendlyDbError(completeError) ?? "That didn't save. Try again." };
 
   if (task?.gcal_event_id) {
     await removeFromGcal({ supabase, userId: user.id, table: "tasks", rowId: input.id, existingEventId: task.gcal_event_id });
@@ -368,7 +378,7 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
   if (!next) return {};
 
   const newId = crypto.randomUUID();
-  const { data: created } = await supabase
+  const { data: created, error: nextError } = await supabase
     .from("tasks")
     .insert({
       id: newId,
@@ -383,6 +393,12 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
     })
     .select("*")
     .single();
+  // The completed instance is done either way, but if the next one failed to
+  // appear that's a recurring task quietly ending forever — exactly the kind
+  // of vanishing work this error exists to surface.
+  if (nextError) {
+    return { error: friendlyDbError(nextError) ?? "That's ticked off, but the next repeat didn't get created. Un-tick and re-tick it to try again." };
+  }
 
   // Re-point any reminder that was tracking the just-completed instance at
   // the new one, so recurring tasks with a nudge on don't go silent after
@@ -421,7 +437,7 @@ export async function setTaskCompleted(input: { id: string; completed: boolean }
   return { nextTask: (created as Task) ?? undefined };
 }
 
-export async function deleteTask(input: { id: string }) {
+export async function deleteTask(input: { id: string }): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const { data: existing } = await supabase
     .from("tasks")
@@ -444,7 +460,10 @@ export async function deleteTask(input: { id: string }) {
     .eq("user_id", user.id)
     .not("gcal_event_id", "is", null);
 
-  await supabase.from("tasks").delete().eq("id", input.id).eq("user_id", user.id);
+  const { error } = await supabase.from("tasks").delete().eq("id", input.id).eq("user_id", user.id);
+  // Nothing was deleted, so there's nothing to tidy up on Google's side —
+  // stop here and say so.
+  if (error) return { error: friendlyDbError(error) ?? "That didn't delete. Try again." };
 
   if (existing?.gcal_event_id) {
     await removeFromGcal({ supabase, userId: user.id, table: "tasks", rowId: input.id, existingEventId: existing.gcal_event_id });
@@ -459,4 +478,6 @@ export async function deleteTask(input: { id: string }) {
       existingEventId: reminder.gcal_event_id as string,
     });
   }
+
+  return {};
 }

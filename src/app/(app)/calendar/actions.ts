@@ -10,6 +10,7 @@ import { backfillGcalSync, type GcalSyncSummary } from "@/lib/gcal/sync";
 import { getTasks } from "@/app/(app)/tasks/actions";
 import type { Task } from "@/lib/tasks/types";
 import type { TopGoal } from "@/lib/reminders/types";
+import { friendlyDbError } from "@/lib/db-errors";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -133,31 +134,39 @@ export async function getYesterdayReflection(): Promise<string | null> {
   return data?.evening_reflection ?? null;
 }
 
-export async function planTomorrow(input: { goals: TopGoal[]; reflection: string | null }) {
+export async function planTomorrow(input: {
+  goals: TopGoal[];
+  reflection: string | null;
+}): Promise<{ error?: string }> {
   const { supabase, user } = await requireUser();
   const today = todayInAppTimezone();
   const tomorrow = addDaysToDateString(today, 1);
 
   if (input.goals.length > 0) {
-    await supabase
+    const { error } = await supabase
       .from("day_plans")
       .upsert(
         { user_id: user.id, plan_date: tomorrow, top_goals: input.goals.slice(0, 3) },
         { onConflict: "user_id,plan_date" }
       );
+    // If the goals didn't save, stop before touching the reflection — better
+    // one clear failure the caller can retry whole than a half-saved ritual.
+    if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   }
 
   const reflection = input.reflection?.trim();
   if (reflection) {
-    await supabase
+    const { error } = await supabase
       .from("day_plans")
       .upsert(
         { user_id: user.id, plan_date: today, evening_reflection: reflection },
         { onConflict: "user_id,plan_date" }
       );
+    if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
   }
 
   revalidatePath("/today");
+  return {};
 }
 
 // ---------- Google Calendar ----------

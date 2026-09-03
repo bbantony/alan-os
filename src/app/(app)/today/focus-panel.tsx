@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Panel, PanelHead } from "@/components/ui/panel";
 import { Tag } from "@/components/ui/tag";
+import { toast } from "@/components/ui/toast";
 import { planTomorrow } from "@/app/(app)/calendar/actions";
 import type { TodayFocusGoal } from "@/app/(app)/calendar/actions";
 import type { Task } from "@/lib/tasks/types";
@@ -139,9 +140,20 @@ function EveningRitual({ openTasks }: { openTasks: Task[] }) {
 
   async function handleSave() {
     setSaving(true);
-    await planTomorrow({ goals: selected, reflection: reflection.trim() || null });
-    setSaving(false);
-    setSaved(true);
+    try {
+      const result = await planTomorrow({ goals: selected, reflection: reflection.trim() || null });
+      if (result.error) {
+        // The form stays as-is — nothing was saved, so nothing gets cleared,
+        // and the "Plan set" panel only ever shows a confirmed save.
+        toast.error(result.error);
+        return;
+      }
+      setSaved(true);
+    } catch {
+      toast.error("Couldn't save the plan — check your connection and try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (saved) {

@@ -945,3 +945,26 @@ visible on Settings -> AI & cost rather than silent).
 the live database. The first attempt failed on a `name[] = text[]` type error and rolled back
 cleanly — see entry 50, and note that the per-file transaction in `run-migration.mjs` is what made
 that a non-event rather than a half-migrated database.
+
+## 2 Sep 2026 — Launcher shortcuts, and the four work-losing findings closed
+
+Two units shipped this session (CHANGELOG entries 54–55), both through the full
+test-runner + unit-reviewer ritual, with a QA trace on the second.
+
+**Launcher shortcuts (Stream C, item 1).** `manifest.json` now declares four app shortcuts —
+Log expense, Add task, Start workout, Shopping list — each deep-linking into a form the target
+page already knew how to auto-open. Long-press menu is standard Android; whether Kvaesitso's
+*search* surfaces them stays out of MANUAL.md until Alan confirms on the Fold 7.
+
+**"Work that vanishes" (Stream A, item 1).** All four data-losing findings are closed, plus the
+"four screens tell you an action worked" family in `task-list.tsx` (all five mutations there now
+revert-and-explain on failure): the evening ritual only claims "Plan set" after a confirmed save;
+the offline shopping outbox replays in typed order (IndexedDB v1→v2, queued rows preserved);
+a failed sync no longer wipes pending changes; a stuck change is set aside after 5 attempts and
+reported instead of jamming the queue; finishing a trip offline clears the tap-time ticks; and
+all seven shopping mutations check their result on the online path too. Rejected-vs-network
+semantics are now explicit: a server "no" reverts and explains, a network drop queues and retries.
+
+**Still open: ~70 of the audit board's 76.** Known leftovers flagged by the reviewer for a later
+unit: `task-detail-dialog.tsx` and `today-console.tsx` still ignore the errors the task actions
+now return; `setTaskCompleted` still doesn't revalidate /plan on a plain complete.

@@ -1633,3 +1633,38 @@ Groceries — and it tells you why underneath, so it doesn't look like a glitch.
 If it's never seen the shop before it makes a sensible guess from the name (Petro-Canada is
 Transport, Tim Hortons is Takeout). If it has no idea, it leaves it blank rather than guessing
 wrong. **It never overwrites a category you picked yourself.**
+
+## Shortcuts from your home screen
+
+Long-press the Alan OS icon on your home screen and a small menu appears with four
+shortcuts. Each one skips the front door and lands you straight where the typing happens:
+
+- **Log expense** — opens Money with the quick-log form already up.
+- **Add task** — opens the Plan list with the cursor in the new-task box.
+- **Start workout** — opens a fresh workout session.
+- **Shopping list** — opens the list with the add-item box focused.
+
+If the menu doesn't show the shortcuts yet, open the app once and give it a minute — your
+phone re-reads the app's details on a visit, not instantly.
+
+## The app stopped taking your word for it
+
+A batch of fixes with one idea behind them: the app used to *assume* a save worked and tell
+you so. Now it *checks*. What that means in practice:
+
+- The evening ritual only says "Plan set — Tomorrow is decided" after your three goals and
+  reflection are actually saved. If the save fails, your words stay in the form and you get
+  a plain message instead of a false promise.
+- Adding, ticking, un-ticking and deleting tasks all verify themselves. If something
+  doesn't stick, the screen puts itself back the way it was — including everything you'd
+  typed — and tells you why.
+- Shopping changes made offline now replay in the order you made them, so a tick can never
+  arrive before the item it belongs to. If a change genuinely can't go through, the app
+  sets it aside after a few tries and tells you which item and why, instead of silently
+  jamming everything behind it.
+- Finishing a shopping trip offline now clears exactly the items that were ticked when you
+  tapped Finish — not whatever happened to be ticked when the phone reconnected.
+- A sync that fails no longer wipes the changes that were waiting to sync.
+
+You don't have to do anything differently. The only visible change is that, on a bad
+connection, the app now tells you the truth.
