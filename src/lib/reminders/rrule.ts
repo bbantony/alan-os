@@ -1,6 +1,17 @@
-import { RRule } from "rrule";
-import { APP_TIMEZONE, zonedTimeToUtc, utcToZonedParts } from "@/lib/time";
+// The rrule package ships an ESM build to bundlers (named exports) and a CJS
+// build to node (everything hanging off `.default`) — so the plain
+// `import { RRule } from "rrule"` that works under Next crashes under node's
+// test runner (npm test), which loads this file directly. The namespace
+// import + `.default ?? namespace` shim resolves both shapes; the ESM build
+// has no default export, so the bundler side can't be fooled by it.
+import * as rrulePkg from "rrule";
+import type { RRule as RRuleInstance } from "rrule";
+// Runtime import is relative with an explicit .ts extension (not "@/lib/time")
+// for the same node-resolution reason — see lib/finance/reconcile.ts.
+import { APP_TIMEZONE, zonedTimeToUtc, utcToZonedParts } from "../time.ts";
 import type { RecurrencePreset } from "./types";
+
+const { RRule } = (rrulePkg as unknown as { default?: typeof rrulePkg }).default ?? rrulePkg;
 
 const DAY_CODES = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
@@ -81,7 +92,7 @@ export function describeRRule(rruleText: string): string {
 // timezone-correct recurrences with a library (rrule.js) that only reasons
 // in either true UTC or the host machine's local time, neither of which is
 // what we want on a UTC-running Vercel function displaying Winnipeg times.
-function rruleAtInstant(rruleText: string, atUtc: Date): RRule {
+function rruleAtInstant(rruleText: string, atUtc: Date): RRuleInstance {
   const parts = utcToZonedParts(atUtc, APP_TIMEZONE);
   const floatingDtstart = new Date(
     Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
@@ -112,6 +123,35 @@ export function nextOccurrenceUtc(rruleText: string, afterUtc: Date): Date | nul
     },
     APP_TIMEZONE
   );
+}
+
+// nextOccurrenceUtc above steps exactly ONE occurrence forward, which is
+// right for reminders (the cron fires each occurrence in turn) but wrong for
+// a repeating task ticked off late: one step from a due date three weeks in
+// the past just spawns another already-overdue instance. This rolls forward —
+// repeated single steps, each preserving the wall-clock time-of-day and
+// re-resolving DST exactly as nextOccurrenceUtc does — until the occurrence
+// lands strictly after `nowUtc`. Guard rails: if `maxSteps` steps still
+// haven't reached the future (a pathological rrule), or the rule stops
+// advancing or runs out (COUNT/UNTIL), it falls back to the plain single
+// step — never worse than the old behaviour.
+export function nextFutureOccurrenceUtc(
+  rruleText: string,
+  afterUtc: Date,
+  nowUtc: Date = new Date(),
+  maxSteps = 500
+): Date | null {
+  const singleStep = nextOccurrenceUtc(rruleText, afterUtc);
+  if (!singleStep) return null;
+
+  let candidate = singleStep;
+  for (let i = 0; i < maxSteps; i++) {
+    if (candidate > nowUtc) return candidate;
+    const following = nextOccurrenceUtc(rruleText, candidate);
+    if (!following || following <= candidate) return singleStep;
+    candidate = following;
+  }
+  return singleStep;
 }
 
 // Routines care about calendar days, not precise instants (unlike reminders'

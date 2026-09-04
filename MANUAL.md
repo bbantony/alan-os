@@ -1676,3 +1676,20 @@ you so. Now it *checks*. What that means in practice:
 
 You don't have to do anything differently. The only visible change is that, on a bad
 connection, the app now tells you the truth.
+
+## Small fixes you'll actually notice
+
+- **Weekly routine streaks count now.** Streaks used to demand every calendar day, so a
+  Sunday-only routine could never pass 1. Now a streak counts the days the routine was
+  actually due: three Sundays running is a streak of 3. One missed due-day in a stretch of
+  seven is forgiven; two resets you — the same forgiveness daily routines always had.
+- **A repeating task done late catches up.** Finish it three weeks late and the next one is
+  due next week — not three weeks ago. Its "remind me before" setting now carries to every
+  repeat too.
+- **A new barbell exercise starts at the bar** (45 lb / 20 kg), not zero — so leaving the
+  suggestion untouched records what you actually lifted.
+- **The Plan calendar loads months as you page to them**, and flipping quickly can't leave
+  the grid showing one month with another month's dots. The Timeline's arrows got the same
+  cure.
+- **One workout, one confetti.** The crew screen now celebrates a personal record once,
+  instead of once per record per refresh.

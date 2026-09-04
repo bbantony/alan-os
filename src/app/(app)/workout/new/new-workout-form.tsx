@@ -24,13 +24,14 @@ import { cn } from "@/lib/utils";
 import { MECHANICAL } from "@/lib/motion";
 import { celebratePr } from "@/lib/workout/celebrate";
 import { formatPace } from "@/lib/workout/format";
-import { formatWeight } from "@/lib/workout/units";
+import { barWeightKg, formatWeight } from "@/lib/workout/units";
 import { suggestNextWeight } from "@/lib/workout/progression";
 import { PR_KIND_LABELS } from "@/lib/workout/pr";
 import {
   WORKOUT_TYPE_LABELS,
   type DraftExercise,
   type DraftSet,
+  type EquipmentType,
   type Exercise,
   type ExerciseHistoryEntry,
   type MuscleGroup,
@@ -45,7 +46,8 @@ import { ExercisePicker } from "./exercise-picker";
 function suggestionFor(
   history: ExerciseHistoryEntry[],
   unit: WeightUnit,
-  weightIncrement: number | null
+  weightIncrement: number | null,
+  equipment: EquipmentType
 ): DraftSet {
   const lastSets = history[0]?.sets ?? [];
   const suggestion = suggestNextWeight(
@@ -53,9 +55,11 @@ function suggestionFor(
     unit,
     weightIncrement
   );
-  return suggestion
-    ? { reps: suggestion.reps, weightKg: suggestion.weightKg }
-    : { reps: 8, weightKg: 0 };
+  if (suggestion) return { reps: suggestion.reps, weightKg: suggestion.weightKg };
+  // No history to go on. For a barbell lift, zero would mean "an invisible
+  // bar" — the set-row shows max(0, total − bar) as "Bar + X", and a set left
+  // untouched saves whatever sits here. Start at the empty bar instead.
+  return { reps: 8, weightKg: equipment === "barbell" ? barWeightKg(unit) : 0 };
 }
 
 /** How long to wait after the last change before writing the draft. */
@@ -173,7 +177,7 @@ export function NewWorkoutForm({
         setDraftExercises((prev) =>
           prev.map((d) =>
             d.exerciseId === ex.exerciseId && d.sets.length === 0
-              ? { ...d, sets: [suggestionFor(history, unit, weightIncrement)] }
+              ? { ...d, sets: [suggestionFor(history, unit, weightIncrement, ex.equipment)] }
               : d
           )
         );
@@ -245,7 +249,7 @@ export function NewWorkoutForm({
       setDraftExercises((prev) =>
         prev.map((ex) =>
           ex.exerciseId === exercise.id && ex.sets.length === 0
-            ? { ...ex, sets: [suggestionFor(history, unit, weightIncrement)] }
+            ? { ...ex, sets: [suggestionFor(history, unit, weightIncrement, exercise.equipment)] }
             : ex
         )
       );
@@ -278,7 +282,7 @@ export function NewWorkoutForm({
         if (ex.exerciseId !== exerciseId) return ex;
         const last =
           ex.sets[ex.sets.length - 1] ??
-          suggestionFor(historyByExercise[exerciseId] ?? [], unit, weightIncrement);
+          suggestionFor(historyByExercise[exerciseId] ?? [], unit, weightIncrement, ex.equipment);
         return { ...ex, sets: [...ex.sets, { ...last }] };
       })
     );

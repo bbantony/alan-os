@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 
@@ -34,7 +34,20 @@ export function CalendarView({
 }) {
   const [selected, setSelected] = useState(todayIso);
   const [items, setItems] = useState(initialItems);
-  const [loadedMonth, setLoadedMonth] = useState(initialMonth);
+  // The whole loaded window, not just its centre — the server preloads three
+  // months, so arrowing to an adjacent month must not refetch (and must not
+  // blank the day panel with "Loading…" for data that's already here).
+  const [loadedRange, setLoadedRange] = useState(() => {
+    const d = parseDateString(`${initialMonth}-01`);
+    if (!d) return { start: initialMonth, end: initialMonth };
+    const prev = addMonths(d.getFullYear(), d.getMonth(), -1);
+    const next = addMonths(d.getFullYear(), d.getMonth(), 1);
+    const monthString = (y: number, m: number) => toDateString(new Date(y, m, 1)).slice(0, 7);
+    return { start: monthString(prev.year, prev.month), end: monthString(next.year, next.month) };
+  });
+  // Ticket per fetch: rapid arrow taps launch overlapping loads, and only the
+  // newest may write — the same stale-response guard the Timeline uses.
+  const loadIdRef = useRef(0);
   const [isPending, startTransition] = useTransition();
 
   const byDate = useMemo(() => {
@@ -68,16 +81,21 @@ export function CalendarView({
   /** Pulls a month's items when the grid moves outside what's loaded. */
   function ensureMonthLoaded(dateIso: string) {
     const month = dateIso.slice(0, 7);
-    if (month === loadedMonth) return;
+    // YYYY-MM strings compare correctly as strings.
+    if (month >= loadedRange.start && month <= loadedRange.end) return;
     const d = parseDateString(`${month}-01`);
     if (!d) return;
     const prev = addMonths(d.getFullYear(), d.getMonth(), -1);
     const next = addMonths(d.getFullYear(), d.getMonth(), 1);
     const start = toDateString(new Date(prev.year, prev.month, 1));
     const end = toDateString(new Date(next.year, next.month + 1, 0));
+    const loadId = ++loadIdRef.current;
     startTransition(async () => {
-      setItems(await getPlanRange(start, end));
-      setLoadedMonth(month);
+      const fresh = await getPlanRange(start, end);
+      // A newer tap superseded this fetch — its result must not win.
+      if (loadId !== loadIdRef.current) return;
+      setItems(fresh);
+      setLoadedRange({ start: start.slice(0, 7), end: end.slice(0, 7) });
     });
   }
 
@@ -93,6 +111,9 @@ export function CalendarView({
           setSelected(iso);
           ensureMonthLoaded(iso);
         }}
+        // The arrows change what's visible without selecting anything, and a
+        // month with no items loaded looks identical to an empty month.
+        onViewChange={(year, month) => ensureMonthLoaded(toDateString(new Date(year, month, 1)))}
       />
 
       <Panel>

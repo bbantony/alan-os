@@ -4516,3 +4516,59 @@ future migration; unreachable from the UI), transfer legs in the reconcile ticki
 "Transaction" in green (polish stream), function EXECUTE grants not revoked from PUBLIC
 (security stream — applies to earlier RPCs too), and the Timeline ledger showing transfers as
 two "Misc" events (pre-existing since 0037).
+
+## 59. Things visibly broken in use — six fixed (3 Sep 2026)
+
+**What led here:** Stream A item 3 of the approved roadmap — the four HIGH "doesn't work like
+it looks" audit findings plus two adjacent ones, all re-verified before building.
+
+**What changed:**
+
+1. **Calendar paging** — the month arrows (and the Today button) in the shared calendar grid
+   now report the newly visible month, and the Plan page loads it before you see it. The
+   loading half already existed; the arrows just never spoke. The date-picker consumer of the
+   same grid is unaffected (the new callback is optional).
+2. **The 0 kg barbell** — a never-before-logged barbell exercise now starts at the bar's own
+   weight (45 lb / 20 kg by your unit setting) instead of 0, and an untouched set saves that
+   weight. Dumbbells and machines still start empty.
+3. **One confetti per session** — the crew screen's live feed now waits out a burst of incoming
+   sets (1.5 s) and refreshes once, and the PR celebration fires at most once per burst instead
+   of once per record.
+4. **Weekly streaks can finally count** — streaks now walk only the days a routine was *due*
+   (from its own schedule), so a Sunday routine done three Sundays running counts 3. The grace
+   rule scales with it: one missed due-day per trailing seven due-days is forgiven, a second
+   resets — exactly mirroring how daily streaks already behaved (daily routines now route
+   through the same single implementation, bit-identical to before).
+5. **Late repeating tasks catch up** — completing a repeat weeks late now rolls the next due
+   date forward past today (bounded at 500 steps with a safe fallback) instead of spawning an
+   instance that is itself already overdue. Time-of-day and DST behaviour preserved.
+6. **Timeline arrows can't race** — each load carries a request id and stale responses are
+   dropped, so rapid paging always ends with rows matching the header.
+
+**Tests:** new `tests/streaks-and-recurrence.test.mts` with nine cases pinning the streak rules
+(including daily ≡ the old behaviour) and the roll-forward (lands on the right weekday at the
+right Winnipeg time across DST, on-time completions step exactly once, the guard falls back
+safely). Two lib files switched to relative `.ts` imports so node's test runner can load them,
+including a load-order shim for the rrule package verified in both node and the bundler.
+
+**QA round, same unit:** the core flows all held (QA hand-walked the streak fixtures, the
+barbell maths in both units, the confetti burst counting, and the DST-safe roll-forward).
+Three findings fixed before shipping: (1) the calendar's month loading had the exact
+rapid-tap race this unit fixed in the Timeline — it now carries the same newest-tap-wins
+ticket; (2) arrowing to an adjacent month refetched data the server had already preloaded
+and blanked the day panel with "Loading…" while doing it — the calendar now remembers the
+whole loaded three-month window, so adjacent paging is instant; (3) pre-existing but found
+walking this unit's flow: when a repeating task with a "30 minutes before" nudge repeats,
+the reminder was re-pointed at the bare due time, quietly killing the early warning from the
+second occurrence on — it now keeps the task's own offset. Noted for later, not smuggled in:
+routines created late in the evening anchor their schedule to the UTC date (consistent
+everywhere, but one day off what the user saw), and the streak walk gets slower as history
+grows — both pre-existing.
+
+**Reviewer round, same unit:** the reviewer proved the nudge fix above would decay — the next
+instance of a repeating task was created *without* its "minutes before" setting, so the row
+claimed "no reminder" while a live reminder pointed at it, editing it would have silently
+deleted that reminder, and the fixed re-point would have regressed to firing at the due time
+from the third occurrence on. The new instance now inherits the nudge setting, which makes the
+fix permanent and the row honest (the Google Calendar side already inherited it — the app row
+was the odd one out).

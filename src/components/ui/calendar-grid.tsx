@@ -32,6 +32,7 @@ export interface DayMark {
 export function CalendarGrid({
   selected,
   onSelect,
+  onViewChange,
   marks,
   todayIso,
   className,
@@ -40,6 +41,8 @@ export function CalendarGrid({
   /** `YYYY-MM-DD`, or null for nothing chosen yet. */
   selected: string | null;
   onSelect: (iso: string) => void;
+  /** Fires when the arrows (or Today) turn the page to a different month. */
+  onViewChange?: (year: number, month: number) => void;
   /** Keyed by `YYYY-MM-DD`. */
   marks?: Record<string, DayMark[]>;
   /** Passed in rather than read from the device, so the app's timezone wins. */
@@ -53,6 +56,12 @@ export function CalendarGrid({
   }, [selected, todayIso]);
 
   const [view, setView] = useState(initial);
+
+  /** The one place the page turns, so the owner always hears about it. */
+  function changeView(year: number, month: number) {
+    setView({ year, month });
+    onViewChange?.(year, month);
+  }
 
   const days = useMemo(
     () => buildMonthGrid(view.year, view.month, todayIso),
@@ -71,7 +80,10 @@ export function CalendarGrid({
       <div className="flex items-stretch border-b-2 border-rule">
         <button
           type="button"
-          onClick={() => setView((v) => addMonths(v.year, v.month, -1))}
+          onClick={() => {
+            const prev = addMonths(view.year, view.month, -1);
+            changeView(prev.year, prev.month);
+          }}
           aria-label="Previous month"
           className="tap-press flex w-10 shrink-0 items-center justify-center border-r border-hairline transition-colors hover:bg-muted"
         >
@@ -85,7 +97,7 @@ export function CalendarGrid({
             type="button"
             onClick={() => {
               const t = parseDateString(todayIso) ?? new Date();
-              setView({ year: t.getFullYear(), month: t.getMonth() });
+              changeView(t.getFullYear(), t.getMonth());
             }}
             className="micro-sm tap-press shrink-0 border-l border-hairline px-2.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
@@ -94,7 +106,10 @@ export function CalendarGrid({
         )}
         <button
           type="button"
-          onClick={() => setView((v) => addMonths(v.year, v.month, 1))}
+          onClick={() => {
+            const next = addMonths(view.year, view.month, 1);
+            changeView(next.year, next.month);
+          }}
           aria-label="Next month"
           className="tap-press flex w-10 shrink-0 items-center justify-center border-l border-hairline transition-colors hover:bg-muted"
         >

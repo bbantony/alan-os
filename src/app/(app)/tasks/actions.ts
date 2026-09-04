@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { nextOccurrenceUtc } from "@/lib/reminders/rrule";
+import { nextFutureOccurrenceUtc } from "@/lib/reminders/rrule";
 import { nudgeInstant } from "@/lib/tasks/nudge";
 import { todayInAppTimezone, addDaysToDateString, zonedTimeToUtc } from "@/lib/time";
 import { syncToGcal, removeFromGcal } from "@/lib/gcal/sync";
@@ -374,7 +374,12 @@ export async function setTaskCompleted(input: {
 
   if (!task?.rrule || !task.due_at) return {};
 
-  const next = nextOccurrenceUtc(task.rrule, new Date(task.due_at));
+  // Rolled forward, not stepped once: a task ticked off three weeks late
+  // used to spawn its next instance still weeks in the past (already
+  // overdue, sometimes several times over). nextFutureOccurrenceUtc keeps
+  // stepping from the old due date until the new one is actually in the
+  // future, preserving the original wall-clock time of day.
+  const next = nextFutureOccurrenceUtc(task.rrule, new Date(task.due_at));
   if (!next) return {};
 
   const newId = crypto.randomUUID();
@@ -390,6 +395,11 @@ export async function setTaskCompleted(input: {
       due_at: next.toISOString(),
       rrule: task.rrule,
       parent_task_id: task.parent_task_id,
+      // The nudge is part of the repeat. Without this, the new instance's row
+      // says "no reminder" while an active reminder points at it, an edit
+      // would silently delete that reminder, and the offset-keeping re-point
+      // below decays back to firing at the due time after one more cycle.
+      notify_offset_minutes: task.notify_offset_minutes,
     })
     .select("*")
     .single();
@@ -414,7 +424,13 @@ export async function setTaskCompleted(input: {
     .update({
       linked_task_id: newId,
       status: "active",
-      remind_at: next.toISOString(),
+      // The nudge fires BEFORE the due time by the task's own offset — the
+      // reminder was created that way (nudgeInstant, above), and re-pointing
+      // it at the bare due instant quietly turned "30 min before" into "as it
+      // becomes late" from the second occurrence on.
+      remind_at:
+        nudgeInstant(next.toISOString(), task.notify_offset_minutes as number | null) ??
+        next.toISOString(),
     })
     .eq("linked_task_id", input.id)
     .eq("user_id", user.id);

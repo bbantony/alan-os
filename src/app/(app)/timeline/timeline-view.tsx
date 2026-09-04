@@ -1,7 +1,7 @@
 "use client";
 
 import { addDaysToDateString, formatInAppTimezone } from "@/lib/time";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -102,11 +102,19 @@ export function TimelineView({
   const [currentInsight, setCurrentInsight] = useState(insight);
   const [acting, setActing] = useState(false);
 
+  // The header range updates instantly but the rows arrive whenever the
+  // network says so — two quick arrow taps used to race, and whichever fetch
+  // finished last won. Each load takes a ticket; stale results are dropped.
+  const loadIdRef = useRef(0);
+
   async function load(nextFrom: string, nextTo: string) {
+    const loadId = ++loadIdRef.current;
     setLoading(true);
     setFrom(nextFrom);
     setTo(nextTo);
-    setDays(await getLedgerDays(nextFrom, nextTo));
+    const result = await getLedgerDays(nextFrom, nextTo);
+    if (loadId !== loadIdRef.current) return;
+    setDays(result);
     setLoading(false);
   }
 

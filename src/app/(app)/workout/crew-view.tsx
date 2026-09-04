@@ -14,6 +14,10 @@ import { Leaderboard } from "./leaderboard";
 
 const REALTIME_TABLES = ["workouts", "workout_sets", "runs", "reactions", "prs"] as const;
 
+/** One saved session inserts rows into several of these tables at once — wait
+ *  for the burst to finish, then refetch once. */
+const REFRESH_DEBOUNCE_MS = 1500;
+
 type CrewTab = "feed" | "leaderboard";
 
 /**
@@ -49,6 +53,26 @@ export function CrewView({
     const supabase = createClient();
     let channel = supabase.channel("workout-feed");
 
+    // Trailing-edge debounce: every event just restarts the timer, so a
+    // multi-set session that lands as nine inserts costs one refetch — and at
+    // most one round of confetti, however many PRs the burst contained.
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let burstHadCrewPr = false;
+
+    function scheduleRefresh() {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(async () => {
+        refreshTimer = null;
+        if (burstHadCrewPr) {
+          burstHadCrewPr = false;
+          celebratePr();
+        }
+        const [freshFeed, freshLeaderboard] = await Promise.all([getFeed(), getLeaderboard()]);
+        onFeedChange(freshFeed);
+        onLeaderboardChange(freshLeaderboard);
+      }, REFRESH_DEBOUNCE_MS);
+    }
+
     for (const table of REALTIME_TABLES) {
       channel = channel.on(
         "postgres_changes",
@@ -56,22 +80,17 @@ export function CrewView({
         (payload) => {
           if (table === "prs" && payload.eventType === "INSERT") {
             const row = payload.new as { user_id?: string };
-            if (row.user_id && row.user_id !== currentUserId) celebratePr();
+            if (row.user_id && row.user_id !== currentUserId) burstHadCrewPr = true;
           }
-          refresh();
+          scheduleRefresh();
         }
       );
     }
 
     channel.subscribe();
 
-    async function refresh() {
-      const [freshFeed, freshLeaderboard] = await Promise.all([getFeed(), getLeaderboard()]);
-      onFeedChange(freshFeed);
-      onLeaderboardChange(freshLeaderboard);
-    }
-
     return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
     // The callbacks are setState functions from the shell and stable across

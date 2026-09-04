@@ -4,12 +4,28 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppTimezone } from "@/lib/time";
-import { computeStreak } from "@/lib/streaks";
+import { computeDueStreak } from "@/lib/streaks";
 import { isDueOnDate, firstReminderInstant, type RecurrenceOptions, buildRRuleString } from "@/lib/reminders/rrule";
 import { syncToGcal, removeFromGcal } from "@/lib/gcal/sync";
 import type { TaskCategory } from "@/lib/tasks/types";
 import type { Routine, RoutineCompletion, RoutineStep, RoutineWithProgress } from "@/lib/routines/types";
 import { friendlyDbError } from "@/lib/db-errors";
+
+// Streaks are schedule-aware (computeDueStreak): only the days the routine's
+// rrule actually schedules count, so a weekly routine's streak is counted in
+// weeks — the six days it was never due on can't reset it, which is exactly
+// what the old every-calendar-day computeStreak got wrong (a weekly streak
+// could never pass 1). created_at anchors interval patterns, matching
+// getRoutinesDueToday below.
+function routineStreak(
+  routine: Pick<Routine, "rrule" | "created_at">,
+  completedDates: string[],
+  today: string
+) {
+  return computeDueStreak(completedDates, today, (dateIso) =>
+    isDueOnDate(routine.rrule, routine.created_at.slice(0, 10), dateIso)
+  );
+}
 
 async function requireUser() {
   const supabase = await createClient();
@@ -60,7 +76,7 @@ export async function getRoutines(): Promise<RoutineWithProgress[]> {
     return {
       ...r,
       steps: stepsByRoutine.get(r.id) ?? [],
-      streak: computeStreak(dates, today),
+      streak: routineStreak(r, dates, today),
       completedToday: routineCompletions.find((c) => c.completed_date === today) ?? null,
       hasReminder: remindedRoutineIds.has(r.id),
     };
@@ -318,13 +334,26 @@ export async function completeRoutineToday(input: {
     };
   }
 
-  const { data: completions } = await supabase
-    .from("routine_completions")
-    .select("completed_date")
-    .eq("routine_id", input.routineId)
-    .eq("user_id", user.id);
+  // The routine's own rrule + created_at ride along so the recomputed streak
+  // is schedule-aware (see routineStreak above), not calendar-day naive.
+  const [{ data: completions }, { data: routine }] = await Promise.all([
+    supabase
+      .from("routine_completions")
+      .select("completed_date")
+      .eq("routine_id", input.routineId)
+      .eq("user_id", user.id),
+    supabase
+      .from("routines")
+      .select("rrule, created_at")
+      .eq("id", input.routineId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
 
-  const streak = computeStreak((completions ?? []).map((c) => c.completed_date as string), today);
+  const dates = (completions ?? []).map((c) => c.completed_date as string);
+  const streak = routine
+    ? routineStreak(routine as Pick<Routine, "rrule" | "created_at">, dates, today)
+    : computeDueStreak(dates, today, () => true);
   revalidatePath("/plan");
   revalidatePath("/today");
   return { streak };
@@ -350,16 +379,25 @@ export async function uncompleteRoutineToday(
 
   // Recomputed and returned: un-ticking today changes the streak, and the
   // caller previously had to guess (routine-section decremented it by one,
-  // which is wrong across a forgiven miss).
-  const { data: completions } = await supabase
-    .from("routine_completions")
-    .select("completed_date")
-    .eq("routine_id", input.routineId)
-    .eq("user_id", user.id);
-  const streak = computeStreak(
-    (completions ?? []).map((c) => c.completed_date as string),
-    today
-  );
+  // which is wrong across a forgiven miss). Schedule-aware, same as the
+  // complete path.
+  const [{ data: completions }, { data: routine }] = await Promise.all([
+    supabase
+      .from("routine_completions")
+      .select("completed_date")
+      .eq("routine_id", input.routineId)
+      .eq("user_id", user.id),
+    supabase
+      .from("routines")
+      .select("rrule, created_at")
+      .eq("id", input.routineId)
+      .eq("user_id", user.id)
+      .maybeSingle(),
+  ]);
+  const dates = (completions ?? []).map((c) => c.completed_date as string);
+  const streak = routine
+    ? routineStreak(routine as Pick<Routine, "rrule" | "created_at">, dates, today)
+    : computeDueStreak(dates, today, () => true);
 
   revalidatePath("/plan");
   revalidatePath("/today");

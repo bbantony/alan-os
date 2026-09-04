@@ -994,3 +994,13 @@ the Money screen now adopts refreshed server data, ending the stale-balances-aft
 behaviour. Recorded for later streams: PUBLIC execute grants on RPCs (security), transfer
 labels in the reconcile list and Timeline ledger (polish), a theoretical two-device
 delete race (needs a row lock).
+
+## 3 Sep 2026 — Things visibly broken in use, closed
+
+CHANGELOG entry 59, full ritual (three reviewer/QA rounds). Calendar paging loads months on
+arrow (with newest-tap-wins ticket and window dedupe); barbell no-history fallback = the bar;
+one confetti per crew burst; weekly streaks count due-days (schedule-aware, one shared
+implementation, daily bit-identical to before); late repeats roll forward past today and
+carry their nudge offset to every instance; Timeline race fixed. Nine new tests in
+tests/streaks-and-recurrence.test.mts. Deferred, recorded in entry 59: routines' UTC-date
+anchoring for evening creations, streak-walk cost growth.
