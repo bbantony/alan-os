@@ -46,20 +46,64 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  side = "center",
+  style,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /**
+   * Where the dialog is anchored.
+   *
+   * `center` is the app's default — a block dropped onto the middle of the
+   * page from just above it.
+   *
+   * `bottom` is the phone sheet: flush to the bottom edge, full width, and it
+   * rises from that edge rather than dropping from the top. It exists because
+   * the capture sheet is opened by a control at the *bottom* of the screen and
+   * is used one-handed — a centred dialog puts its first field out of thumb
+   * reach and moves in the opposite direction to the tap that summoned it.
+   * From `sm` up it stops being a full-width strip and becomes a centred
+   * bottom-docked panel, because a 1440px-wide sheet reads as a page.
+   */
+  side?: "center" | "bottom"
 }) {
   return (
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        // Not `data-side` — that name belongs to base-ui's own positioned
+        // popups (menus, popovers) and this is a dialog.
+        data-dialog-side={side}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto border-2 border-rule bg-popover p-4 text-sm text-popover-foreground shadow-[var(--shadow-hard-lg)] duration-100 outline-none sm:max-w-md",
-          "data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-top-2 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-top-2",
+          "fixed z-50 grid w-full gap-4 overflow-y-auto border-2 border-rule bg-popover p-4 text-sm text-popover-foreground shadow-[var(--shadow-hard-lg)] duration-100 outline-none",
+          side === "center" && [
+            "top-1/2 left-1/2 max-h-[calc(100dvh-2rem)] max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 sm:max-w-md",
+            "data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-top-2 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-top-2",
+          ],
+          side === "bottom" && [
+            // No bottom border: the sheet is docked to the edge of the screen
+            // on a phone, and a rule with nothing under it reads as a seam.
+            "inset-x-0 bottom-0 max-h-[85dvh] border-b-0 sm:inset-x-auto sm:left-1/2 sm:max-w-md sm:-translate-x-1/2 sm:border-b-2",
+            "data-open:animate-in data-open:fade-in-0 data-open:slide-in-from-bottom-4 data-closed:animate-out data-closed:fade-out-0 data-closed:slide-out-to-bottom-4",
+            // Somebody who has asked their phone to stop animating gets the
+            // sheet simply appearing. The app's own Motion: Reduced setting is
+            // already handled globally in globals.css.
+            "motion-reduce:animate-none",
+          ],
           className
         )}
+        // Inline rather than a padding utility on purpose: consumers pass
+        // `p-0` to run their own edge-to-edge sections, and this must survive
+        // that — it's the gap that keeps the last row of the sheet clear of a
+        // phone's home indicator.
+        // (`style` can also be a function of the popup's state in base-ui; in
+        // that case it is left alone rather than half-merged.)
+        style={
+          side === "bottom" && (style === undefined || typeof style === "object")
+            ? { paddingBottom: "env(safe-area-inset-bottom)", ...style }
+            : style
+        }
         {...props}
       >
         {children}

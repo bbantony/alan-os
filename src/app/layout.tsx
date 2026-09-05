@@ -78,6 +78,15 @@ export const metadata: Metadata = {
 // Matches the Ink theme's paper/ink grounds — this is the colour Android paints
 // the status bar with when the PWA is open from the home screen.
 export const viewport: Viewport = {
+  // Android keyboards float OVER the page by default: the layout viewport
+  // keeps its full height, so a sheet sized at 85dvh stays 85% of the WHOLE
+  // screen and its lower half — the capture sheet's chips and Save button —
+  // ends up behind the keys. `resizes-content` makes the viewport itself
+  // shrink when the keyboard opens, which is what every dvh/vh measurement and
+  // every fixed element in the app is then measured against, so the sheet
+  // simply gets shorter and everything in it stays reachable. iOS Safari
+  // ignores the key and already behaves this way.
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#F1F0EC" },
     { media: "(prefers-color-scheme: dark)", color: "#121211" },

@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { History, Settings } from "lucide-react";
+
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { getTasks } from "@/app/(app)/tasks/actions";
 import { getShoppingItems, getStapleSuggestions } from "@/app/(app)/shopping/actions";
@@ -26,7 +29,6 @@ import { getLedger } from "@/lib/ledger";
 import { ensureDailyOutlook } from "@/lib/ai/outlook";
 import { TodayConsole } from "./today-console";
 import { FocusPanel } from "./focus-panel";
-import { JumpTo } from "./jump-to";
 import { TodaySoFar } from "./today-so-far";
 import { UpcomingBills } from "./upcoming-bills";
 import { OutlookPanel } from "./outlook-panel";
@@ -199,6 +201,41 @@ export default async function TodayPage() {
             )}
           </>
         }
+        // The way into Settings on a phone. It used to be two taps down behind
+        // the More tab, which the capture sheet replaced; the masthead of the
+        // screen the app opens on is the obvious home for it, and this is
+        // where a settings control sits in almost every app there is.
+        actions={
+          /* The two doors that used to live in the retired More menu. Timeline
+             also has a door on the "Today so far" panel header, but that panel
+             can be switched off in Settings -> Today — and a screen you can
+             hide must never be the only way to reach another screen.
+
+             Timeline is gated on Tasks because /timeline IS gated on Tasks
+             (ROUTE_MODULE_ALIASES in lib/permissions.ts): it reads across the
+             everyday modules, so Tasks is the flag it hangs on. Shown
+             unconditionally, an account with only Workout got a button that
+             bounced straight back to Today — a door painted on a wall.
+             Settings stays ungated on purpose: every account has settings. */
+          <div className="flex items-center gap-2">
+            {access.tasks && (
+              <Link
+                href="/timeline"
+                aria-label="Timeline"
+                className="tap-press tap-reach flex size-9 items-center justify-center border-2 border-rule bg-surface hover:bg-muted"
+              >
+                <History className="size-4" strokeWidth={2.5} />
+              </Link>
+            )}
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              className="tap-press tap-reach flex size-9 items-center justify-center border-2 border-rule bg-surface hover:bg-muted"
+            >
+              <Settings className="size-4" strokeWidth={2.5} />
+            </Link>
+          </div>
+        }
       />
 
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-4 md:px-6 md:py-6">
@@ -300,7 +337,7 @@ export default async function TodayPage() {
               );
             }
             if (panel === "timeline") {
-              return <TodaySoFar key={panel} events={ledgerToday} />;
+              return <TodaySoFar key={panel} events={ledgerToday} canOpenTimeline={access.tasks} />;
             }
             if (panel === "focus" && access.calendar) {
               return (
@@ -312,9 +349,6 @@ export default async function TodayPage() {
                   openTasks={tasks}
                 />
               );
-            }
-            if (panel === "jump") {
-              return <JumpTo key={panel} moduleAccess={access} />;
             }
             return null;
           })}

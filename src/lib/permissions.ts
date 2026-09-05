@@ -90,9 +90,10 @@ const ROUTE_MODULE_ALIASES: { prefix: string; module: ModuleId }[] = [
 ];
 
 // Maps a pathname to the module it belongs to. Returns null for paths that
-// aren't module-gated at all (/today, /more, /settings and its
-// Appearance/Password sub-pages, /settings/admin) — those are handled by
-// their own separate rule in canAccessPath below.
+// aren't module-gated at all (/today, /settings and its Appearance/Password
+// sub-pages, /settings/admin) — those are handled by their own separate rule
+// in canAccessPath below. (/more was in this list until the page was deleted
+// on 5 Sep 2026 and the capture sheet took its place.)
 function moduleForPath(pathname: string): ModuleId | null {
   for (const alias of ROUTE_MODULE_ALIASES) {
     if (pathname.startsWith(alias.prefix)) return alias.module;
@@ -111,7 +112,7 @@ export function canAccessPath(profile: PermissionProfile, pathname: string): boo
   if (pathname.startsWith("/settings/admin")) return false;
 
   const moduleId = moduleForPath(pathname);
-  if (moduleId === null) return true; // /today, /more, /settings, /settings/appearance, /settings/password
+  if (moduleId === null) return true; // /today, /settings, /settings/appearance, /settings/password
 
   return resolveModuleAccess(profile)[moduleId];
 }

@@ -61,12 +61,21 @@ export function MoneyShell({
    * against the live account list. Null means first in the list.
    */
   defaultAccountId?: string | null;
-  /** Set by the `?new=1` link the app-wide quick-add sends here. */
+  /**
+   * Set by `?new=1` on the /money address. Nothing in the app sends that any
+   * more — the app-wide "+" is a capture sheet that logs an expense where you
+   * stand — but a bookmark or a hand-typed link still works.
+   */
   autoOpenQuickLog?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [accounts, setAccounts] = useState(initialAccounts);
   const [transactions, setTransactions] = useState(initialTransactions);
+  const [budgets, setBudgets] = useState(initialBudgets);
+  const [goals, setGoals] = useState(initialGoals);
+  const [debts, setDebts] = useState(initialDebts);
+  const [receipts, setReceipts] = useState(initialReceipts);
+  const [recurring, setRecurring] = useState(initialRecurring);
   // router.refresh() hands this component fresh props, but useState keeps its
   // first value — so refreshed balances and rows never reached the screen and
   // the figures sat stale until a full reload. Adopt the server's data
@@ -75,24 +84,37 @@ export function MoneyShell({
   // re-arrives after a router.refresh() or any server action's revalidate —
   // in both cases it is post-commit truth, so adopting it never fights an
   // optimistic update (quick-log's echo lands only after its save returned).
-  const [prevInitial, setPrevInitial] = useState({ initialAccounts, initialTransactions });
+  //
+  // Receipts joined the list on 5 Sep 2026: approving one from the capture
+  // sheet while standing on this screen files the transaction but left the
+  // receipt sitting in the "to review" panel — and tapping it again opened a
+  // receipt that no longer existed. It sits below its own useState rather than
+  // above, because reading `setReceipts` before that line runs is a crash.
+  //
+  // Budgets, goals, debts and recurring are deliberately NOT here. Their
+  // staleness predates this and fixing it is its own piece of work — they hold
+  // computed progress that the views also update by hand, so adopting them
+  // needs checking view by view rather than in passing.
+  const [prevInitial, setPrevInitial] = useState({
+    initialAccounts,
+    initialTransactions,
+    initialReceipts,
+  });
   if (
     prevInitial.initialAccounts !== initialAccounts ||
-    prevInitial.initialTransactions !== initialTransactions
+    prevInitial.initialTransactions !== initialTransactions ||
+    prevInitial.initialReceipts !== initialReceipts
   ) {
-    setPrevInitial({ initialAccounts, initialTransactions });
+    setPrevInitial({ initialAccounts, initialTransactions, initialReceipts });
     setAccounts(initialAccounts);
     setTransactions(initialTransactions);
+    setReceipts(initialReceipts);
   }
-  const [budgets, setBudgets] = useState(initialBudgets);
-  const [goals, setGoals] = useState(initialGoals);
-  const [debts, setDebts] = useState(initialDebts);
-  const [receipts, setReceipts] = useState(initialReceipts);
-  const [recurring, setRecurring] = useState(initialRecurring);
-  // Arriving from the app-wide quick-add (`?new=1`) drops you straight into
-  // the amount keypad rather than on the Money page with the form still to be
-  // opened. Seeded as initial state rather than set from an effect — the value
-  // is known at first render, so an effect would only cause a second one.
+  // A `?new=1` address drops you straight into the amount keypad rather than
+  // onto the Money page with the form still to be opened. (It was the app-wide
+  // quick-add's link until that became a capture sheet with the keypad inside
+  // it.) Seeded as initial state rather than set from an effect — the value is
+  // known at first render, so an effect would only cause a second one.
   const [showQuickLog, setShowQuickLog] = useState(autoOpenQuickLog);
 
   // The vitals strip. Recomputed from live client state rather than passed in

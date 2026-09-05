@@ -1004,3 +1004,20 @@ implementation, daily bit-identical to before); late repeats roll forward past t
 carry their nudge offset to every instance; Timeline race fixed. Nine new tests in
 tests/streaks-and-recurrence.test.mts. Deferred, recorded in entry 59: routines' UTC-date
 anchoring for evening creations, streak-walk cost growth.
+
+## 5 Sep 2026 — Wave 1A: the + button became a capture sheet
+
+CHANGELOG entry 61. Four review rounds and a QA trace; 24 findings raised, all fixed or
+recorded. The + no longer navigates: it opens a bottom sheet with a focused text/dictation box
+that hands a sentence to the assistant, and inline Expense, Task, Shopping and Receipt forms.
+Data comes from one lazily-fetched, module-gated `getCaptureData()` — the gate lives inside the
+action because the sheet floats over every route and has none of its own for the proxy to guard.
+The "Jump to" panel and the /more route are deleted; Settings and Timeline moved to the Today
+masthead (all four Timeline doors gated on the tasks module). Questions sent while a reply is in
+flight queue and are asked in order — Alan's choice when the two-strikes rule stopped the work
+and put it to him.
+
+**Next: Wave 1B** (reminders made visible + Today gets hands), then 1C (week view, buried
+doors). Scouted already: reminders have no listing query anywhere and snooze is hardcoded to an
+hour behind a signed token; the invariant from migration 0022 is that a reminder linked to
+neither a task nor a routine must never exist.

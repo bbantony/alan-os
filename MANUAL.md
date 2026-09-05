@@ -40,24 +40,27 @@ they're just labeled placeholder pages so the navigation has somewhere to go.
 ### Getting around the app
 
 - **On your phone:** a row of tabs sits at the bottom of the screen —
-  Today, Money, Tasks, Shop, Workout, More. Tap any tab to jump to that
+  Today, Money, Plan, Shop, Workout. Tap any tab to jump to that
   section. (Shopping moved into this row later — it used to be buried
   under More, which didn't make sense for something you check while
   actually standing in a store.)
 - **On a computer:** the same links appear as a sidebar on the left.
-- **More** opens a list of everything that doesn't fit in the bottom bar:
-  Calendar and Settings.
+- **The gear and the clock** in the top-right of the Today screen open
+  **Settings** and the **Timeline**. (There used to be a sixth tab called
+  "More" holding those; it was retired in Sep 2026.)
 - Only the modules a given account actually has access to show up in the
-  tabs/More at all — see the **Admin — Users & Crews** section further down
+  tabs at all — see the **Admin — Users & Crews** section further down
   for how that's controlled.
-- There used to be a floating "+" button on every screen for quick-capture.
-  It was removed — it only ever said "coming soon" (real quick-capture is
-  later AI work), and a button that does nothing on every single screen was
-  more confusing than useful. It'll come back once it actually works.
+- **The floating "+" button** on the bottom-right of every screen is the
+  capture sheet: type or talk to the assistant, or fill in an expense, a
+  task, a shopping item or a receipt without leaving the screen you're on.
+  See "The + button became a capture sheet" near the end of this guide.
+  (An earlier "+" was removed in 2026 for only ever saying "coming soon".
+  This is the real one.)
 
 ### Changing how the app looks (Settings → Appearance)
 
-1. Tap **More → Settings → Appearance**.
+1. Tap **the gear on Today → Appearance**.
 2. **Palette:** tap any of the 11 color swatches (British Racing Green is
    the default) — the whole app recolors instantly so you can preview
    before committing. Added later: Teal/Mist, Plum/Blush, Amber/Ink,
@@ -81,12 +84,12 @@ they're just labeled placeholder pages so the navigation has somewhere to go.
 
 ### Changing your password
 
-1. Tap **More → Settings → Password**.
+1. Tap **the gear on Today → Password**.
 2. Enter a new password twice, tap **Update password**.
 
 ### Signing out
 
-1. Tap **More → Settings**.
+1. Tap **the gear on Today**.
 2. Tap **Sign out** at the bottom.
 
 ### Installing it like a real app
@@ -128,7 +131,7 @@ even though most of it isn't built yet.
 
 ### Shopping list
 
-1. Tap **Shopping** (in the bottom tabs/sidebar, or via More).
+1. Tap **Shop** (in the bottom tabs, or the sidebar on a computer).
 2. Type an item name — a category dropdown next to it auto-guesses as you
    type (e.g. "milk" → Dairy). Leave it, or pick a different one yourself;
    the moment you touch it manually, your choice sticks instead of the
@@ -155,7 +158,7 @@ even though most of it isn't built yet.
    did quietly syncs to your account. Nothing is lost, nothing needs to be
    redone.
 8. **Managing categories:** tap "Manage categories" on the Shopping page
-   (or **More → Settings → Shopping**) to rename or delete categories, add
+   (or **the gear on Today → Shopping**) to rename or delete categories, add
    your own (e.g. "Electronics"), and see/edit the list of item names each
    category has learned. Deleting a category moves its items to "Other,"
    which can't itself be deleted.
@@ -286,7 +289,7 @@ coding agent if you'd rather pick your rest day yourself instead.)
 
 ### Settings → Workout
 
-Tap **More → Settings → Workout** to switch between **lbs** and **kg**, and
+Tap **the gear on Today → Workout** to switch between **lbs** and **kg**, and
 to see/delete any routines you've saved as templates.
 
 ### Today dashboard
@@ -307,7 +310,7 @@ first, they only take about 10 minutes total.
 
 ### One-time setup #1 — turn on push notifications
 
-1. Tap **More → Settings → Calendar & Reminders**.
+1. Tap **the gear on Today → Calendar & Reminders**.
 2. Under "Push notifications," tap **Enable push on this device**.
 3. Your browser will ask permission to send notifications — tap **Allow**.
 4. Do this on every device you want reminders to reach (your phone, your
@@ -344,7 +347,7 @@ This part needs a few clicks in Google's own site first.
    paste the Client ID from step 7, and tick all three environment boxes
    (Production/Preview/Development). Do the same for a variable named
    `GOOGLE_CLIENT_SECRET` with the Client secret.
-9. Back in Alan OS, go to **More → Settings → Calendar & Reminders** and tap
+9. Back in Alan OS, go to **the gear on Today → Calendar & Reminders** and tap
    **Connect Google Calendar**.
 
 ### Google Calendar sync
@@ -404,7 +407,7 @@ outside site, which isn't something that can be set up on your behalf.
 
 ### Reminders
 
-1. Tap **More → Calendar → Reminders** tab.
+1. Tap **the Plan tab → Agenda**.
 2. Tap **New reminder**, type a title, pick a date/time.
 3. Under "Repeat," tap a preset — **Daily, Weekdays, Weekly, Every N days,
    Monthly**, or **Custom** for anything else. Leave it on **One-time** for a
@@ -425,7 +428,7 @@ outside site, which isn't something that can be set up on your behalf.
 
 ### Agenda
 
-1. Tap **More → Calendar → Agenda** tab.
+1. Tap **the Plan tab → Agenda**.
 2. Toggle between **Today** and **Week**. Everything shows in one list,
    sorted by time: your real Google Calendar events, your reminders, and any
    task with a due date — each tagged so you can tell them apart at a glance.
@@ -471,7 +474,7 @@ setup — it all works the moment you open it.
 
 ### Accounts
 
-1. Tap **More → Money → Overview** tab.
+1. Tap **the Money tab → Overview**.
 2. Tap **New account** — give it a name (e.g. "Scene+ Visa"), pick which
    bank it's at, its type (Chequing/Credit Card/Investment/Cash), its
    currency (CAD or INR), and its current balance.
@@ -570,7 +573,7 @@ Nothing in Money deletes on a single tap any more.
 
 ### Categories
 
-Categories are yours to edit — tap **More → Settings → Money** to add new
+Categories are yours to edit — tap **the gear on Today → Money** to add new
 ones or remove old ones (13 are already set up for you: Groceries, Takeout,
 Entertainment, Rent, Utilities, Transport, Subscriptions, Health/Gym,
 Remittance, Work, Vinyl/Music, Misc, and Income: Salary). Removing a
@@ -620,7 +623,7 @@ automatic.
 
 ### Scanning a receipt
 
-1. Tap **More → Money → Overview** tab. Under "Receipts," tap **Scan
+1. Tap **the Money tab → Overview**. Under "Receipts," tap **Scan
    receipt**.
 2. Pick a photo or take one with your camera. Your phone takes very large
    photos, so the app shrinks it first — that happens by itself and takes
@@ -644,8 +647,8 @@ automatic.
 
 ### Importing transactions from a CSV file
 
-1. Tap **More → Money → Overview** and tap **Import from your bank** (or go
-   the long way: **More → Settings → Money**). Scroll to **Import from CSV**
+1. Tap **the Money tab → Overview** and tap **Import from your bank** (or go
+   the long way: **the gear on Today → Money**). Scroll to **Import from CSV**
    → **Choose file** → pick your bank's exported .csv file.
 2. Confirm which columns are which — the app guesses based on the column
    headers, but double-check them. If your bank uses separate "Debit" and
@@ -677,7 +680,7 @@ forever.
 
 ### Managing users and crews
 
-1. Tap **More → Settings**. Since you're the owner, you'll see a new **Admin** section
+1. Tap **the gear on Today**. Since you're the owner, you'll see a new **Admin** section
    at the bottom with a **Users & Crews** link — this section only ever appears for you,
    never for anyone else, no matter what you toggle for them.
 2. At the top, your **invite code** is there to copy and send to someone new (same as
@@ -827,7 +830,9 @@ It now reads straight down, and each section answers one question:
   isn't done yet turns amber.
 - **Today's focus** — the three goals you picked last night, or after 8pm, the
   form to pick tomorrow's.
-- **Jump to** — a plain list of everywhere else in the app.
+- **Jump to** — a plain list of everywhere else in the app. *(Retired in Sep 2026 — it
+  duplicated the tab bar sitting right below it. See "The + button became a capture
+  sheet" at the end of this guide.)*
 
 **The four "coming soon" boxes are gone** (AI briefing, weather, world news,
 local news). They took up half the screen advertising things that don't exist
@@ -835,6 +840,10 @@ yet. They're now one small grey line at the bottom, and they'll come back as rea
 features when they're built.
 
 ### The new "+" button
+
+*(Superseded in Sep 2026 — the + no longer takes you anywhere. See "The + button
+became a capture sheet" at the end of this guide. The description below is kept
+so the history of the app still reads in order.)*
 
 There's a square **+** button floating at the bottom-right of every screen. Tap
 it and you get a short list: Task, Expense, Shopping item, Reminder, Workout.
@@ -905,7 +914,7 @@ fix.
 Anything that comes out (or goes in) on a schedule can log itself, so you never
 type it again.
 
-1. Tap **More → Money → Overview** and find the **Repeating** panel. Tap the
+1. Tap **the Money tab → Overview** and find the **Repeating** panel. Tap the
    **+**.
 2. Choose **Goes out** or **Comes in**, name it ("Rent", "Salary"), put in the
    amount, and pick how often: every week, every 2 weeks, every month, or every
@@ -937,7 +946,7 @@ in February and goes back to the 31st in March. It doesn't drift.
 
 ## The Assistant
 
-Tap **More → Assistant** (or the Assistant row at the bottom of Today).
+Tap the **+** button on any screen and type or talk into the box at the top.
 
 It's a box you can type anything into. It can look at anything you can see in
 the app and answer from the real numbers — and it can do a few small things for
@@ -1040,7 +1049,7 @@ doubles too.
 
 ### The safety net
 
-Tap **More → Settings → AI & cost**. It shows exactly what's been spent this
+Tap **the gear on Today → AI & cost**. It shows exactly what's been spent this
 month, broken down by what spent it, against the $5 ceiling. If the ceiling is
 ever reached, the AI features simply stop and everything else in the app keeps
 working normally until the 1st.
@@ -1243,7 +1252,7 @@ days, which is what it always meant.
 
 ## Timeline — everything you did, in one line
 
-**More → Timeline** (or the Timeline row at the bottom of Today).
+The **clock icon** in the top-right of Today (or "Everything ›" on the "Today so far" panel).
 
 Until now the app has been six separate sections that couldn't see each other.
 This is the first screen that reads them all together: what you spent, what you
@@ -1326,7 +1335,8 @@ into the code:
 
 ## Settings — everything you can now change
 
-Settings used to be four screens. It's thirteen. **More → Settings.**
+Settings used to be four screens. It's thirteen. Open them with **the gear in
+the top-right of the Today screen.**
 
 Nothing has a Save button — every switch and dropdown takes effect the moment
 you touch it.
@@ -1563,7 +1573,8 @@ read. Everything from that date onward keeps both.
 
 ## Talking to the assistant, and what it can now change
 
-**Assistant** (in the More menu). There's a microphone button next to the text box — tap it and
+**Assistant** (open the **+** button and type or talk into the box at the top; there is also
+a microphone button next to the text box — tap it and
 talk, and the words appear as you say them. Tap the red square to stop, or just hit send. If you
 don't see a microphone, your browser doesn't support it; typing works the same.
 
@@ -1693,3 +1704,37 @@ connection, the app now tells you the truth.
   cure.
 - **One workout, one confetti.** The crew screen now celebrates a personal record once,
   instead of once per record per refresh.
+
+## The + button became a capture sheet
+
+The **+** used to be a menu of doors: you tapped it, picked "Expense", and it
+*took you to the Money screen*, which then opened the form. Five taps to log a
+coffee. Now the + **is** the form. Nothing navigates.
+
+Tap **+** on any screen and a panel slides up from the bottom with:
+
+- **A box at the top, cursor already in it, with a microphone beside it.** Type
+  or say a whole sentence — *"spent 40 at Superstore"*, *"remind me to call the
+  landlord Thursday"*, *"add oat milk to the list"* — and send it. It goes to the
+  assistant, which does the thing. This is the "just tell it" way of working you
+  asked for.
+- **Four buttons under it: Expense · Task · Shopping · Receipt.** Tap one and
+  that form opens *inside the sheet*. The expense keypad is the same one from
+  the Money screen; logging one closes the sheet and leaves you exactly where
+  you were. **Task and Shopping deliberately stay open** with the field cleared
+  and ready, because you rarely add just one — close it with the X or by
+  tapping outside when you're done.
+
+You only see the buttons for the parts of the app your account uses.
+
+**The "Jump to" panel and the "More" tab are gone.** Jump to was a list of the
+same places the tab bar underneath it already showed, and More held three rows.
+Nothing was lost:
+
+- **Assistant** — now the box at the top of the + sheet.
+- **Settings** — the **gear** in the top-right of the Today screen.
+- **Timeline** — the **clock** icon beside it, and also the "Everything ›" link
+  on the "Today so far" panel.
+
+Your bottom tab bar now has five buttons instead of six, and the sixth thing
+you used to hunt through a menu for is the button your thumb is already on.

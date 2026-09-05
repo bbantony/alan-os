@@ -11,17 +11,19 @@ import type { ModuleAccess } from "@/lib/permissions";
 /**
  * The desktop rail. Two changes beyond the styling:
  *
- *   - It now shows the "More" destinations (Assistant, Settings) as a
- *     second ruled group instead of a single "More" link that bounced you to a
- *     phone-shaped menu page. On a 1440px screen there was never a reason to
- *     hide them behind a tap.
+ *   - It shows the Timeline, Assistant and Settings as a second ruled group.
+ *     On a 1440px screen there was never a reason to hide them behind a tap —
+ *     and since the phone's "More" page was retired (5 Sep 2026) this rail is
+ *     the only place that lists them together.
  *   - Active state is a full-bleed inverted block that runs to both edges of
  *     the rail, so the current module reads as a slot the page is docked into.
  */
 export function SidebarNav({ moduleAccess }: { moduleAccess: ModuleAccess }) {
   const pathname = usePathname();
-  const primary = getNavItems(moduleAccess).filter((i) => i.href !== "/more");
-  const secondary = getMoreLinks();
+  // No /more filter any more — getNavItems stopped returning it when the page
+  // it pointed at was deleted.
+  const primary = getNavItems(moduleAccess);
+  const secondary = getMoreLinks(moduleAccess);
 
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r-2 border-rule bg-surface md:flex">

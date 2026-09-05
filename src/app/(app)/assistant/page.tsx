@@ -14,12 +14,20 @@ import { AssistantChat } from "./assistant-chat";
  * use (see lib/ai/tools.ts). An account with only Workout access gets an
  * assistant that can talk about training and nothing else, without a separate
  * permission having to be invented for it.
+ *
+ * `?q=` is how the global capture sheet hands a question over: whatever was
+ * typed (or dictated) into the sheet arrives here already asked, so the sheet
+ * never has to become a second chat window of its own.
  */
-export default async function AssistantPage() {
+export default async function AssistantPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; t?: string }>;
+}) {
   const profile = await getCurrentProfile();
   if (!profile) redirect("/login");
 
-  const usage = await getUsageSummary();
+  const [{ q, t }, usage] = await Promise.all([searchParams, getUsageSummary()]);
 
   return (
     <div>
@@ -39,6 +47,11 @@ export default async function AssistantPage() {
           configured={isAiConfigured()}
           initialUsage={usage}
           moduleAccess={profile.moduleAccess}
+          initialQuestion={typeof q === "string" && q.trim() ? q.trim() : null}
+          /* A one-shot token from the sheet. Two identical questions sent
+             minutes apart must both be asked, and the question text alone
+             cannot tell them apart — this can. */
+          questionKey={typeof t === "string" && t ? t : null}
         />
       </div>
     </div>

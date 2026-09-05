@@ -19,7 +19,7 @@ export type ShoppingSort = "category" | "alphabetical" | "recent";
 
 /** Panels on the Today console, in the order they can be arranged. */
 export const TODAY_PANEL_IDS = [
-  "outlook", "vitals", "bills", "timeline", "console", "focus", "jump",
+  "outlook", "vitals", "bills", "timeline", "console", "focus",
 ] as const;
 
 /**
@@ -30,10 +30,15 @@ export const TODAY_PANEL_IDS = [
  * deliberately hidden one, and a new panel would have stayed invisible to
  * anyone who had ever opened Settings → Today — silently, forever. Stored
  * preferences written before this date have no `todayPanelsKnown` key, so they
- * are treated as having known exactly these six.
+ * are treated as having known exactly these.
+ *
+ * "jump" was one of them until the capture sheet replaced the Jump To panel
+ * (5 Sep 2026). Dropping an id here and from TODAY_PANEL_IDS needs no
+ * migration: `isPanelId` in resolvePreferences filters every saved list
+ * against the ids that currently exist, so a stored "jump" is simply ignored.
  */
 const PANELS_KNOWN_BEFORE_OUTLOOK: readonly TodayPanelId[] = [
-  "vitals", "bills", "timeline", "console", "focus", "jump",
+  "vitals", "bills", "timeline", "console", "focus",
 ];
 export type TodayPanelId = (typeof TODAY_PANEL_IDS)[number];
 
@@ -44,7 +49,6 @@ export const TODAY_PANEL_LABELS: Record<TodayPanelId, string> = {
   timeline: "Today so far",
   console: "What's on today",
   focus: "Focus & evening ritual",
-  jump: "Jump to",
 };
 
 export interface NotificationPreferences {

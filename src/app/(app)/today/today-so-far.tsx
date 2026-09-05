@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 
 import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { Micro } from "@/components/ui/tag";
@@ -15,7 +16,18 @@ import type { LedgerEvent } from "@/lib/ledger";
  */
 const MAX_ROWS = 6;
 
-export function TodaySoFar({ events }: { events: LedgerEvent[] }) {
+export function TodaySoFar({
+  events,
+  canOpenTimeline = true,
+}: {
+  events: LedgerEvent[];
+  /**
+   * /timeline is aliased to the Tasks module, so an account without it gets
+   * bounced back to Today by the route guard. A door that returns you to where
+   * you were is worse than no door.
+   */
+  canOpenTimeline?: boolean;
+}) {
   const shown = events.slice(0, MAX_ROWS);
   const spentCents = events
     .filter((e) => e.kind === "money" && (e.amountCents ?? 0) < 0 && e.currency !== "INR")
@@ -26,10 +38,21 @@ export function TodaySoFar({ events }: { events: LedgerEvent[] }) {
       <PanelHead
         title="Today so far"
         count={spentCents > 0 ? `−${formatCents(spentCents)}` : undefined}
+        // The phone's way into the full Timeline now that the More tab is
+        // gone. This panel is today's slice of that screen, so its header is
+        // the honest door to the rest of it — and `tap-reach` gives the link a
+        // 44px hit area without changing how it looks, because a 10px label in
+        // a header is otherwise a coin toss to hit with a thumb.
         action={
-          <Link href="/timeline" className="micro-sm tap-press text-muted-foreground hover:text-foreground">
-            All of it
-          </Link>
+          canOpenTimeline ? (
+            <Link
+              href="/timeline"
+              className="micro-sm tap-press tap-reach flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            >
+              Everything
+              <ChevronRight className="size-3.5" strokeWidth={2.5} />
+            </Link>
+          ) : undefined
         }
       />
 

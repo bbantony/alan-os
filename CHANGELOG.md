@@ -4586,3 +4586,154 @@ One line, plus this entry.
 two more places — the old `/calendar?new=1` redirect and the "add a task" link inside the
 calendar view itself. Both now pin `view=list` the same way, closing the whole family: every
 route into "add a task" now lands on a screen that actually has the add field.
+
+## 61. Wave 1A — the + button becomes a capture sheet (5 Sep 2026)
+
+**What Alan asked for:** after reading the UX critique
+(claude.ai/code/artifact/eafcd18e-578c-4e31-8d81-c3a083777615) he answered its three
+questions with three yeses: ship the waves in order, let the capture sheet **fully replace**
+the old + menu, and retire the "Jump to" panel and the More tab. This is Wave 1A.
+
+**The problem it fixes:** every row of the old + menu was a *navigation*. Tapping "Expense"
+did not give you a keypad — it took you to Money, which then opened the keypad. The most-used
+button in the app captured nothing itself, which is why logging a coffee cost five taps.
+
+**What changed:**
+
+1. **A real bottom sheet.** `components/ui/dialog.tsx`'s `DialogContent` gained a
+   `side="bottom"` variant (flush to the bottom edge above the safe-area inset, full-width on
+   phone, capped at 85% of the screen with internal scroll, rising from the bottom, and
+   honouring "reduce motion"). Centre-positioned dialogs are byte-identical to before.
+2. **The sheet captures in place.** Top: a text box focused on open with a mic beside it —
+   type or dictate a sentence and it goes to the assistant, which asks it on arrival
+   (new `?q=` handling in `assistant/page.tsx` + `assistant-chat.tsx`, guarded so it asks
+   exactly once and then strips the query without re-rendering an in-flight reply).
+   Under it: Expense · Task · Shopping · Receipt chips, each opening its form *inside the
+   sheet*. Expense mounts the real `QuickLogForm` (given an opt-in `inline` prop; the Money
+   screen is unchanged). Task and Shopping are light composers calling `createTask` and
+   `addShoppingItem` directly — `task-list.tsx`'s add handler is welded to ~20 pieces of local
+   state and was correctly not reused. Shopping still guesses the aisle from your own learned
+   items.
+3. **New `capture-actions.ts`** loads the sheet's data — accounts, categories, recent
+   merchants, default account, shopping categories and known items — in one round trip, on
+   the first *open* rather than on shell mount, cached for the tab. It is **module-gated
+   inside the action**: the sheet floats over every screen, so it has no route for the normal
+   gatekeeper to guard, and this check is what stops a workout-only account seeing Money data.
+4. **Both old menus retired**: `today/jump-to.tsx` and the whole `more/` route are deleted,
+   `"jump"` is out of all three panel lists in `lib/preferences.ts` (no migration — `isPanelId`
+   filters unknown saved ids, verified), and the "More" tab is gone from the nav. The bottom
+   bar now has five destinations.
+5. **The stranded doors rehomed.** Retiring More would have left Timeline and Settings
+   unreachable on the phone. Settings is now a gear in the Today masthead; Timeline is a
+   clock beside it **and** an "Everything ›" link on the "Today so far" panel header. The
+   masthead pair is deliberate: the panel can be switched off in Settings, and a screen you
+   can hide must never be the only route to another screen.
+6. **MANUAL.md** gained "The + button became a capture sheet", and the two passages that
+   described the retired menus are marked superseded rather than quietly deleted, so the
+   guide still reads in order.
+
+**Known and deliberate, flagged for follow-up:** the sheet's shopping composer is online-only
+(the Shopping screen keeps the offline outbox; two queues writing one list from two places
+would be the worse bug), a receipt photo closes the sheet and opens the existing review dialog
+rather than reviewing inside it, and `QuickLogForm`/receipt components are now statically
+imported into the always-mounted shell — if that shows in the bundle, lazy-loading the mode
+area is the fix.
+
+**Review and QA rounds on Wave 1A (5 Sep):** both passes examined it and between them found
+fourteen things; all were fixed before shipping. The three that would have bitten daily:
+
+- **A second question typed into the sheet while already on the Assistant screen vanished** —
+  no message, no error, the words gone. The screen doesn't remount on that kind of navigation,
+  so its "already asked" guard was still set from the first sentence. Each handover now carries
+  a one-shot token, so every ask is distinguishable — including the same sentence sent twice an
+  hour apart, which the words alone could never tell apart.
+- **A dropped connection while adding a task or a shopping item lost what you'd typed** and
+  left the button stuck on "Adding…" forever — the exact failure the entry-55 unit existed to
+  kill, reintroduced in two brand-new forms. Both now catch it, restore the words and say so.
+- **Adding a task while standing on Plan (or an item on Shopping) changed nothing on screen**
+  until a reload, because those screens never re-read refreshed data. Both now adopt it, the
+  same way the Money screen was taught to in entry 58 — carefully, so a queued offline shopping
+  change can't be clobbered.
+
+Also fixed: choosing several photos from the gallery could save one receipt's items against
+another receipt's record (they're queued and reviewed one at a time now); the Timeline icon was
+a dead button for a workout-only account; a transfer logged from the sheet confirmed nothing; the
+sheet's cached lists went stale for the life of the tab; approving a receipt from the sheet left
+it sitting in the review list; the Android keyboard covered the sheet's own buttons
+(`interactive-widget=resizes-content`); the mode chips sat under the app's 44px tap floor; the
+sheet claimed "nothing here leaves this screen" directly above a box that does; and a batch of
+comments and dates that had gone stale or were simply wrong. MANUAL.md's body was swept too — it
+still told Alan to tap "More →" in twenty-one places, and told him the sheet closes after adding
+a task when it deliberately stays open for the next one.
+
+Recorded, deliberately not fixed here: the Android back gesture doesn't close any dialog in the
+app (pre-existing, whole-app), budget figures on the Money screen go stale after a delete
+(pre-existing), and the sheet's shopping composer is online-only by design.
+
+**Three more closed after the fix pass:** the desktop rail still offered Timeline and the
+Assistant to accounts without them (the twin of the dead Timeline button on Today — both now
+gated); clearing the sheet's cache after a capture meant a later failure to reload showed an
+error instead of the perfectly good lists it already had (it now keeps the last good data and
+only ever replaces it with newer data); and the mic and send buttons sat under the 44px tap
+floor alongside the chips that were just fixed.
+
+**Reviewer round two:** three more closed — the doc block above `getMoreLinks` still said the
+rail was ungated after the gate was added (a stale comment is worse than none, because it will
+be believed); the "Everything ›" link on "Today so far" was the third Timeline door and the
+only one still ungated; and MANUAL.md's *orientation* section — the first thing a new reader
+meets — still described the More tab and stated the floating "+" had been removed, which is
+now the app's main control.
+
+**Stopped here on the fourth, per the two-strikes rule.** The reviewer has now failed the
+"a question typed into the sheet can vanish" item twice. The token fix genuinely narrowed it —
+a different question is asked, the same question twice is asked twice, no double-charging —
+but one hole remains: send a second question while the first reply is still arriving and the
+guard marks it delivered before `send()` bails on `thinking`, so the words are lost in silence.
+A third attempt without Alan's input would be exactly what the rule exists to prevent, and the
+remaining decision is genuinely his: should a question sent mid-reply wait its turn, or should
+the sheet refuse it and keep the words? Put to him 5 Sep 2026.
+
+**Alan's answer, and the fix (5 Sep 2026):** asked whether a question sent while the assistant
+is mid-answer should wait its turn, be refused, or interrupt, he chose **wait its turn**. It now
+queues and is asked automatically the moment the current answer lands. Two details worth recording: the queue lives in a ref and is drained inside the send
+function itself, which keeps the whole mechanism out of render and out of an effect body; and
+the drain is explicitly allowed past the "already thinking" check, because clearing that flag
+only schedules a re-render — the draining call still sees the old value and would otherwise bail
+silently, dropping the exact question the queue exists to protect. If the first answer fails,
+the waiting question is handed back to the composer rather than dropped.
+
+**Reviewer round three — three bugs inside the queue itself, all fixed.** The reviewer was
+careful to separate the design decision (Alan's, settled) from the implementation of it (mine,
+buggy), so this was not a third attempt at the same question:
+
+1. **A queued question would have been asked without the conversation it was following up on.**
+   The drain ran inside the *previous* send's closure, so it read the message list as it stood
+   before the first question — the model would have answered "and the month before?" with no
+   idea what came before, at full price — and re-setting the list from that stale copy would
+   have made the first question and its answer vanish from the screen. The completed exchange
+   is now built explicitly and handed to the queued send.
+2. **A third question overwrote the second, silently** — the queue was a single slot. It is a
+   real list now, drained oldest first, so the claim "nothing typed is lost" is actually true.
+   (The claim was removed from the paragraph above until it was.)
+3. **A dropped connection mid-answer froze the screen and swallowed the queue** — the call had
+   no guard, so the composer, mic and send button stayed disabled until a full reload and the
+   waiting questions were stranded behind a flag that never cleared. Guarded now: the screen
+   recovers, and every unsent question is handed back to the composer instead of dropped
+   (without overwriting anything typed in the meantime).
+
+**Reviewer round four — UNIT PASSES.** The queue was verified line by line: a queued question
+carries the completed exchange before it, any number queue up and are asked oldest first, no
+question can be sent or charged twice, the thinking flag cannot stick, the recursion cannot grow
+the stack, and a rescue can never overwrite something being typed. One non-blocking note was
+acted on anyway because it was the last way words could still vanish here: sending a question
+from the sheet cleared the composer, taking any half-typed text with it. The box is now cleared
+only when the box is what was sent.
+
+Two smaller notes recorded for a future session rather than fixed: the catch around the
+assistant call reports any fault as a connection problem and logs nothing (a genuine code error
+would be mislabelled), and the queue drain is fire-and-forget, so a throw after the guarded
+section would surface only as an unhandled rejection. Also still open from earlier rounds and
+recorded: a receipt batch chosen from the gallery reports its per-photo progress on a screen the
+sheet has already closed, the shopping list can show a queued offline change as absent for as
+long as the connection stays flaky-but-online, and `interactive-widget=resizes-content` changes
+how the bottom bar sits over the Android keyboard app-wide and wants one look on the Fold 7.

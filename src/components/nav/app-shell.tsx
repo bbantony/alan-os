@@ -5,11 +5,16 @@ import { QuickAdd } from "./quick-add";
 import { PageTransition } from "./page-transition";
 import type { ModuleAccess } from "@/lib/permissions";
 
-// The floating quick-capture "+" is back — but as a real control this time.
-// The old one was removed because it only ever opened a "coming soon" dialog
-// (real free-text capture is Phase 7 AI work). The new QuickAdd doesn't
-// pretend to parse anything: it routes into each module's existing create
-// form, which is genuinely useful today and needs no AI at all.
+// The floating "+" is the app's capture control, and as of 5 Sep 2026 it
+// captures IN PLACE: a bottom sheet with a text box you can talk into and the
+// real expense/task/shopping/receipt forms inside it. It used to be a menu of
+// links into each module's create screen, which is the nav bar with an extra
+// tap in front of it. Nothing about the sheet navigates except the text box,
+// which hands its sentence to the Assistant.
+//
+// It is mounted here, once, for every screen — so it must stay cheap on mount.
+// Everything it needs to fill those forms is fetched on the first OPEN, never
+// on shell mount (see quick-add.tsx).
 export function AppShell({
   moduleAccess,
   children,

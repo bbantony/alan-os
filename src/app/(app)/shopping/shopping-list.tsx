@@ -93,7 +93,10 @@ export function ShoppingList({
   categories: ShoppingCategoryRow[];
   initialKnownItems: ShoppingCategoryItem[];
   groceryBudget: { remainingCents: number; amountCents: number; spentCents: number } | null;
-  /** Set by the `?new=1` link the app-wide quick-add sends here. */
+  /**
+   * Set by a `?new=1` link. It used to be how the app-wide quick-add got here;
+   * that button is a capture sheet now and adds an item without navigating.
+   */
   autoFocusNew?: boolean;
 }) {
   // Arriving from the app-wide quick-add should land with the cursor in the
@@ -103,6 +106,29 @@ export function ShoppingList({
     if (autoFocusNew) nameRef.current?.focus();
   }, [autoFocusNew]);
   const [items, setItems] = useState<ShoppingItem[]>(initialItems);
+  // Adopt the server's list whenever a fresh one arrives — the same
+  // adjust-state-during-render pattern money-shell.tsx documents. Without it,
+  // an item added from the capture sheet while standing on this screen said
+  // "on the list" and the list didn't move: useState keeps its first value, so
+  // the refreshed prop was thrown away until a reload.
+  //
+  // Why this cannot eat an offline change. The test is the prop's IDENTITY,
+  // not its contents, so this runs only when the SERVER hands over a new
+  // array: a router.refresh() or a server action's revalidate. Both happen
+  // after a save has returned, so the new list already contains it. A change
+  // made offline never reaches this path at all — it goes to the IndexedDB
+  // outbox and the component's own state; nothing round-trips to the server,
+  // so no new props are produced and this never fires. The one window left is
+  // a refresh landing in the seconds after the signal returns but before the
+  // outbox has finished replaying — the server's list would briefly be missing
+  // the queued change. It heals itself: `syncAndRefresh` below flushes the
+  // outbox first and only then pulls the list, and it skips the pull entirely
+  // while anything is still queued, so the correct list arrives moments later.
+  const [adoptedItems, setAdoptedItems] = useState(initialItems);
+  if (adoptedItems !== initialItems) {
+    setAdoptedItems(initialItems);
+    setItems(initialItems);
+  }
   const [suggestions, setSuggestions] = useState<StapleSuggestion[]>(initialSuggestions);
   const [knownItems, setKnownItems] = useState<ShoppingCategoryItem[]>(initialKnownItems);
   const [online, setOnline] = useState(() =>

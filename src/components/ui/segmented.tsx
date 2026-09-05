@@ -32,11 +32,23 @@ export function Segmented<T extends string>({
   value,
   onChange,
   className,
+  optionClassName,
 }: {
   options: SegmentedOption<T>[];
   value: T;
   onChange: (value: T) => void;
   className?: string;
+  /**
+   * Extra classes for each segment.
+   *
+   * Exists for the capture sheet, whose four chips are a primary one-handed
+   * control and so need the app's 44px tap floor and a label that can't wrap
+   * at 320px. Growing every Segmented in the app by 8px to get that would
+   * change the height of five shipped tab bars for the sake of one sheet, so
+   * the sheet asks for it and everything else stays exactly as it was.
+   * `cn` is tailwind-merge, so what's passed here wins over the defaults.
+   */
+  optionClassName?: string;
 }) {
   // A fresh layoutId per instance — reusing one id across multiple Segmented
   // controls rendered at once would make Framer Motion try to animate the
@@ -64,7 +76,8 @@ export function Segmented<T extends string>({
               "micro-sm",
               i > 0 && "border-l border-hairline",
               option.disabled && "cursor-not-allowed opacity-40",
-              active ? "text-background" : "text-muted-foreground hover:text-foreground"
+              active ? "text-background" : "text-muted-foreground hover:text-foreground",
+              optionClassName
             )}
           >
             {active && (

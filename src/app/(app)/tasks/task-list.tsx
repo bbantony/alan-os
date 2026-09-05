@@ -67,10 +67,35 @@ export function TaskList({
   initialTasks: Task[];
   weeklyDoneCount: number;
   initialDoneTodayByHorizon: Record<TaskHorizon, number>;
-  /** Set by the `?new=1` link the app-wide quick-add sends here. */
+  /**
+   * Set by a `?new=1` link — today the Plan screen's calendar view (its "add
+   * a task on this day" button) and the /tasks redirect. It used to be how the
+   * app-wide quick-add got here; that button is a capture sheet now and saves
+   * without navigating at all.
+   */
   autoFocusNew?: boolean;
 }) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  // Adopt the server's list whenever a fresh one arrives.
+  //
+  // useState keeps its FIRST value forever, so a task added from the capture
+  // sheet while standing on this screen said "added" and changed nothing: the
+  // sheet's router.refresh() handed this component a new list and it was
+  // ignored until a full reload. This is the adjust-state-during-render
+  // pattern documented in money-shell.tsx — compare the prop's identity with
+  // the one already adopted and set state during render, which React re-runs
+  // immediately without painting the stale frame an effect would show.
+  //
+  // Safe against the optimistic updates below because a new `initialTasks`
+  // only ever arrives from a router.refresh() or a server action's revalidate,
+  // and both of those are post-commit truth: the save has already returned by
+  // the time the new list is built, so it contains the optimistic change
+  // rather than overwriting it.
+  const [adoptedTasks, setAdoptedTasks] = useState(initialTasks);
+  if (adoptedTasks !== initialTasks) {
+    setAdoptedTasks(initialTasks);
+    setTasks(initialTasks);
+  }
   const [title, setTitle] = useState("");
   const [horizon, setHorizon] = useState<TaskHorizon>("today");
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);

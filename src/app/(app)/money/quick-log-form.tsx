@@ -43,8 +43,10 @@ export function QuickLogForm({
   categories,
   recentMerchants,
   initialAccountId = null,
+  inline = false,
   onClose,
   onLogged,
+  onTransferred,
 }: {
   accounts: Account[];
   categories: Category[];
@@ -54,8 +56,28 @@ export function QuickLogForm({
    * live account list before it gets here. Null means first in the list.
    */
   initialAccountId?: string | null;
+  /**
+   * Render the form's own body with no dialog around it.
+   *
+   * The Money screen opens this AS a dialog (the default). The global capture
+   * sheet is already a dialog and shows this inside itself — nesting a second
+   * one there would put a centred box on top of the sheet, which is exactly
+   * the "one more screen away" feeling the capture sheet exists to remove.
+   * Nothing else about the form changes: same steps, same keypad, same
+   * actions, same callbacks.
+   */
+  inline?: boolean;
   onClose: () => void;
   onLogged: (txn: Transaction, updatedAccount: Account) => void;
+  /**
+   * A transfer saved. Separate from `onLogged` because a transfer is two rows
+   * and two balance moves, so there is no single optimistic transaction to
+   * hand back — the Money screen picks the change up from the server instead.
+   * Optional: the Money screen needs nothing here (its own props refresh), but
+   * the capture sheet does, because the screen underneath it could be any
+   * screen at all and only it knows to refresh.
+   */
+  onTransferred?: () => void;
 }) {
   const [step, setStep] = useState<"amount" | "details">("amount");
   const [digits, setDigits] = useState(""); // raw digits typed, interpreted as cents
@@ -177,18 +199,41 @@ export function QuickLogForm({
       }
       setSaving(true);
       setError(null);
-      const moved = await logTransfer({
-        fromAccountId: accountId,
-        toAccountId,
-        amountCents,
-        txnDate: date,
-        note: note.trim() || null,
-      });
-      setSaving(false);
+      // Guarded like the expense path below it: a dropped signal REJECTS
+      // rather than returning an error, and unguarded that left Save stuck
+      // saying nothing for good. Same shape, so the two paths behave alike.
+      let moved: Awaited<ReturnType<typeof logTransfer>>;
+      try {
+        moved = await logTransfer({
+          fromAccountId: accountId,
+          toAccountId,
+          amountCents,
+          txnDate: date,
+          note: note.trim() || null,
+        });
+      } catch {
+        setError("Couldn't save — check your connection and try again.");
+        return;
+      } finally {
+        setSaving(false);
+      }
       if (moved.error) {
         setError(moved.error);
         return;
       }
+      // A transfer used to close in total silence, which from inside the
+      // capture sheet was indistinguishable from having tapped cancel: the
+      // sheet vanished, no money appeared to have moved, and the only way to
+      // find out was to go and look. It gets the same confirmation the expense
+      // path gets, naming the account it landed in so a mis-tapped destination
+      // is caught there and then.
+      const destination = accounts.find((a) => a.id === toAccountId);
+      toast.success(
+        destination
+          ? `${formatCents(amountCents)} moved to ${destination.name}`
+          : `${formatCents(amountCents)} moved`
+      );
+      onTransferred?.();
       onClose();
       return;
     }
@@ -253,10 +298,9 @@ export function QuickLogForm({
     });
   }
 
-  return (
-    <Dialog open onOpenChange={(next) => !next && onClose()}>
-      <DialogContent showCloseButton={false} className="max-h-[90dvh] gap-0 overflow-y-auto p-0">
-        {/* The amount, as the emphasised block. On the details step it shrinks
+  const body = (
+    <>
+      {/* The amount, as the emphasised block. On the details step it shrinks
             but stays on screen — you should never lose sight of the figure
             you're categorising. */}
         <div
@@ -280,14 +324,24 @@ export function QuickLogForm({
               {formatCents(amountCents)}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="tap-press shrink-0 text-background/60 hover:text-background"
-          >
-            <X className="size-5" strokeWidth={2.5} />
-          </button>
+          {/* Inside the capture sheet there is already a close button in the
+              sheet's own header, a few centimetres above this one, and both
+              close the whole thing — two identical X's stacked down the right
+              edge doing the same job. The sheet's is the one that stays,
+              because it's where the close control is on every other sheet in
+              the app. Collapsing just this form back to the chips is still a
+              tap on the highlighted "Expense" chip, which is how the other
+              inline forms close too. */}
+          {!inline && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="tap-press shrink-0 text-background/60 hover:text-background"
+            >
+              <X className="size-5" strokeWidth={2.5} />
+            </button>
+          )}
         </div>
 
         {step === "amount" ? (
@@ -520,6 +574,15 @@ export function QuickLogForm({
             </div>
           </div>
         )}
+    </>
+  );
+
+  if (inline) return <div className="flex flex-col">{body}</div>;
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent showCloseButton={false} className="max-h-[90dvh] gap-0 overflow-y-auto p-0">
+        {body}
       </DialogContent>
     </Dialog>
   );
