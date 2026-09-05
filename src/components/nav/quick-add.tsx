@@ -75,7 +75,11 @@ const TARGETS: QuickAddTarget[] = [
     // you to the same form under two names.
     label: "Task or reminder",
     hint: "Something to do, or a nudge",
-    href: "/plan?new=1",
+    // Pins the list view: ?new=1 focuses TaskList's add field, which only
+    // renders in the list view — with a Calendar/Agenda default this landed
+    // on a screen with no add field at all. Same fix as the launcher
+    // shortcut (CHANGELOG entry 54).
+    href: "/plan?view=list&new=1",
     icon: ListChecks,
   },
   {

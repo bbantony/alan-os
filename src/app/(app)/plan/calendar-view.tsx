@@ -128,7 +128,7 @@ export function CalendarView({
           <PanelEmpty
             action={
               <Link
-                href="/plan?new=1"
+                href="/plan?view=list&new=1"
                 className="micro-sm tap-press border-2 border-rule bg-surface px-2.5 py-1.5 transition-colors hover:bg-foreground hover:text-background"
               >
                 <Plus className="mr-1 inline size-3" strokeWidth={3} />

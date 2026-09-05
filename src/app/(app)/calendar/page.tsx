@@ -10,5 +10,5 @@ export default async function CalendarPage({
   searchParams: Promise<{ tab?: string; new?: string }>;
 }) {
   const { new: isNew } = await searchParams;
-  redirect(isNew === "1" ? "/plan?new=1" : "/plan?view=agenda");
+  redirect(isNew === "1" ? "/plan?view=list&new=1" : "/plan?view=agenda");
 }

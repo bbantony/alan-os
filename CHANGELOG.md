@@ -4572,3 +4572,17 @@ deleted that reminder, and the fixed re-point would have regressed to firing at 
 from the third occurrence on. The new instance now inherits the nudge setting, which makes the
 fix permanent and the row honest (the Google Calendar side already inherited it — the app row
 was the odd one out).
+
+## 60. The + button's "Task or reminder" pinned to the list view (3 Sep 2026)
+
+**What led here:** the UX-critique mapping pass (requested by Alan as part of the big
+tightening commission) found the floating + button's task row had the exact gap the
+unit-reviewer caught in the launcher shortcut back in entry 54: `/plan?new=1` only opens the
+add field in the List view, so a Calendar or Agenda default view landed on a screen with no
+add field at all. The + row now links to `/plan?view=list&new=1`, same as the shortcut.
+One line, plus this entry.
+
+**Addendum, same day:** the unit-reviewer passed the fix and pointed out the identical gap in
+two more places — the old `/calendar?new=1` redirect and the "add a task" link inside the
+calendar view itself. Both now pin `view=list` the same way, closing the whole family: every
+route into "add a task" now lands on a screen that actually has the add field.
