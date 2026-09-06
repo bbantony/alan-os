@@ -168,7 +168,11 @@ export async function backfillGcalSync(
       .not("due_at", "is", null),
     supabase
       .from("routines")
-      .select("id, title, time_of_day, rrule, gcal_event_id")
+      // created_at is the routine's start date, which an "every N days" rule
+      // has to count from — without it the backfilled Google event starts on
+      // whatever day "Sync now" was tapped and repeats off the routine's real
+      // schedule from then on.
+      .select("id, title, time_of_day, rrule, gcal_event_id, created_at")
       .eq("user_id", userId)
       .eq("active", true)
       .not("time_of_day", "is", null),
@@ -208,7 +212,12 @@ export async function backfillGcalSync(
   );
 
   for (const r of routines ?? []) {
-    const startIso = firstReminderInstant(r.rrule, r.time_of_day as string).toISOString();
+    const startIso = firstReminderInstant(
+      r.rrule,
+      r.time_of_day as string,
+      new Date(),
+      (r.created_at as string | null)?.slice(0, 10) ?? null
+    ).toISOString();
     record(
       await syncToGcal({
         supabase,

@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { verifyActionToken } from "@/lib/reminders/action-token";
-import { nextOccurrenceUtc } from "@/lib/reminders/rrule";
+import { nextReminderState, type ReminderAnchorRow } from "@/lib/reminders/anchor";
+
+// What `get_reminder_anchors` hands back (migration 0039): the reminder plus
+// the scheduling fields of whichever parent it hangs off.
+interface AnchorRow extends ReminderAnchorRow {
+  reminder_id: string;
+  user_id: string;
+}
 
 // Reached from the OS notification's "Done" action button — the service
 // worker fetches this with no guarantee of a live session (a dormant PWA's
@@ -22,27 +29,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!secret) return NextResponse.json({ error: "server misconfigured" }, { status: 500 });
 
   const supabase = await createClient();
-  const { data: rows } = await supabase.rpc("get_reminder_admin", { secret, target_reminder: id });
-  const reminder = rows?.[0];
+  // Was `get_reminder_admin`, which returns the reminder row and nothing else.
+  // That was the bug: a repeating reminder was then advanced with
+  // nextOccurrenceUtc(rrule, remind_at), stepping from a pointer that snooze
+  // rewrites, so one snooze re-anchored the series for good. The next
+  // occurrence now comes from the parent's own schedule instead, which this
+  // session-less route cannot read any other way (tasks and routines are both
+  // `auth.uid() = user_id` RLS).
+  const { data: rows } = await supabase.rpc("get_reminder_anchors", {
+    secret,
+    target_reminders: [id],
+  });
+  const reminder = ((rows as AnchorRow[] | null) ?? [])[0];
   if (!reminder || reminder.user_id !== verified.userId) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
-  let nextRemindAt = reminder.remind_at as string;
-  let nextStatus: "active" | "done" = "done";
-  if (reminder.rrule) {
-    const next = nextOccurrenceUtc(reminder.rrule, new Date(reminder.remind_at));
-    if (next) {
-      nextRemindAt = next.toISOString();
-      nextStatus = "active";
-    }
-  }
+  // SNOOZING MOVES ONLY THIS OCCURRENCE, NEVER THE SERIES — so "Done" on a
+  // repeating reminder that was snoozed earlier puts it back on the schedule
+  // its routine or task actually asks for, not on the snoozed time. A reminder
+  // linked to neither is retired rather than advanced (migration 0022).
+  const next = nextReminderState(reminder);
 
   await supabase.rpc("advance_reminder", {
     secret,
     reminder_id: id,
-    new_remind_at: nextRemindAt,
-    new_status: nextStatus,
+    // null leaves remind_at alone; advance_reminder coalesces it (0012).
+    new_remind_at: next.remindAt,
+    new_status: next.status,
   });
 
   return NextResponse.json({ ok: true });

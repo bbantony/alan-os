@@ -1738,3 +1738,38 @@ Nothing was lost:
 
 Your bottom tab bar now has five buttons instead of six, and the sixth thing
 you used to hunt through a menu for is the button your thumb is already on.
+
+## Your reminders finally have a screen
+
+Until now a reminder was invisible. You set a nudge on a task ("tell me 30 minutes before"),
+and after that the only way to see it was for it to go off. There was no list, and the only
+Snooze was a button on the notification itself, locked to exactly one hour.
+
+**Open Plan and you'll now see "Upcoming nudges"** above your tasks. Anything late sits at the
+top in red. Each row says what the nudge is *for* — "Renew passport — 30 minutes before it's
+due" — and whether it repeats.
+
+Two buttons on each:
+
+- **Snooze** now offers real choices: 10 minutes, an hour, 4 hours, or in the morning. If
+  you've set quiet hours, the morning option waits until they're over — no point scheduling
+  something for a time the phone won't ring.
+- **Done** silences that nudge without ticking the task off. A reminder to do a thing isn't
+  the thing. If it's a repeating nudge, only this one is silenced — it comes back next time.
+
+**And an important fix underneath:** snoozing a repeating reminder used to quietly move it
+forever. Snooze your daily 7am nudge by an hour and it became a daily 8am nudge — and you'd
+also silently lose the next morning's. Now snoozing moves *only that one*, and tomorrow it's
+back at 7am where it belongs.
+
+## Today can do things now, not just show them
+
+- **Tick shopping items straight from Today** — no trip to the Shopping screen for the last
+  two things on the list.
+- **The evening ritual opens when you're ready.** It used to appear only after 8pm, with no
+  way in before then. There's now a "Plan tomorrow now" button, and "Not now" to back out —
+  and if you've already typed something, it asks before throwing it away.
+- **The numbers strip obeys your ordering.** Moving it up or down in the gear → Today screen
+  actually moves it now; the arrows used to do nothing for that one row.
+- **Ticking a task with unfinished subtasks asks first**, the same way it always has on the
+  Plan screen. Same question, same words, both places.

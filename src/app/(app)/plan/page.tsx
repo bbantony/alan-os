@@ -5,6 +5,7 @@ import {
 } from "@/app/(app)/tasks/actions";
 import { getRoutines, getRoutineSuggestions } from "@/app/(app)/routines/actions";
 import { getGcalStatus } from "@/app/(app)/calendar/actions";
+import { getUpcomingReminders } from "@/app/(app)/reminders/actions";
 import { PageHeader, HeaderFact } from "@/components/ui/page-header";
 import { todayInAppTimezone } from "@/lib/time";
 import { addMonths, parseDateString, toDateString } from "@/lib/calendar";
@@ -45,6 +46,7 @@ export default async function PlanPage({
     gcalStatus,
     preferences,
     profile,
+    reminders,
   ] = await Promise.all([
     getTasks(),
     getWeeklyDoneCount(),
@@ -55,6 +57,7 @@ export default async function PlanPage({
     getGcalStatus(),
     getPreferences(),
     getCurrentProfile(),
+    getUpcomingReminders(),
   ]);
 
   const openCount = tasks.filter((t) => !t.parent_task_id).length;
@@ -90,6 +93,8 @@ export default async function PlanPage({
         doneTodayByHorizon={doneTodayByHorizon}
         routines={routines}
         routineSuggestions={routineSuggestions}
+        reminders={reminders}
+        notifications={preferences.notifications}
         planItems={planItems}
         todayIso={todayIso}
         initialMonth={todayIso.slice(0, 7)}

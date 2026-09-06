@@ -171,6 +171,49 @@ export function isDueOnDate(rruleText: string, dtstartDateStr: string, dateStr: 
   return rule.between(dayStart, dayEnd, true).length > 0;
 }
 
+// The next occurrence of `rruleText` strictly after `nowUtc`, at wall-clock
+// `hour:minute` in APP_TIMEZONE, with the series anchored at
+// `dtstartDateStr` — the same floating-date trick rruleAtInstant uses, so DST
+// is re-resolved at the far end rather than carried across.
+//
+// The anchoring is the whole point. A repeat rule is only half a schedule:
+// "every 3 days" is meaningless until you say every 3 days FROM WHEN, and
+// that start date is what picks one set of days out of the calendar rather
+// than another. Returns null if the rule can't produce an occurrence at all
+// (COUNT/UNTIL already spent), leaving the caller to fall back.
+function anchoredNextInstant(
+  rruleText: string,
+  dtstartDateStr: string,
+  hour: number,
+  minute: number,
+  nowUtc: Date
+): Date | null {
+  const [y, m, d] = dtstartDateStr.split("-").map(Number);
+  if (!y || !m || !d) return null;
+
+  const parsed = RRule.parseString(rruleText);
+  const rule = new RRule({ ...parsed, dtstart: new Date(Date.UTC(y, m - 1, d, hour, minute, 0)) });
+
+  const now = utcToZonedParts(nowUtc, APP_TIMEZONE);
+  const floatingNow = new Date(
+    Date.UTC(now.year, now.month - 1, now.day, now.hour, now.minute, now.second)
+  );
+  const next = rule.after(floatingNow, false);
+  if (!next) return null;
+
+  return zonedTimeToUtc(
+    {
+      year: next.getUTCFullYear(),
+      month: next.getUTCMonth() + 1,
+      day: next.getUTCDate(),
+      hour: next.getUTCHours(),
+      minute: next.getUTCMinutes(),
+      second: next.getUTCSeconds(),
+    },
+    APP_TIMEZONE
+  );
+}
+
 // The correct first remind_at for a brand-new (or just-edited) recurring
 // reminder anchored to a wall-clock "time of day" rather than a specific
 // picked date+time (routines' "Around what time?" field, unlike the
@@ -183,7 +226,24 @@ export function isDueOnDate(rruleText: string, dtstartDateStr: string, dateStr: 
 // fires on the wrong day entirely. Both are fixed by checking today against
 // the rrule and rolling forward to the true next occurrence whenever
 // today's slot isn't a valid, still-upcoming one.
-export function firstReminderInstant(rruleText: string, timeOfDay: string, nowUtc: Date = new Date()): Date {
+//
+// `dtstartDateStr` (YYYY-MM-DD) is the series' start date, and supplying it
+// is the difference between "a day this rule allows" and "a day this rule
+// allows COUNTING FROM THE RIGHT PLACE". Without it the rule is evaluated
+// with today as day zero, which is harmless for daily / weekdays /
+// weekly-BYDAY / monthly-BYMONTHDAY (none of them care where they started)
+// and wrong for FREQ=DAILY;INTERVAL=n — the routine form's "every N days".
+// A routine anchors its own due-days and streaks on created_at (see
+// routines/actions.ts), so passing the same date here is what makes "due"
+// mean one thing across the routine, its reminder and its calendar event.
+// Omitting it keeps the older today-anchored behaviour exactly, for callers
+// that have no start date to give.
+export function firstReminderInstant(
+  rruleText: string,
+  timeOfDay: string,
+  nowUtc: Date = new Date(),
+  dtstartDateStr?: string | null
+): Date {
   const [hh, mm] = timeOfDay.split(":").map(Number);
   const now = utcToZonedParts(nowUtc, APP_TIMEZONE);
   const todayStr = `${now.year}-${String(now.month).padStart(2, "0")}-${String(now.day).padStart(2, "0")}`;
@@ -191,6 +251,14 @@ export function firstReminderInstant(rruleText: string, timeOfDay: string, nowUt
     { year: now.year, month: now.month, day: now.day, hour: hh || 0, minute: mm || 0, second: 0 },
     APP_TIMEZONE
   );
+
+  if (dtstartDateStr) {
+    // One call answers both halves of the old question: it returns today's
+    // slot when today is a due day whose time is still ahead, and the next
+    // truly-due day's slot otherwise.
+    const anchored = anchoredNextInstant(rruleText, dtstartDateStr, hh || 0, mm || 0, nowUtc);
+    if (anchored) return anchored;
+  }
 
   if (isDueOnDate(rruleText, todayStr, todayStr) && todayCandidate > nowUtc) {
     return todayCandidate;

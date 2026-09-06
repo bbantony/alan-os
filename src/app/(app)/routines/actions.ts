@@ -105,16 +105,30 @@ export async function createRoutine(input: {
   const { supabase, user } = await requireUser();
   const rrule = buildRRuleString(input.recurrence) ?? "RRULE:FREQ=DAILY";
 
-  const { error } = await supabase.from("routines").insert({
-    id: input.id,
-    user_id: user.id,
-    title: input.title.trim(),
-    icon: input.icon,
-    category: input.category,
-    rrule,
-    time_of_day: input.timeOfDay ?? null,
-  });
+  // created_at is read straight back rather than assumed to be "now": it is
+  // the routine's start date, and every later decision about whether the
+  // routine is due on a given day counts from it (see routineStreak above and
+  // getRoutinesDueToday). The reminder and the calendar event below are
+  // anchored on the same value so all three agree from the first day.
+  const { data: created, error } = await supabase
+    .from("routines")
+    .insert({
+      id: input.id,
+      user_id: user.id,
+      title: input.title.trim(),
+      icon: input.icon,
+      category: input.category,
+      rrule,
+      time_of_day: input.timeOfDay ?? null,
+    })
+    .select("created_at")
+    // maybeSingle, not single: `single` turns "inserted fine but the row came
+    // back empty" into an error, which would tell Alan his routine didn't save
+    // when it did. Here a missing row just leaves the start date null and the
+    // reminder falls back to the old today-anchored behaviour.
+    .maybeSingle();
   if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
+  const routineStart = (created?.created_at as string | undefined)?.slice(0, 10) ?? null;
 
   const stepTitles = input.steps.length > 0 ? input.steps : [input.title.trim()];
   await supabase.from("routine_steps").insert(
@@ -126,7 +140,7 @@ export async function createRoutine(input: {
   );
 
   if (input.remindMe && input.timeOfDay) {
-    const remindAt = firstReminderInstant(rrule, input.timeOfDay).toISOString();
+    const remindAt = firstReminderInstant(rrule, input.timeOfDay, new Date(), routineStart).toISOString();
     await supabase.from("reminders").insert({
       user_id: user.id,
       title: input.title.trim(),
@@ -137,7 +151,7 @@ export async function createRoutine(input: {
   }
 
   if (input.timeOfDay) {
-    const startIso = firstReminderInstant(rrule, input.timeOfDay).toISOString();
+    const startIso = firstReminderInstant(rrule, input.timeOfDay, new Date(), routineStart).toISOString();
     await syncToGcal({
       supabase,
       userId: user.id,
@@ -174,12 +188,18 @@ export async function updateRoutine(input: {
   const rrule = buildRRuleString(input.recurrence) ?? "RRULE:FREQ=DAILY";
   const trimmedTitle = input.title.trim();
 
+  // created_at comes along for the ride: editing a routine recomputes its
+  // reminder and its calendar event, and both have to be anchored on the
+  // routine's original start date, not on the day the edit happened to be
+  // made — otherwise saving an untouched "every 3 days" form would shunt it
+  // onto a different set of days.
   const { data: existingRoutine } = await supabase
     .from("routines")
-    .select("gcal_event_id")
+    .select("gcal_event_id, created_at")
     .eq("id", input.id)
     .eq("user_id", user.id)
     .maybeSingle();
+  const routineStart = (existingRoutine?.created_at as string | undefined)?.slice(0, 10) ?? null;
 
   const { error } = await supabase
     .from("routines")
@@ -251,7 +271,7 @@ export async function updateRoutine(input: {
     .maybeSingle();
 
   if (input.remindMe && input.timeOfDay) {
-    const remindAt = firstReminderInstant(rrule, input.timeOfDay).toISOString();
+    const remindAt = firstReminderInstant(rrule, input.timeOfDay, new Date(), routineStart).toISOString();
     if (existingReminder) {
       await supabase
         .from("reminders")
@@ -270,7 +290,9 @@ export async function updateRoutine(input: {
     await supabase.from("reminders").delete().eq("id", existingReminder.id);
   }
 
-  const startIso = input.timeOfDay ? firstReminderInstant(rrule, input.timeOfDay).toISOString() : null;
+  const startIso = input.timeOfDay
+    ? firstReminderInstant(rrule, input.timeOfDay, new Date(), routineStart).toISOString()
+    : null;
   await syncToGcal({
     supabase,
     userId: user.id,

@@ -19,7 +19,7 @@ export type ShoppingSort = "category" | "alphabetical" | "recent";
 
 /** Panels on the Today console, in the order they can be arranged. */
 export const TODAY_PANEL_IDS = [
-  "outlook", "vitals", "bills", "timeline", "console", "focus",
+  "outlook", "vitals", "bills", "timeline", "console", "shopping", "focus",
 ] as const;
 
 /**
@@ -36,6 +36,10 @@ export const TODAY_PANEL_IDS = [
  * (5 Sep 2026). Dropping an id here and from TODAY_PANEL_IDS needs no
  * migration: `isPanelId` in resolvePreferences filters every saved list
  * against the ids that currently exist, so a stored "jump" is simply ignored.
+ *
+ * "shopping" was added 5 Sep 2026 and is deliberately absent from this list,
+ * so every existing profile — with or without a stored `todayPanelsKnown` —
+ * treats it as new and shows it.
  */
 const PANELS_KNOWN_BEFORE_OUTLOOK: readonly TodayPanelId[] = [
   "vitals", "bills", "timeline", "console", "focus",
@@ -48,6 +52,7 @@ export const TODAY_PANEL_LABELS: Record<TodayPanelId, string> = {
   bills: "About to land",
   timeline: "Today so far",
   console: "What's on today",
+  shopping: "The shopping list",
   focus: "Focus & evening ritual",
 };
 

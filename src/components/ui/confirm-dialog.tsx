@@ -25,6 +25,12 @@ import { Button } from "@/components/ui/button";
  * `detail` is where the real cost goes ("this also deletes 41 transactions"),
  * because the whole point is that the person deciding can see the consequence
  * rather than a generic warning.
+ *
+ * `confirmTone` exists for the minority of confirmations that are a *check*
+ * rather than a destruction — "this task still has unfinished subtasks" is a
+ * question, not a warning, and painting its button the same red as "delete
+ * this account forever" would spend the red on something that can be undone.
+ * It defaults to destructive so every existing caller is untouched.
  */
 export function ConfirmDialog({
   open,
@@ -33,6 +39,7 @@ export function ConfirmDialog({
   detail,
   confirmLabel = "Delete",
   cancelLabel = "Cancel",
+  confirmTone = "destructive",
   onConfirm,
   onCancel,
   pending = false,
@@ -44,6 +51,7 @@ export function ConfirmDialog({
   detail?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmTone?: "destructive" | "default";
   onConfirm: () => void;
   onCancel: () => void;
   pending?: boolean;
@@ -66,7 +74,12 @@ export function ConfirmDialog({
           <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
             {cancelLabel}
           </Button>
-          <Button type="button" variant="destructive" onClick={onConfirm} disabled={pending}>
+          <Button
+            type="button"
+            variant={confirmTone === "default" ? "default" : "destructive"}
+            onClick={onConfirm}
+            disabled={pending}
+          >
             {pending ? "Working…" : confirmLabel}
           </Button>
         </DialogFooter>

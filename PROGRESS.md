@@ -1021,3 +1021,27 @@ and put it to him.
 doors). Scouted already: reminders have no listing query anywhere and snooze is hardcoded to an
 hour behind a signed token; the invariant from migration 0022 is that a reminder linked to
 neither a task nor a routine must never exist.
+
+## 5 Sep 2026 — Wave 1B: reminders get a face, Today gets hands
+
+CHANGELOG entries 62–65. Three reviewer rounds and a QA trace; migrations 0039 and 0040
+written, applied to production and verified with real calls (both security-definer, both with
+PUBLIC execute explicitly revoked — the hole QA found on the older RPCs is not repeated).
+
+Reminders now have a screen (Plan → "Upcoming nudges"), four snooze presets, and a Done that
+silences the nudge without completing the task. Today gained a tickable shopping panel, an
+early-openable evening ritual, a numbers strip that honours its ordering, and Plan's subtask
+warning.
+
+**The wave's real value was a bug the feature exposed:** snoozing a repeating reminder
+permanently shifted its time of day AND ate the occurrence the dispatcher had already advanced
+to. Fixed at all four advance sites via `lib/reminders/anchor.ts`, which recomputes from the
+parent rather than stepping from the mutable pointer. 0040 extended it to interval rules
+("every N days"), which counted from today instead of the routine's start date — including at
+creation time, so an evening-created routine was already wrong before any snooze. 23+6 tests in
+tests/reminders.test.mts pin all of it.
+
+**Next: Wave 1C** — the week view for spending (currently unanswerable: Reports is
+calendar-month only), Money's tabs in the URL, receipts on the capture sheet, and reconcile
+surfacing itself when a month closes. Then Wave 2 (the AI as a layer) and Wave 3 (Fold panes +
+share_target).

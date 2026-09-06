@@ -4737,3 +4737,335 @@ recorded: a receipt batch chosen from the gallery reports its per-photo progress
 sheet has already closed, the shopping list can show a queued offline change as absent for as
 long as the connection stays flaky-but-online, and `interactive-widget=resizes-content` changes
 how the bottom bar sits over the Android keyboard app-wide and wants one look on the Fold 7.
+
+## 62. Wave 1B — reminders get a face, and Today gets hands (5 Sep 2026)
+
+**What Alan asked for:** Wave 1B of the approved flow plan. Two halves: reminders had no
+interface anywhere in the app, and the richest screen in it could look but not touch.
+
+### Reminders exist now
+
+1. **"Upcoming nudges" in Plan.** Late ones first (in the alert tone, not a new colour), then
+   what's coming. Each row says what the nudge is *for* — "Renew passport — 30 minutes before
+   it's due" — rather than repeating a bare title, and says when a nudge repeats. Times render
+   in your timezone. New `reminders/actions.ts` with the query that never existed:
+   `getUpcomingReminders()` joins each reminder to its task or routine and returns overdue and
+   upcoming separately, capped at a 14-day horizon plus anything late.
+2. **Snooze finally has choices** — 10 minutes, an hour, 4 hours, tomorrow morning — instead of
+   the fixed hour buried in a notification button. The presets live in a plain module
+   (`lib/reminders/snooze.ts`) so the server can re-validate exactly what the screen offered;
+   the server accepts only that allow-list. "Tomorrow morning" is computed in your timezone and
+   lifted past quiet hours, because scheduling it inside them would just delay it again.
+3. **"Done" silences the nudge without ticking the task off** — a nudge is a reminder to do a
+   thing, not the thing. For a *repeating* nudge it drops only that occurrence and rolls the
+   rest forward; setting it done outright would have silently killed every future one, the
+   exact failure migration 0022 exists to prevent.
+
+### The bug that made this worth stopping for
+
+Building the snooze buttons surfaced a **pre-existing bug that they would have made routine**:
+snoozing a repeating reminder permanently moved its time of day, and ate an occurrence as well.
+Snooze your daily 7am nudge by an hour and it became a daily 8:05am nudge, forever — and
+tomorrow's 7am never fired at all, because the dispatcher had already advanced the pointer
+before you tapped. It happened via the notification's Snooze button already; four new buttons
+on a screen would have turned a rare accident into a daily one, so it was fixed first.
+
+4. **Migration 0039** (applied to production and verified: function present, security definer,
+   and — unlike the older ones — no blanket public execute permission, closing the same hole QA
+   flagged earlier). It adds one lookup so the notification routes, which run with no login and
+   therefore cannot read your tasks, can recover a reminder's *true* anchor.
+5. **`lib/reminders/anchor.ts`** — one shared helper, so all four places that advance a
+   reminder agree. The next occurrence is now recomputed from the parent (a routine's own
+   schedule and time of day, or a task's due date minus its nudge offset) instead of stepped
+   from the pointer a snooze had already moved. Snoozing moves *this* occurrence only; the next
+   lands back on the real schedule. A fourth drift site was found inside the brand-new
+   reminders code itself and fixed the same way.
+6. **The notification Snooze route never checked the reminder was yours.** It verified the
+   signed link matched the reminder but never that the reminder belonged to the person holding
+   it. It does now, and it also refuses to reactivate a reminder attached to nothing.
+7. **A broken repeat rule no longer takes down the whole batch.** Found by the new tests: an
+   unreadable rule threw straight out of the scheduler, so one bad row would stop every other
+   reminder that night from being sent. It now goes quiet instead — chosen on evidence, since
+   the dispatcher leaves a null pointer alone, so keeping such a row active would have re-fired
+   it every five minutes forever.
+
+**Tests:** new `tests/reminders.test.mts`, 23 cases — no drift (including a compounding second
+snooze), no eaten occurrence, snooze refusing to skip past a nearer real fire, task anchors
+ahead and behind, a zero-minute offset (0 is falsy — a real bug class), orphan safety,
+one-off, exhausted rules, unreadable rules, and both directions of a Winnipeg daylight-saving
+crossing. One test deliberately pins a known soft failure rather than blessing it: a corrupt
+time-of-day silently becomes midnight.
+
+### Today gets hands
+
+8. **The numbers strip obeys your ordering.** It was filtered out of the ordered list and drawn
+   separately, so the arrows in Settings → Today did nothing while implying they worked.
+9. **Shopping is tickable from Today** — a new panel listing the top few unchecked items, each
+   with a checkbox that rolls back and explains itself if the save fails. (Ticking offline from
+   here reports the failure rather than queueing; the Shopping screen keeps the offline queue,
+   and two writers on one cache is the worse bug.)
+10. **The evening ritual opens when you're ready**, not at 8pm sharp — a "Plan tomorrow now"
+    control, with "Not now" to back out. The copy also stops hardcoding 8pm and reads the hour
+    you actually set.
+11. **Today warns about unfinished subtasks** like Plan does, in Plan's exact words. The shared
+    confirmation gained a tone option so completing a task uses the ordinary button rather than
+    the red one — completing isn't destroying, and copying the red would have fixed one
+    inconsistency by creating another.
+
+### Three review notes, fixed the same day
+
+The review of the above passed it but raised four notes. Three are fixed here, and two of those
+were the same failure this wave exists to end: **the screen showing a time the database never
+held.**
+
+12. **The snooze row could show a time that was never saved.** Tapping "4 hours" on a repeating
+    nudge whose next genuine fire is two hours away correctly stores *two* hours — the server
+    refuses to overwrite a sooner real occurrence — but the row and the confirmation both said
+    four. The server action now hands back the instant it actually wrote (read off the saved
+    row, not recalculated), and the screen adopts it. It is still instant: the row moves the
+    moment you tap and quietly corrects itself a beat later if the guess was wrong.
+13. **"Tomorrow morning" could mean this morning.** Snoozing at 07:30 with an 8am morning
+    scheduled 08:00 *today* under a button that promised tomorrow. The behaviour is right — at
+    2am you want the morning that is hours away, not the one 32 hours away — so only the words
+    changed: the button now reads **"In the morning"**, and the confirmation names the actual
+    landing ("Back today at 8:00 a.m.", "Back tomorrow at 8:00 a.m."). Nothing fires at a
+    different time than it did before.
+14. **The reminder job could lose its schedules in silence.** If the lookup that finds each
+    reminder's true schedule ever failed, the error was thrown away, and every reminder fell
+    back to the old drifting behaviour with nothing anywhere saying so. The failure is now
+    logged and included in the job's own status response. The run deliberately continues —
+    sending reminders on a slightly wrong schedule beats not sending them at all — but the
+    degradation is now visible instead of invisible.
+
+**Not fixed, recorded instead:** a reminder that somehow outlives the task or routine it belongs
+to buzzes once on its way out before retiring itself. Reaching that state requires the database
+cascade (migration 0022) to have failed, and the one buzz is how it gets cleaned up.
+
+### Wave 1B QA fixes, part two: the nudge panel, "in the morning", and where a reminder tap lands
+
+Five findings from the QA pass on the nudges panel, all of the same family — **the screen saying
+something the database never agreed to.**
+
+1. **A dropped connection made the nudge row lie, then jam.** Snooze and Done both moved the row
+   first and saved second, which is right, but they only handled the server *refusing* — not the
+   call failing outright (no signal, a server error). When that happened the row kept a time
+   that was never saved, said nothing at all, and its Snooze and Done buttons stayed greyed out
+   and dead until the whole page was reloaded. Both now catch the failure, put the row back, say
+   so in plain English ("Couldn't snooze that — check your connection and try again."), and the
+   row always comes back to life whatever happens. Same shape as the money capture sheet.
+2. **Failing on one nudge undid another one that had worked.** The undo kept a copy of the whole
+   list, so tapping Done on two nudges in quick succession and having the *first* fail put the
+   second one back on screen too — even though it had genuinely been silenced. Each action now
+   only ever puts back its own row. Related: two nudges saving at once used to share one "busy"
+   flag, so whichever finished first un-greyed both; they are now tracked separately.
+3. **"In the morning" could land in the evening.** Quiet hours can be set to any two hours of the
+   day, and if they were set to a *daytime* window (say 1pm to 6pm), the morning snooze deferred
+   to 6pm — the evening — because the code assumed every quiet window runs overnight. It now
+   only waits for the window to end when 8am genuinely falls inside it, asked of the same rule
+   the notification job uses. Alan's own setting (10pm to 7am) behaved correctly before and is
+   unchanged.
+4. **Tapping a reminder could open a screen with no reminders on it.** The notification opened
+   `/plan`, which shows whichever Plan view is set as the default — so anyone defaulting to
+   Calendar or Agenda arrived at a screen with no nudge list and no Done/Snooze buttons, which
+   is exactly the fallback iPhones rely on. It now opens the list view directly, the same link
+   the home-screen shortcut already uses.
+5. **"Done" on a repeating nudge didn't say when it comes back.** It said "it comes round again
+   (every day)", which sounds like tomorrow and sometimes means forty minutes — silencing an
+   overdue daily nudge reschedules it from the routine's own timetable, which can hand back a
+   slot still ahead of us today. The server now returns the time it actually stored (the same
+   way snooze already did) and the confirmation names it: "Nudge silenced — back today at
+   5:30 p.m. (every day)". A one-off still just says the task itself is still open.
+
+**Also:** the snooze helper was written in a way node's test runner couldn't load, so the maths
+above had never been testable. Its imports now match the style the other reminder files already
+use, and eight cases were added covering the morning-hour rule — no quiet hours, an overnight
+window that runs past 8am, a daytime window that must be ignored, and snoozing before the morning
+hour landing on today rather than tomorrow. House rule: a maths fix gets a test.
+
+## 63. Wave 1B follow-ups — five checks found in review (5 Sep 2026)
+
+**What Alan asked for:** the leftover findings from the review of Wave 1B, fixed. Nothing new
+on screen — these are the "it looks fine until the day it isn't" kind.
+
+1. **Ticking shopping off the dashboard now admits when it didn't save.** The box filled the
+   moment it was tapped, which is right, but if the phone had no signal (or the server fell
+   over) the tick was never saved and nothing said so — the box just stayed ticked and the item
+   quietly left the list you were shopping from. It now un-ticks itself and says "Couldn't save
+   that — check your connection and try again.", the same way the nudge rows and the task list
+   already do.
+2. **The shopping count on Today keeps up.** Ticking something off the dashboard changed the
+   little list but not the "Shopping" number above it, so the two disagreed for the rest of the
+   session — tick two of four and the list said 2/4 while the number still said 4. The number
+   is refreshed now. Side effect worth knowing: because Today's shopping panel is deliberately
+   a list of what's *left* to buy, a ticked item now disappears from it a moment after you tick
+   it instead of sitting there struck through. Un-ticking a mis-tap has to happen on the
+   Shopping screen ("All", top right of the panel). If that turns out to be annoying in use,
+   say so — the alternative is showing ticked items on the dashboard too.
+3. **Tapping "Not now" in the evening ritual can't throw your work away.** Opening "Plan
+   tomorrow" early and then backing out used to bin every goal picked and every word typed with
+   no warning at all. It now asks first — "Close without saving?", with a line naming exactly
+   what would be lost ("You'll lose 2 goals for tomorrow and your line about today") and a
+   "Keep planning" button. If nothing has been picked or typed, it still closes on one tap.
+4. **The buttons on Today's shopping list are big enough to hit.** The rows were about 40px
+   tall against the app's own 44px minimum, and shrank further on the compact density setting.
+   They now hold 44px at every density.
+5. **"This still has unfinished subtasks" stops being asked about finished ones.** On Today,
+   ticking off the last subtask and then its parent still produced the warning, because the
+   list of what's unfinished was worked out when the page loaded and never updated. Today's
+   panel now keeps track of what's been ticked since and answers the question itself.
+
+**One thing deliberately not fixed, and why.** The review also flagged that snoozing a nudge for
+a routine that repeats on an *interval* ("every 3 days") can shift the whole series onto the
+wrong days. It is real, and it only affects interval routines — daily, weekdays, weekly-on-a-day
+and monthly-on-a-date are all unaffected. Fixing it needs one more piece of information about the
+routine (the date it was created) to be handed to the part of the app that reschedules nudges,
+and that lookup lives in a database function that is already live in production. Changing it is
+a database migration, which is a separate job from this one, so it has been left for that. Alan
+loses nothing today unless he has a routine set to repeat every N days with a reminder on it,
+and snoozes it.
+
+---
+
+## 64. Wave 1B final fix — "every N days" reminders count from the right day (5 Sep 2026)
+
+**What Alan asked for:** the one leftover from the last entry — the routine reminder that
+drifts onto the wrong days when it repeats on an interval. The previous session stopped short
+of it on purpose because fixing it needs a database change; that change was approved.
+
+**The problem in plain English.** "Every 3 days" doesn't mean anything on its own — every 3 days
+*starting when?* A routine has always answered that with the day it was created, and that's what
+decides which days it ticks off and what its streak counts. The reminder attached to it answered
+differently: it counted from *today*, whatever today happened to be. Most of the time the two
+agree anyway, because "every day", "weekdays", "every Wednesday" and "the 5th of the month" all
+land on the same days no matter where you start counting. "Every 3 days" doesn't. So a routine
+created Tue 1 Sep (due the 1st, 4th, 7th, 10th) whose 7am nudge fired on Friday the 4th and got
+snoozed into Saturday the 5th would reschedule itself for Tuesday the 8th — a day the routine
+itself doesn't think it's due — and stay a day out from then on.
+
+**What changed, one by one:**
+
+1. **New migration `0040_reminder_anchor_dtstart.sql`.** The three places that reschedule a
+   nudge (the every-few-minutes pinger and the Done/Snooze buttons on the notification itself)
+   run with nobody signed in, so they can only see a routine through one specific database
+   function, `get_reminder_anchors`. That function handed back the routine's repeat rule and its
+   time of day but not the date it was created. It now hands that back too. The function had to
+   be dropped and recreated rather than edited in place — Postgres won't let you add a column to
+   what a function returns — which happens inside a single transaction, so there is no moment
+   where it's missing. Its permissions are restated afterwards (callable only by the two roles
+   that need it, and useless without the shared secret). No table, column or data changed.
+2. **`src/lib/reminders/rrule.ts`.** `firstReminderInstant` can now be told the start date of a
+   series. Given one, it works out the next slot by counting from there; given nothing, it
+   behaves exactly as it always did, so nothing that doesn't pass a start date changes meaning.
+3. **`src/lib/reminders/anchor.ts`.** The rescheduling logic passes the routine's creation date
+   through, sliced to a plain day exactly the way the routines code slices it — so "due" now
+   means one thing across the routine, its nudge and its calendar event.
+4. **The pinger route** (`api/cron/reminders`) carries the new field through to that logic, and
+   the two NOTIFICATION routes (Done and Snooze) pick it up automatically because they pass the
+   lookup's row straight through. The in-app Done button does not — it runs with a login and
+   reads the parent itself, so it needed its own fix, which it did not get until the reviewer
+   round recorded below.
+5. **Creating and editing a routine** (`routines/actions.ts`) now anchor on the routine's own
+   creation date too, so a new "every 3 days" routine's first nudge lands on a day the routine
+   agrees with, and re-saving an untouched edit form can't shunt an existing one sideways.
+6. **The Google Calendar backfill** (`lib/gcal/sync.ts`) does the same, so a repeating event
+   pushed to Google by "Sync now" starts on a real due day rather than on the day sync was run.
+7. **Six new tests** in `tests/reminders.test.mts` (section 11): the exact Sep 1 / every-3-days /
+   snoozed-into-Saturday case now lands on Monday the 7th; the same row without the start date is
+   pinned at the old wrong answer so a silently-dropped field can't hide; a due-day morning still
+   uses its own 7am slot; and daily, weekly-on-Wednesday and the clocks-going-back case are all
+   proved to give identical answers with and without a start date.
+
+**Note for whoever runs it:** the migration file was written and has since been applied to production (see entry 65). It runs with
+`SUPABASE_DB_URL="..." node scripts/run-migration.mjs`. Until it is applied, the code falls back
+to the old behaviour rather than failing — reminders keep sending, just on the old slightly wrong
+days for interval routines only.
+
+### Wave 1B — the QA round, and the two things it changed my mind about
+
+QA traced the whole wave and found ten things. All are fixed. Three mattered:
+
+- **Both new panels lied when the connection dropped.** Ticking a shopping item on Today in
+  airplane mode left the box ticked, saved nothing and said nothing; snoozing a nudge moved the
+  row to a time that was never stored and left that row's buttons dead until a reload. Neither
+  had a guard around its save. This is the same failure the wave exists to end, reintroduced in
+  two brand-new panels — both now roll back, explain themselves, and always re-enable.
+- **The notification's "tap to open the app" landed on the wrong screen.** The push opened
+  `/plan`, but the nudges panel only exists in Plan's list view, so with Plan defaulting to
+  Calendar or Agenda you'd arrive at a screen with no nudges on it — while the service worker's
+  own comment promised it opened "to the reminders list, where Done and Snooze exist as ordinary
+  buttons". It now pins the list view, the same way the launcher shortcut and the capture sheet
+  do.
+- **"In the morning" could land in the evening.** The morning snooze deferred past quiet hours
+  unconditionally, so a daytime quiet window (1pm–6pm) sent it to 18:00 — tomorrow evening. It
+  now defers only when the morning hour genuinely falls inside the window, reusing the app's
+  existing definition of that rather than a second copy of the rule. It also stopped saying
+  "tomorrow" when it means today: the button reads "In the morning" and the confirmation names
+  the real day and time it will arrive.
+
+Also fixed: the snooze row could display a time the server hadn't stored (the server now returns
+the instant it actually saved, and the row adopts it); a failed rollback restored the whole list
+rather than the one row that failed; backing out of the early-opened evening ritual silently
+threw away goals and reflection you'd typed (it now asks, and names what would be lost); the
+Today shopping panel's rows were under the 44px tap floor; Today's subtask warning went stale
+after ticking the last subtask; and the anchor lookup failing degraded silently back to the
+drifting behaviour, which now says so in the job's response and the logs.
+
+**One I changed my own instruction over.** I had asked for Today's stale count to be fixed by
+revalidating inside the shared `setChecked` action. The agent showed that a revalidate refreshes
+whichever screen *called* it — and that action is called far more often from the Shopping screen,
+which would then do a server round trip on every tick and could briefly show an earlier tick's
+list over a later one. The dashboard panel refreshes its own page instead: same fix, confined to
+the screen with the problem.
+
+## 65. Migration 0040 — "every N days" routines stop drifting too (5 Sep 2026)
+
+QA found the last hole in the anti-drift work: a routine's next due day was computed by counting
+from **today**, while the routine itself counts from **the day it was created**. For "every 3
+days" those disagree the moment a nudge is dealt with on a non-due day — a routine created Sep 1
+(truly due the 4th, 7th, 10th) that fires on the 4th and is snoozed into the 5th re-anchored onto
+the 8th and stayed on the wrong days forever. Daily, weekday, weekly and monthly rules are
+unaffected because they don't count from a start date.
+
+Fixing it needed the routine's start date to reach the notification routes, which run with no
+login and cannot read your routines directly — so **migration 0040** (applied to production and
+verified with a real call: the new column is returned, and the permissions were correctly
+restated after the function was recreated, still with no blanket public access) adds it to the
+lookup. `firstReminderInstant` gained a start-date argument; without one it behaves exactly as
+before, so no other caller changed meaning.
+
+**Wider than QA's finding, deliberately:** the same mistake was made when a routine is *created*,
+not only when a nudge is advanced. An "every 3 days" routine created after 7pm Winnipeg has a
+UTC creation date of tomorrow, so its very first reminder was already off the routine's own due
+days before any snooze existed. Creating, editing and the Google Calendar backfill all now pass
+the real start date. Existing rows aren't rewritten; each corrects itself the next time its
+reminder fires, is snoozed or is completed.
+
+Six new tests pin it, including the exact Sep 1 / every-3-days / snoozed-to-the-5th case and a
+dtstart-independent rule alongside it to prove nothing else moved.
+
+**Reviewer round two on Wave 1B — two real holes, both closed.**
+
+1. **The in-app "Done" button was the one advance path still drifting.** Entry 62 claimed all
+   four places that advance a reminder now agree; three did. `completeReminder` builds its own
+   anchor from a direct read and never asked for the routine's start date, so silencing an
+   "every N days" nudge from the Plan screen on a non-due day re-anchored the series onto the
+   wrong days — exactly the bug migration 0040 was written to kill, surviving in the one path
+   this wave added a button for. It runs with a login, so it can simply read the column, and
+   now does.
+2. **A failed snooze quietly demoted an overdue nudge.** I had changed that row-moving helper
+   myself and asserted the "late" flag could always be cleared "by construction, because every
+   caller moves a nudge forward". The reviewer found four callers, not two: the two rollbacks
+   move it *backward*. So a nudge that should have gone off yesterday, snoozed with no signal,
+   was restored to its old time but marked on-time — it left "Should already have gone off",
+   lost its red, dropped out of the late count and sat under "Coming up" reading yesterday. The
+   rollback added to make failures visible was hiding one. The flag now travels with the time.
+
+Also corrected in this file: entry 64 said the migration was not applied (it is), and entry 65
+understated which repeats were at risk — anything with an interval drifts, including the custom
+every-N-weeks and every-N-months presets, not just "every N days".
+
+**One more correction to this file itself:** the reviewer noticed that one of the three
+changelog fixes recorded above had not actually been made — the text replacement silently
+failed to match and I reported it as done. It is made now, along with a misattribution (entry
+62, not 64, is where the "all four places agree" claim first appeared). Recording it because a
+changelog that misreports its own corrections is worse than one that never claimed them.

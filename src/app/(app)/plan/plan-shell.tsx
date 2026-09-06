@@ -7,8 +7,11 @@ import { TaskList } from "@/app/(app)/tasks/task-list";
 import type { Task, TaskHorizon } from "@/lib/tasks/types";
 import type { RoutineWithProgress } from "@/lib/routines/types";
 import type { RoutineSuggestion } from "@/app/(app)/routines/actions";
+import type { NotificationPreferences } from "@/lib/preferences";
+import type { UpcomingReminders } from "@/app/(app)/reminders/actions";
 import { CalendarView } from "./calendar-view";
 import { AgendaView } from "./agenda-view";
+import { NudgePanel } from "./nudge-panel";
 import type { PlanItem } from "./actions";
 
 type View = "list" | "calendar" | "agenda";
@@ -31,6 +34,8 @@ export function PlanShell({
   doneTodayByHorizon,
   routines,
   routineSuggestions,
+  reminders,
+  notifications,
   planItems,
   todayIso,
   initialMonth,
@@ -44,6 +49,10 @@ export function PlanShell({
   doneTodayByHorizon: Record<TaskHorizon, number>;
   routines: RoutineWithProgress[];
   routineSuggestions: RoutineSuggestion[];
+  /** Nudges that are late or land in the next fortnight, soonest first. */
+  reminders: UpcomingReminders;
+  /** Quiet hours, so an optimistic "in the morning" snooze shows the right time. */
+  notifications: NotificationPreferences;
   planItems: PlanItem[];
   todayIso: string;
   initialMonth: string;
@@ -69,6 +78,10 @@ export function PlanShell({
       {view === "list" && (
         <>
           <RoutineSection initialRoutines={routines} suggestions={routineSuggestions} />
+          {/* Between the routines strip and the task list on purpose: a late
+              nudge is time-critical enough that it can't sit below a task list
+              of any length, but Tasks is still what this view is mostly for. */}
+          <NudgePanel initial={reminders} timeZone={timeZone} notifications={notifications} />
           <TaskList
             initialTasks={tasks}
             weeklyDoneCount={weeklyDoneCount}

@@ -32,6 +32,7 @@ import { FocusPanel } from "./focus-panel";
 import { TodaySoFar } from "./today-so-far";
 import { UpcomingBills } from "./upcoming-bills";
 import { OutlookPanel } from "./outlook-panel";
+import { ShoppingPanel } from "./shopping-panel";
 import { DashboardGrid, Reveal } from "./dashboard-grid";
 
 /**
@@ -49,8 +50,12 @@ import { DashboardGrid, Reveal } from "./dashboard-grid";
  *   NOW        what is the single next thing            (the one loud element)
  *   VITALS     the four numbers worth knowing           (each a door)
  *   THE DAY    what the whole day looks like, in order
+ *   SHOPPING   what still needs buying                  (tickable here)
  *   FOCUS      what you said mattered / plan tomorrow
- *   JUMP TO    everywhere else
+ *
+ * That is the DEFAULT order. Every band below is a panel in one list rendered
+ * straight from `prefs.todayPanels`, so Settings → Today can reorder or drop
+ * any of them, vitals included.
  */
 
 const MONTHS = [
@@ -101,7 +106,8 @@ export default async function TodayPage() {
   ]);
 
   const name = profile?.displayName?.split(" ")[0] ?? null;
-  const uncheckedShopping = shoppingItems.filter((i) => !i.checked).length;
+  const uncheckedShoppingItems = shoppingItems.filter((i) => !i.checked);
+  const uncheckedShopping = uncheckedShoppingItems.length;
   // Both from preferences now: the hour used to be a hardcoded 8pm and the
   // timezone a hardcoded Winnipeg.
   const prefs = profile?.preferences ?? DEFAULT_PREFERENCES;
@@ -182,7 +188,34 @@ export default async function TodayPage() {
   // The order (and what's shown at all) comes from Settings → Today. The old
   // layout was a fixed two-column grid; this is a straight list so a person can
   // put what they actually look at first.
-  const panels = prefs.todayPanels.filter((p) => p !== "vitals");
+  //
+  // Nothing is filtered out of this list. Vitals used to be, and was then
+  // rendered above the loop with only a hidden/shown class — so the up/down
+  // arrows in Settings moved it in the list and did nothing on the screen.
+  const panels = prefs.todayPanels;
+
+  // Every panel needs at least one figure to show; an account with none of
+  // these modules would otherwise get an empty frame.
+  const hasVitals = access.tasks || access.money || access.workout || access.shopping;
+
+  // Which tasks still have unfinished subtasks under them, and WHICH subtasks.
+  // `getTasks` returns only incomplete tasks, so anything here with a parent IS
+  // an open subtask. The console gets this because it is handed only the tasks
+  // due today and can't see a subtask sitting in another horizon — and without
+  // it, ticking a parent off Today skipped the confirmation Plan always shows.
+  //
+  // The subtask ids travel too, not just the parents'. This is computed once,
+  // when the page renders, and completing a task deliberately does not
+  // revalidate /today — so a flat list of parents went stale the moment
+  // anything was ticked, and finishing the last subtask here still left its
+  // parent asking about it. The console re-answers the question itself.
+  const openSubtasksByParent: Record<string, string[]> = {};
+  for (const t of tasks) {
+    if (!t.parent_task_id) continue;
+    const siblings = openSubtasksByParent[t.parent_task_id] ?? [];
+    siblings.push(t.id);
+    openSubtasksByParent[t.parent_task_id] = siblings;
+  }
 
   return (
     <div>
@@ -240,66 +273,70 @@ export default async function TodayPage() {
 
       <div className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-4 md:px-6 md:py-6">
         <DashboardGrid>
-          {/* VITALS. Every figure here is a link into the module that produced
-              it — seeing a number and acting on it should never be more than
-              one tap apart. It's a panel like the others now: Settings → Today
-              can move it or hide it. */}
-          <Reveal className={prefs.todayPanels.includes("vitals") ? undefined : "hidden"}>
-            <StatStrip columns={4}>
-              {access.tasks && (
-              <Stat
-                label="Due today"
-                value={dueCount}
-                href="/plan"
-                tone={overdueTasks.length > 0 ? "alert" : "default"}
-                sub={
-                  overdueTasks.length > 0
-                    ? `${overdueTasks.length} overdue`
-                    : dueCount === 0
-                      ? "All clear"
-                      : "tasks & routines"
-                }
-              />
-            )}
-            {access.money && (
-              <Stat
-                label="Safe to spend"
-                value={formatCents(money.safeToSpendCents)}
-                href="/money"
-                tone={money.safeToSpendCents < 0 ? "alert" : "default"}
-                sub={
-                  money.overCount > 0
-                    ? `${money.overCount} budget${money.overCount > 1 ? "s" : ""} over`
-                    : "this period"
-                }
-              />
-            )}
-            {access.workout && (
-              <Stat
-                label="Streak"
-                value={workout.currentStreak}
-                unit="days"
-                href="/workout"
-                tone={workout.loggedToday ? "ok" : "default"}
-                sub={workout.loggedToday ? "Logged today" : "Not logged yet"}
-              />
-            )}
-            {access.shopping && (
-              <Stat
-                label="Shopping"
-                value={uncheckedShopping}
-                href="/shopping"
-                sub={
-                  suggestions.length > 0
-                    ? `${suggestions.length} running low`
-                    : "on the list"
-                }
-                />
-              )}
-            </StatStrip>
-          </Reveal>
-
           {panels.map((panel) => {
+            // VITALS. Every figure here is a link into the module that
+            // produced it — seeing a number and acting on it should never be
+            // more than one tap apart. It is a panel like every other one:
+            // Settings → Today can move it anywhere in this list or drop it.
+            if (panel === "vitals") {
+              return hasVitals ? (
+                <Reveal key={panel}>
+                  <StatStrip columns={4}>
+                    {access.tasks && (
+                      <Stat
+                        label="Due today"
+                        value={dueCount}
+                        href="/plan"
+                        tone={overdueTasks.length > 0 ? "alert" : "default"}
+                        sub={
+                          overdueTasks.length > 0
+                            ? `${overdueTasks.length} overdue`
+                            : dueCount === 0
+                              ? "All clear"
+                              : "tasks & routines"
+                        }
+                      />
+                    )}
+                    {access.money && (
+                      <Stat
+                        label="Safe to spend"
+                        value={formatCents(money.safeToSpendCents)}
+                        href="/money"
+                        tone={money.safeToSpendCents < 0 ? "alert" : "default"}
+                        sub={
+                          money.overCount > 0
+                            ? `${money.overCount} budget${money.overCount > 1 ? "s" : ""} over`
+                            : "this period"
+                        }
+                      />
+                    )}
+                    {access.workout && (
+                      <Stat
+                        label="Streak"
+                        value={workout.currentStreak}
+                        unit="days"
+                        href="/workout"
+                        tone={workout.loggedToday ? "ok" : "default"}
+                        sub={workout.loggedToday ? "Logged today" : "Not logged yet"}
+                      />
+                    )}
+                    {access.shopping && (
+                      <Stat
+                        label="Shopping"
+                        value={uncheckedShopping}
+                        href="/shopping"
+                        sub={
+                          suggestions.length > 0
+                            ? `${suggestions.length} running low`
+                            : "on the list"
+                        }
+                      />
+                    )}
+                  </StatStrip>
+                </Reveal>
+              ) : null;
+            }
+
             if (panel === "outlook") {
               return outlook ? (
                 // Keyed by DATE, not by panel id. A tab left open across
@@ -321,6 +358,7 @@ export default async function TodayPage() {
                   dueTodayTasks={dueTodayTasks}
                   overdueTasks={overdueTasks}
                   routinesDueToday={routinesDueToday}
+                  openSubtasksByParent={openSubtasksByParent}
                   nextEventTitle={calendar.nextEventTitle}
                   nextEventTime={calendar.nextEventTime}
                   nowMinutes={nowMinutes}
@@ -339,11 +377,18 @@ export default async function TodayPage() {
             if (panel === "timeline") {
               return <TodaySoFar key={panel} events={ledgerToday} canOpenTimeline={access.tasks} />;
             }
+            if (panel === "shopping" && access.shopping) {
+              // Only the unchecked ones. Today is "what still needs doing";
+              // the ticked half of the list is history and lives on the
+              // Shopping screen.
+              return <ShoppingPanel key={panel} items={uncheckedShoppingItems} />;
+            }
             if (panel === "focus" && access.calendar) {
               return (
                 <FocusPanel
                   key={panel}
                   isEvening={isEvening}
+                  eveningRitualHour={prefs.eveningRitualHour}
                   focus={focus}
                   yesterdayReflection={yesterdayReflection}
                   openTasks={tasks}

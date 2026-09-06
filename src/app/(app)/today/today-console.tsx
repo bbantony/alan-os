@@ -11,6 +11,7 @@ import { utcToZonedParts } from "@/lib/time";
 import { getRoutineIcon } from "@/lib/routines/icon-registry";
 import { StreakBadge } from "@/components/streak-badge";
 import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tag } from "@/components/ui/tag";
 import { toast } from "@/components/ui/toast";
 import {
@@ -77,6 +78,7 @@ export function TodayConsole({
   dueTodayTasks,
   overdueTasks,
   routinesDueToday,
+  openSubtasksByParent,
   nextEventTitle,
   nextEventTime,
   nowMinutes,
@@ -84,6 +86,23 @@ export function TodayConsole({
   dueTodayTasks: Task[];
   overdueTasks: Task[];
   routinesDueToday: RoutineWithProgress[];
+  /**
+   * For each task that still has unfinished subtasks under it, the ids of
+   * those subtasks.
+   *
+   * A plain object rather than a Map or a Set because this crosses the
+   * server/client boundary. Computed on the page, which already holds the full
+   * task list — this component only ever sees the ones due today, so it cannot
+   * work this out for itself.
+   *
+   * WHY THE IDS AND NOT JUST THE PARENTS. It used to be a flat list of parent
+   * ids, decided once when the page rendered. Tick the last subtask here and
+   * then its parent, and the parent still asked "this still has unfinished
+   * subtasks" — about a subtask that had just been finished on this very
+   * screen. Keeping the ids lets that question re-answer itself against what
+   * has been ticked since, with no round trip to the server.
+   */
+  openSubtasksByParent: Record<string, string[]>;
   nextEventTitle: string | null;
   nextEventTime: string | null;
   /** Local wall-clock minutes at render, computed server-side so the app's
@@ -92,6 +111,35 @@ export function TodayConsole({
 }) {
   const [routines, setRoutines] = useState(routinesDueToday);
   const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set());
+  const [confirmTask, setConfirmTask] = useState<{ id: string; title: string } | null>(null);
+
+  // Recomputed as things are ticked: a parent only counts as blocked while at
+  // least one of its subtasks is still open, and one ticked in this session
+  // counts as done even though the page's own list was fetched before it was.
+  const openSubtaskIds = useMemo(() => {
+    const blocked = new Set<string>();
+    for (const [parentId, subtaskIds] of Object.entries(openSubtasksByParent)) {
+      if (subtaskIds.some((id) => !doneTaskIds.has(id))) blocked.add(parentId);
+    }
+    return blocked;
+  }, [openSubtasksByParent, doneTaskIds]);
+
+  /**
+   * The same guard Plan puts on the same action.
+   *
+   * Ticking a parent with unfinished subtasks is usually a mistake, and Plan
+   * has always asked first. This screen completed it silently — one action,
+   * two behaviours, decided by which screen you happened to be looking at.
+   * Un-ticking never asks: putting something back is not a decision worth
+   * interrupting.
+   */
+  function requestToggleTask(taskId: string, title: string) {
+    if (!doneTaskIds.has(taskId) && openSubtaskIds.has(taskId)) {
+      setConfirmTask({ id: taskId, title });
+      return;
+    }
+    toggleTask(taskId);
+  }
 
   // Optimistic, then persisted. Ticking a task off the dashboard has to be a
   // real completion — a checkbox that only looks checked until the next page
@@ -292,13 +340,30 @@ export function TodayConsole({
                   last={i === flow.length - 1}
                   isPast={item.minutes !== null && item.minutes < nowMinutes}
                   onToggleRoutine={toggleRoutine}
-                  onToggleTask={toggleTask}
+                  onToggleTask={requestToggleTask}
                 />
               ))}
             </ul>
           )}
         </Panel>
       </motion.div>
+
+      {/* Word for word what Plan asks. Two different sentences for the same
+          warning is the inconsistency this is here to remove. */}
+      <ConfirmDialog
+        open={!!confirmTask}
+        title="Complete this?"
+        description={
+          <>&ldquo;{confirmTask?.title}&rdquo; still has unfinished subtasks.</>
+        }
+        confirmLabel="Complete anyway"
+        confirmTone="default"
+        onConfirm={() => {
+          if (confirmTask) toggleTask(confirmTask.id);
+          setConfirmTask(null);
+        }}
+        onCancel={() => setConfirmTask(null)}
+      />
     </div>
   );
 }
@@ -398,7 +463,7 @@ function FlowRow({
   last: boolean;
   isPast: boolean;
   onToggleRoutine: (routine: RoutineWithProgress) => void;
-  onToggleTask: (id: string) => void;
+  onToggleTask: (id: string, title: string) => void;
 }) {
   const KindIcon = KIND_META[item.kind].icon;
   const checkable = item.kind === "routine" || item.kind === "task";
@@ -416,7 +481,7 @@ function FlowRow({
 
   function handleCheck() {
     if (item.routine) onToggleRoutine(item.routine);
-    else if (item.kind === "task") onToggleTask(item.key.replace("task-", ""));
+    else if (item.kind === "task") onToggleTask(item.key.replace("task-", ""), item.title);
   }
 
   return (

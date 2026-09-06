@@ -165,6 +165,16 @@ export async function setChecked(input: { id: string; checked: boolean }): Promi
     .eq("id", input.id)
     .eq("user_id", user.id);
   if (error) return { error: friendlyDbError(error) ?? "That didn't save. Try again." };
+
+  // Deliberately NOT revalidating here. Today's numbers strip does go stale
+  // when an item is ticked from the dashboard, but a revalidate in a server
+  // action refreshes whatever route CALLED it — and this action is called far
+  // more often from the Shopping screen, which would then re-render on every
+  // single tick and could briefly show an earlier tick's server list over a
+  // later optimistic one. The dashboard panel refreshes its own page instead
+  // (see today/shopping-panel.tsx), which fixes the count exactly where the
+  // problem is and leaves the Shopping screen, with its own list and offline
+  // outbox, completely alone.
   return {};
 }
 
