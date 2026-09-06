@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { ALL_TOOLS, type ToolContext } from "@/lib/ai/tools";
+import { isSuggestableTool } from "@/lib/ai/suggestable";
 import type { OutlookSuggestion } from "@/lib/ai/outlook";
 import { todayInAppTimezone } from "@/lib/time";
 
@@ -54,6 +55,16 @@ export async function runOutlookSuggestion(input: {
   // Idempotent: a double tap, or a tap on a stale render, must not run the same
   // write twice. Cheap to check and the only guard against it.
   if (action.actedAt) return { error: "That one's already done." };
+
+  // Belt and braces, matching timeline/actions.ts. The outlook already filters
+  // to the allowlist when it PARSES the model's reply, so nothing unauthorised
+  // should be stored — but a row written before that filter existed, or by a
+  // future path that forgets it, would otherwise still be executable here. The
+  // allowlist is the rule; this is the second place that enforces it, because
+  // one place enforcing a security rule is one bug away from none.
+  if (!isSuggestableTool(action.tool)) {
+    return { error: "That suggestion isn't something the app offers to do for you." };
+  }
 
   const tool = ALL_TOOLS.find((t) => t.name === action.tool);
   if (!tool) return { error: "That suggestion isn't something the app can do." };

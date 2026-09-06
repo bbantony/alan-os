@@ -3,11 +3,17 @@ import assert from "node:assert/strict";
 
 import { parseCsvAmount, readCsvAmount, normalizeCsvDate } from "../src/lib/finance/csv-parser.ts";
 import {
+  bucketsWithin,
   currentPeriodBounds,
+  customRangeFor,
+  customRangeProblem,
   daysInMonth,
+  exclusiveEndFor,
+  inclusiveLastDay,
   monthRangeFor,
   shiftPeriodRange,
   trendRangesFor,
+  trendUnitFor,
   weekRangeFor,
 } from "../src/lib/finance/period.ts";
 import { projectPayoff } from "../src/lib/finance/debt-payoff.ts";
@@ -623,6 +629,179 @@ test("shifting agrees with computing the same period from today", () => {
     const weekShifted = shiftPeriodRange(weekRangeFor("2026-09-02", 0, "monday"), "week", offset);
     assert.deepEqual(weekShifted, weekFromToday, `week offset ${offset}`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Where a range ends — the money off-by-one
+// ---------------------------------------------------------------------------
+//
+// `get_spending_by_category` filtered `.lte(to_date)`; the Reports screen
+// filtered `.lt(range.end)`. Same question, two answers, a day apart. The
+// tests below are the shapes of both filters run over transactions sitting
+// exactly on the four boundary dates — a date-maths fix that is also a
+// money-maths fix, so it gets tests twice over.
+
+/** The four dates that can be got wrong, one transaction on each, in cents. */
+const BOUNDARY_TXNS = [
+  { date: "2026-07-31", cents: 1000 },
+  { date: "2026-08-01", cents: 2000 },
+  { date: "2026-08-31", cents: 4000 },
+  { date: "2026-09-01", cents: 8000 },
+];
+
+/** What `.gte(start).lt(end)` — every query in the app — adds up to. */
+function totalInHalfOpen(start: string, end: string): number {
+  return BOUNDARY_TXNS.filter((t) => t.date >= start && t.date < end).reduce((s, t) => s + t.cents, 0);
+}
+
+test("the assistant and the Reports screen total the same August", () => {
+  const reports = monthRangeFor("2026-08-15", 0);
+  // What Reports counts.
+  assert.equal(totalInHalfOpen(reports.start, reports.end), 6000);
+
+  // What the tool counts now: a person's inclusive dates, translated once.
+  const toolEnd = exclusiveEndFor("2026-08-31");
+  assert.equal(toolEnd, reports.end);
+  assert.equal(totalInHalfOpen("2026-08-01", toolEnd), 6000);
+
+  // And the same question asked the other way the model phrases it — "to the
+  // 1st of September" — is now a DIFFERENT question (1 Sep included), not the
+  // same question with a different answer.
+  assert.equal(totalInHalfOpen("2026-08-01", exclusiveEndFor("2026-09-01")), 14000);
+});
+
+test("the old inclusive filter really did add a day, so this stays fixed", () => {
+  // The bug, reproduced: `.lte(to)` fed the range-shaped end date the overview
+  // handed the model. $140 for a month that contained $60.
+  const reports = monthRangeFor("2026-08-15", 0);
+  const oldToolTotal = BOUNDARY_TXNS.filter(
+    (t) => t.date >= reports.start && t.date <= reports.end
+  ).reduce((s, t) => s + t.cents, 0);
+  assert.equal(oldToolTotal, 14000);
+  assert.notEqual(oldToolTotal, totalInHalfOpen(reports.start, reports.end));
+});
+
+test("nothing exclusive is ever shown to a person or a model", () => {
+  // `get_money_overview` used to return the exclusive end as `period_end`,
+  // which is the day AFTER the period. It now returns the last day included.
+  const august = monthRangeFor("2026-08-15", 0);
+  assert.equal(august.end, "2026-09-01");
+  assert.equal(inclusiveLastDay(august.end), "2026-08-31");
+  assert.equal(exclusiveEndFor(inclusiveLastDay(august.end)), august.end); // round trip
+});
+
+// ---------------------------------------------------------------------------
+// Custom ranges — "since June"
+// ---------------------------------------------------------------------------
+
+test("a custom range takes two inclusive dates and returns an exclusive end", () => {
+  const r = customRangeFor("2026-06-01", "2026-06-30");
+  assert.equal(r.start, "2026-06-01");
+  assert.equal(r.end, "2026-07-01"); // 30 June is inside it
+  assert.ok("2026-06-30" >= r.start && "2026-06-30" < r.end);
+  assert.equal(r.longLabel, "1–30 Jun 2026");
+  assert.equal(r.label, "1–30 Jun");
+});
+
+test("a custom range collapses its label exactly like a week does", () => {
+  // Same month: one month name. Same year, two months: one year. Two years:
+  // both years. The rule is shared with `weekRangeFor`, so it cannot drift.
+  assert.equal(customRangeFor("2026-06-01", "2026-08-15").longLabel, "1 Jun – 15 Aug 2026");
+  assert.equal(customRangeFor("2025-12-29", "2026-01-04").longLabel, "29 Dec 2025 – 4 Jan 2026");
+  assert.equal(weekRangeFor("2026-09-01", 0, "monday").longLabel, "31 Aug – 6 Sep 2026");
+  // A single day is a range of one day, and reads as one day.
+  const oneDay = customRangeFor("2026-06-03", "2026-06-03");
+  assert.equal(oneDay.longLabel, "3 Jun 2026");
+  assert.equal(oneDay.label, "3 Jun");
+  assert.equal(oneDay.end, "2026-06-04");
+});
+
+test("the short label drops the year and the long label keeps it", () => {
+  const r = customRangeFor("2025-06-01", "2026-08-15");
+  assert.equal(r.label, "1 Jun – 15 Aug"); // chart axis
+  assert.equal(r.longLabel, "1 Jun 2025 – 15 Aug 2026"); // heading
+});
+
+test("a custom range refuses what it cannot report on, in plain English", () => {
+  // Malformed, in the three ways a model actually gets it wrong.
+  for (const bad of ["June", "2026-6-1", "2026-02-30", ""]) {
+    assert.match(
+      customRangeProblem(bad, "2026-06-30") ?? "",
+      /real days/,
+      `"${bad}" should have been refused`
+    );
+  }
+  // Backwards — refused, not silently swapped.
+  assert.equal(customRangeProblem("2026-06-30", "2026-06-01"), "That range ends before it starts.");
+  // Absurd span.
+  assert.match(customRangeProblem("2015-01-01", "2026-06-01") ?? "", /five years/);
+  // Typo'd year.
+  assert.match(customRangeProblem("0226-06-01", "2026-06-30") ?? "", /outside the years/);
+  // Hasn't started yet — only when a `today` is given to compare with.
+  assert.match(
+    customRangeProblem("2026-10-01", "2026-10-05", "2026-09-06") ?? "",
+    /hasn't started yet/
+  );
+  assert.equal(customRangeProblem("2026-10-01", "2026-10-05"), null);
+  // A single day and a perfectly ordinary range are fine.
+  assert.equal(customRangeProblem("2026-06-03", "2026-06-03", "2026-09-06"), null);
+  assert.equal(customRangeProblem("2026-06-01", "2026-09-06", "2026-09-06"), null);
+});
+
+test("building a range it would refuse throws that same sentence", () => {
+  // One list of rules: the thrower and the answerer must never disagree about
+  // what is legal, or a range refused by the screen builds fine in a tool.
+  assert.throws(() => customRangeFor("2026-06-30", "2026-06-01"), /ends before it starts/);
+  assert.throws(() => customRangeFor("June", "2026-06-30"), /real days/);
+});
+
+test("the trend buckets inside a custom range cover it exactly, with no day twice", () => {
+  for (const [from, to] of [
+    ["2026-06-01", "2026-09-06"], // part of September on the end
+    ["2026-08-20", "2026-09-06"], // short: weekly bars, both ends clipped
+    ["2026-06-03", "2026-06-03"], // one day
+    ["2025-11-15", "2026-02-02"], // across a year boundary
+  ]) {
+    const range = customRangeFor(from, to);
+    const buckets = bucketsWithin(range, trendUnitFor(range), "monday");
+    assert.ok(buckets.length > 0, `${from}..${to} produced no buckets`);
+    let cursor = range.start;
+    for (const b of buckets) {
+      assert.equal(b.start, cursor, `gap or overlap at ${b.start} in ${from}..${to}`);
+      cursor = b.end;
+    }
+    assert.equal(cursor, range.end, `buckets stopped short in ${from}..${to}`);
+  }
+});
+
+test("bucket size follows the length of the range, and the ends are clipped", () => {
+  const quarter = customRangeFor("2026-06-01", "2026-09-06");
+  assert.equal(trendUnitFor(quarter), "month");
+  const months = bucketsWithin(quarter, "month");
+  assert.deepEqual(months.map((b) => b.label), ["Jun", "Jul", "Aug", "Sep"]);
+  // The last bar is a part month and must not run to the end of September.
+  assert.equal(months[3].start, "2026-09-01");
+  assert.equal(months[3].end, "2026-09-07");
+  assert.equal(months[3].longLabel, "1–6 Sep 2026");
+
+  const fortnight = customRangeFor("2026-08-20", "2026-09-06");
+  assert.equal(trendUnitFor(fortnight), "week");
+  const weeks = bucketsWithin(fortnight, "week", "monday");
+  // The first bar starts on the 20th, not on the Monday before it.
+  assert.equal(weeks[0].start, "2026-08-20");
+  assert.equal(weeks[0].label, "20 Aug");
+  assert.equal(weeks[1].start, "2026-08-24"); // then whole Monday weeks
+});
+
+test("too many bars changes the bucket rather than dropping bars", () => {
+  // Five years of weekly bars is 260 of them. Asking for weeks anyway gets
+  // months, and still covers every day — a truncated chart would be a wrong
+  // picture with nothing on screen saying so.
+  const fiveYears = customRangeFor("2021-09-07", "2026-09-06");
+  const buckets = bucketsWithin(fiveYears, "week", "monday");
+  assert.ok(buckets.length <= 64, `${buckets.length} buckets is too many to read`);
+  assert.equal(buckets[0].start, fiveYears.start);
+  assert.equal(buckets[buckets.length - 1].end, fiveYears.end);
 });
 
 // ---------------------------------------------------------------------------

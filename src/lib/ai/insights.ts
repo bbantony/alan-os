@@ -7,6 +7,7 @@ import { startOfWeek } from "@/lib/streaks";
 import { addDaysToDateString, todayInAppTimezone } from "@/lib/time";
 import { getLedger, groupByDay, type LedgerEvent } from "@/lib/ledger";
 import { callGeminiJson, isAiConfigured } from "./gemini";
+import { sanitiseProposedAction } from "./suggestable";
 
 // The weekly pattern — the thing only a system holding all of it can say.
 //
@@ -37,9 +38,22 @@ export interface Insight {
  *
  * Alan chose "notice and suggest": it may put one action under your thumb, and
  * nothing happens until you tap it. Storing the *intent* rather than performing
- * it is the entire boundary — `tool` is a name from the existing registry
- * (lib/ai/tools.ts), so an insight can never reach past what the assistant
- * could already do, and the write tools there are deliberately narrow.
+ * it is the entire boundary.
+ *
+ * `tool` IS NOT "any name from lib/ai/tools.ts", which is what this comment
+ * used to claim and what the parse below used to allow. That registry includes
+ * `manage_budget`, `update_transaction` and `log_workout`, and
+ * `runSuggestedAction` executes by name — so until 6 Sep 2026 a weekly insight
+ * could propose a write to the money module and one tap would run it. Nothing
+ * cross-account (module access and RLS still held), but it is the model
+ * choosing a write and the person confirming something they didn't really
+ * choose, which is precisely what the "AI output never commits on its own"
+ * rule exists to stop. `tool` is now restricted to `SUGGESTABLE_TOOLS` in
+ * ./suggestable.ts — the same two names the Today outlook has always been
+ * limited to — and it is enforced HERE, at parse time, so an unauthorised
+ * proposal is never written to the database in the first place. The type stays
+ * `string` because rows written before that date may hold anything; the
+ * execution path re-checks.
  */
 export interface SuggestedAction {
   label: string;
@@ -208,11 +222,13 @@ export async function ensureWeeklyInsight(): Promise<Insight | null> {
   const parsed = result as { body?: unknown; suggested_action?: unknown } | null;
   if (!parsed || typeof parsed.body !== "string" || !parsed.body.trim()) return null;
 
-  const action = parsed.suggested_action as SuggestedAction | null | undefined;
-  const suggested =
-    action && typeof action.label === "string" && typeof action.tool === "string"
-      ? { label: action.label, tool: action.tool, args: action.args ?? {} }
-      : null;
+  // Only the two tools the prompt offers, and only well-formed ones — the same
+  // filter, from the same definition, that the outlook applies. A model that
+  // names anything else (invented, or a real but unsafe tool like
+  // `manage_budget`) gets its suggestion dropped here rather than stored and
+  // later executed on a tap. Null is a perfectly normal answer: most insights
+  // suggest nothing.
+  const suggested = sanitiseProposedAction(parsed.suggested_action);
 
   const { data: inserted } = await supabase
     .from("insights")

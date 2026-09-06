@@ -4,6 +4,13 @@
 Everything below was verified against the tree on 30 Aug – 2 Sep 2026, not recalled from a
 conversation. Where something is unverified, it says so.
 
+> **⚠ Read `NEXT-SESSION.md` first if you are the next session.** This file is the durable
+> cold-start guide — the project, the rules, the audit, the device — and it is still accurate on
+> all of that. But it is dated **2 Sep**, and Waves 1B, 1C, 2A and half of 2B have shipped since.
+> Its "what Alan is asking for now" (section 3) and its recommended first unit are **superseded**:
+> section 2's four data-losing findings were closed in the Wave 1 work, and the current job queue
+> is in `NEXT-SESSION.md`. Treat sections 0–2 here as reference and section 3 onward as history.
+
 ---
 
 ## 0. Read these first, in this order

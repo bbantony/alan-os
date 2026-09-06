@@ -5411,3 +5411,237 @@ real conversation even if you had just started a blank one in the sheet. The she
 fact about the browser; the page asks the server what your latest chat is. Nothing is misfiled —
 the screen and the target always agree — so this is documented in MANUAL.md rather than papered
 over.
+
+---
+
+## 68. Wave 2B — "add a routine that waters the plants every 3 days at 7pm" (6 Sep 2026)
+
+**What was asked for:** the assistant could tick a routine off but not make one. Routines are a
+core part of the app, and "set up a routine that reminds me to water the plants every 3 days at
+7pm" is exactly the sort of sentence the assistant exists for. So: give it a create-routine tool.
+
+**The thing that made this more than a one-liner.** Creating a routine is four separate writes,
+not one — the routine, its checklist steps, the reminder that actually nudges the phone, and the
+mirrored Google Calendar event. A tool that only did the first would have produced a routine that
+looks perfect on the Plan screen, has no steps, never nudges, and never appears in the calendar,
+with nothing anywhere reporting a problem. The tool does all four, in the same order and with the
+same anchoring the routine dialog uses.
+
+**What changed, one by one:**
+
+- **New tool `create_routine`** in `src/lib/ai/tools.ts`, appended to the registry. Title,
+  how it repeats, time of day, whether to nudge, an optional checklist, category and icon.
+  It writes the routine, its steps, the linked reminder and the Google Calendar mirror, and
+  reports back what it made in plain terms ("repeats every 3 days, 19:00, reminder on").
+- **The schedule is described in words, not numbers.** The day of the week is passed by name
+  ("tuesday"), never as a number, because the app counts 0 = Monday while JavaScript counts
+  0 = Sunday — a model picking the wrong convention would have built routines a day out, forever,
+  with no error to show for it. A bare number is refused rather than guessed at.
+- **Anything half-said is asked about rather than assumed.** "Weekly" with no day, "monthly"
+  with no date, or a time that can't be read all come back as a short question instead of a
+  quietly-wrong default.
+- **"Every 1 day" now means daily.** The underlying rule-builder clamps intervals to a minimum
+  of two, so an interval of 1 would have silently become every-other-day — half the reminders
+  asked for.
+- **The start date is carried through all four writes.** "Every 3 days" is only half a schedule
+  until you say *from when*; the routine's own creation date is read back off the insert and used
+  to work out the first reminder and the first calendar event, so the nudge lands on the same days
+  the card says it will (the anchoring migration 0040 added).
+- **New `src/lib/routines/icon-names.ts`** — the twelve routine icon names as plain data, with no
+  React attached, so the assistant layer and the test runner can use them. `icon-registry.ts` is
+  now typed against that list, so the two can never drift apart, and an icon name the model
+  invents is snapped to a real one before it is stored.
+- **New `src/lib/routines/parse.ts`** — the pure "sentence to schedule" rules: weekday names,
+  wall-clock times ("7pm" → 19:00, and 12pm is noon, not midnight), and the repeat pattern.
+  No database, no clock offsets: the time is stored as a wall clock and turned into a real moment
+  later by code that knows about daylight saving, which is the rule everywhere in this app.
+- **A same-name routine is refused** rather than created twice, so a re-tapped suggestion or a
+  retried question can't leave two identical routines behind. Exact name match only — the fuzzy
+  matcher used elsewhere would have blocked "Water the plants" because "Water filter" exists.
+- **Tests** added to `tests/streaks-and-recurrence.test.mts` for every one of those traps:
+  the day-of-week off-by-one, every-1-day, the missing day/date questions, 7pm in both halves of
+  the year, and the every-3-days anchor.
+
+## 69. Wave 2B — one answer per money question, and reports that understand "since June" (6 Sep 2026)
+
+**Asked for:** fix the money off-by-one first — the assistant's spending tool counted a date range
+one way and the Reports screen counted it another, so "what did I spend in August" could come back
+with two different totals — then give the report path the ability to cover a stretch of dates
+rather than only a whole month or week, and give the assistant a tool that uses it.
+
+- **The bug, confirmed before it was fixed.** `get_spending_by_category` filtered
+  `txn_date <= to_date` while the Reports screen filtered `txn_date < range.end`. Run over four
+  transactions sitting on the four boundary dates (31 Jul $10, 1 Aug $20, 31 Aug $40, 1 Sep $80),
+  Reports said $60 for August and the tool said $140 — for the same month. It only agreed when the
+  model happened to phrase the end date the way a person would; `get_money_overview` was handing it
+  the other phrasing (`period_end`, which is really the *first day of the next* period) in the same
+  conversation.
+- **One convention, written down in `src/lib/finance/period.ts`.** Inside the code every range is
+  half-open — `[start, end)`, end exclusive — because that is the only way consecutive periods join
+  up with no gap and no day counted twice. Every date a person says, a date picker returns, or the
+  assistant sends or is shown is inclusive, and is converted exactly once at that boundary by two
+  new one-line functions (`exclusiveEndFor`, `inclusiveLastDay`). The reasoning, and the numbers
+  above, are in a comment at the top of that section.
+- **Three query paths brought onto it.** `get_spending_by_category` and `list_transactions` now
+  translate the inclusive date they were given and filter `< end` like everything else (identical
+  results for a date a person named, no possible disagreement for anything else), and
+  `get_money_overview` reports `period_last_day` instead of the exclusive `period_end`, so nothing
+  exclusive is ever shown to the model again. The assistant's own instructions now say the rule out
+  loud too.
+- **The report queries moved to one shared home**, `src/lib/finance/report-queries.ts` — the same
+  category, trend and merchant queries, byte for byte, with the same four filters (CAD only, no
+  transfers, expense categories only, user-scoped) and the same all-pages reading. They were private
+  to the Reports screen; the assistant had grown its own second copy, which is how the two answers
+  happened in the first place. `getReport` is still the only authenticated way in for the screen.
+- **`customRangeFor(start, lastDate)`** — new pure function turning two dates a person named into a
+  range, labelled the way weeks already are: "1–30 Jun 2026", "1 Jun – 15 Aug 2026",
+  "1 Jun 2025 – 15 Aug 2026", "3 Jun 2026" for a single day. The label-collapsing rule is now shared
+  with weeks rather than copied, so they cannot drift.
+- **It refuses bad input in plain English rather than guessing**: something that isn't a real date
+  ("June", "2026-02-30"), a year outside 2000–2099, an end before the start (refused, never silently
+  swapped), a span over about five years, or a range that hasn't started yet. One list of rules,
+  `customRangeProblem`, used both by the code that answers and the code that throws.
+- **`getReport` takes a range**, as `{unit: "custom", start, lastDate}` alongside the existing
+  `{unit, offset}` — one endpoint rather than a sibling action, because the queries, the failure
+  handling and the returned shape are identical and a second door would be a second chance to drift.
+  The field is called `lastDate`, not `end`, so handing it a range object by mistake is a compile
+  error instead of a report one day too long.
+- **The trend chart works over a range too.** `bucketsWithin` chops a custom range into consecutive
+  month or week bars clipped to its own edges, so they add up to exactly the range's total. Too many
+  bars changes the bucket size (weeks fall back to months) rather than dropping bars off the end.
+- **New assistant tool `get_money_report`** — total spent, total income, net, daily average, biggest
+  categories with their share, top merchants, and each month or week inside the range compared. It
+  calls the same shared queries the Reports screen does, so the assistant and the screen cannot
+  disagree. Read-only, Money-module gated, and a failed query returns "couldn't load those figures"
+  rather than zeros that would read as "you spent nothing".
+- **Both money-range tools now read the account's own timezone** rather than the hardcoded Winnipeg
+  default, because the Reports screen does — otherwise the two could still disagree about which day
+  a range ends on.
+- **Tests** in `tests/money-and-units.test.mts`: the off-by-one in both directions (including the
+  old behaviour, so it stays fixed), the inclusive/exclusive round trip, every label-collapsing case,
+  every validation refusal, and that the trend buckets cover a custom range exactly with no day in
+  two bars.
+
+## 70. Wave 2B — a suggestion chip could have offered to move money; now it can't (6 Sep 2026)
+
+**Asked for:** while building the routine verb, a hole turned up in the AI suggestion chips. Close it.
+
+**The hole.** Two screens let the AI put an action under Alan's thumb: the Today outlook and the
+weekly Timeline insight. The outlook only ever allowed two harmless suggestions — add a task, add
+shopping items — and threw away anything else the model said. The Timeline insight had no such
+list. It stored whatever the model named, and tapping the chip ran it. So a weekly insight could
+have offered "change your grocery budget" or "log this workout" and one tap would have done it.
+Nobody else's data was ever reachable (the app's per-account locks all still held), but the AI
+choosing a change and Alan confirming something he didn't really choose is exactly what the app's
+"the AI suggests, it never commits" rule exists to prevent.
+
+**What changed, one by one:**
+- **New `src/lib/ai/suggestable.ts`** — one list of the only two things an AI suggestion may ever
+  propose (`create_task`, `add_shopping_items`), with the rule for membership written down: it must
+  only ADD something, never edit, delete, or touch money, and undoing it by mistake must be one tap.
+  The near-misses are listed with reasons — completing a task or routine edits history and inflates
+  a streak; creating a routine creates a recurring obligation; logging an expense or workout feeds
+  other numbers; budgets, goals and transactions are categorically out.
+- **The weekly insight now applies that list when the model answers**, so an unauthorised suggestion
+  is never written to the database at all, rather than being caught later at tap time.
+- **The Today outlook now uses the same shared list** instead of its own copy of the same two names.
+  No behaviour change there — it is the same two tools — but there is now one definition instead of
+  two that could drift apart.
+- **The Timeline "do it" button re-checks before running**, because rows written before today could
+  already name something unsafe. (Checked the live database read-only: there are no stored
+  suggestions at all yet, on either screen, so nothing existing is affected.)
+- **The same button now re-reads the suggestion from the database instead of trusting what the
+  browser sent it**, which is how the Today version always worked — otherwise a handcrafted request
+  could have used it as a general-purpose write. It also refuses a second tap on one already done.
+- **Tests** in `tests/ai-suggestions.test.mts`: every unsafe tool name is rejected, junk shapes are
+  rejected, a good suggestion survives intact, the cap counts survivors rather than input positions,
+  and a renamed tool in the registry would fail the suite rather than quietly become a dead button.
+
+## 71. Wave 2B — a crew member could spend Alan's AI budget (6 Sep 2026)
+
+**Asked for:** close the hole entry 67 recorded but deliberately left open, because it was a
+permissions change and deserved its own pass rather than being buried inside the assistant wave.
+
+**The hole.** Alan can give someone (a workout crew member, say) an account that only unlocks the
+workout section. The assistant is supposed to be off for those accounts — it costs real money per
+question, and it is Alan's card. The lock was on the *address*: try to visit the assistant page
+without permission and you are turned away. But the assistant's "ask" button doesn't navigate
+anywhere; it sends the question from whatever page you are already standing on. So the lock never
+got a look in. A crew member could have made the app ask questions all day and Alan would have got
+the bill.
+
+To be exact about what was and wasn't at risk: **no private information was ever reachable.** The
+app already hands each account only the tools its own sections allow, so a workout-only account
+could only ever have asked about workouts — never money, never shopping, never tasks. What was
+exposed was the spending, not the data.
+
+**What changed, one by one:**
+- **`src/app/(app)/assistant/actions.ts` now checks permission itself**, at the top of `ask()`,
+  before anything else happens. An account that isn't allowed the assistant gets the same polite
+  "isn't switched on for this account" message the app already shows when the AI key is missing or
+  the monthly ceiling is reached — a shape the screen already knows how to display, so there was no
+  new failure mode to design.
+- **It asks the same question the page lock asks** (`canAccessPath(profile, "/assistant")`) rather
+  than checking the underlying module by hand. There is one place that decides who may use the
+  assistant; this is now the second thing consulting it instead of a second opinion that could
+  drift. If the assistant ever gets its own toggle in Settings, this line needs no edit.
+- **The refusal happens before the model is called and before any conversation is looked up or
+  created**, which is the whole point: a blocked account now costs one database read and writes
+  nothing at all — no usage row, so no charge, and no empty conversation left behind.
+
+**Not yet verified against the live database.** The check is straightforward and reviewed, but the
+adversarial test the plan calls for — a second account set to workout-only, confirming the refusal
+*and* confirming no row lands in `ai_usage` — has not been run. That test is the one that proves
+the billing is actually closed rather than merely refused politely, and it is written down as the
+first job of the next session.
+
+## 72. Handing Wave 2B to a fresh session (6 Sep 2026)
+
+**Asked for:** "i want to take this to another session because you are out of context. do
+accordingly and give me instructions what to do."
+
+**What changed, one by one:**
+- **New `NEXT-SESSION.md`** at the top of the repo — a note from this session to the next one, not
+  documentation. It records exactly where the work stands, the four jobs left in Wave 2B and in what
+  order, which review findings are already dealt with and which are still open, and a list of the
+  things that cost this session time so the next one doesn't rediscover them. It says out loud which
+  claims have evidence behind them and which don't. **It is meant to be deleted** once Wave 2B is
+  finished and written into `PROGRESS.md`.
+- **A near-miss worth recording, because the fix is a habit and not a line of code.** That note was
+  first written straight over `HANDOFF.md` — the 520-line cold-start guide from 2 Sep — without
+  reading what was already there. Git had it, so nothing was lost, but only because the file was
+  already committed. `HANDOFF.md` is restored intact and the two now have different jobs:
+  `HANDOFF.md` is the durable guide to the project for someone arriving with no context at all, and
+  `NEXT-SESSION.md` is the short-lived note about the work currently in flight.
+- **`HANDOFF.md` gained a warning at the top** saying which of it has gone stale. It is five days
+  old and four waves have shipped since; its "read this section first" recommendation points at four
+  data-losing bugs that have since been fixed. Checked rather than assumed — the shopping outbox now
+  replays in queue order and counts attempts, and the evening ritual checks the save before saying
+  "Plan set". Sections 0–2 are still true and are marked as reference; section 3 onward is marked
+  history.
+- **Three comments that were describing code that no longer exists were rewritten**, each one
+  checked against the file it was talking about rather than trusted:
+  - `lib/finance/period.ts` said `lib/ledger.ts` "converts on the way in". It doesn't. Five of its
+    six queries filter plain date columns where `.lte(to)` *is* the inclusive answer and no
+    conversion is wanted; only the sixth, a timestamp, converts. The comment now says which and why,
+    because the rule is "never show an exclusive date to a person or a model", not "always convert".
+  - `lib/finance/report-queries.ts` called itself "the ONLY copy". It isn't — `get_spending_by_category`
+    still runs its own narrower query, deliberately, because folding it in would mean fetching four
+    things to answer one. What is true is that the two can no longer disagree by a day, since both
+    now turn the date at their own boundary the same way. That's a shared *rule* rather than shared
+    *code*, so the comment now warns that changing the convention means changing two places.
+  - `lib/ai/tools.ts` still claimed the assistant "cannot touch budgets, goals, debts or recurring
+    rules" and "cannot delete anything". It has been able to change budgets and goals since the money
+    audit, and `manage_*` can delete. The header now lists all twelve writing tools by name and
+    states the boundary that actually still holds — nothing moves money between accounts, nothing
+    touches debts, and nothing runs unasked. Listed rather than described on purpose: a list can be
+    checked against `writes: true`; an adjective is how this comment got to be wrong for weeks.
+- **The build was fixed, and it was never broken.** `npm run build` had been refusing with "Another
+  next build process is already running" — there was no such process. A build killed part-way leaves
+  `.next/diagnostics/build-diagnostics.json` saying `"buildStage": "static-generation"`, and every
+  later build believes it. Deleting that one file was the whole fix; it is written down in
+  `HANDOFF.md` because it will happen again.
+
+**Where this leaves it:** lint, build and all 166 tests pass on this tree. What is in this commit is
+landed but **not blessed** — `unit-reviewer` has not seen the final state, so nothing has been marked
+complete in `PROGRESS.md` and nothing is claimed finished.

@@ -1,11 +1,32 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { todayInAppTimezone, addDaysToDateString, zonedTimeToUtc } from "@/lib/time";
+import {
+  todayInAppTimezone,
+  addDaysToDateString,
+  daysBetweenDateStrings,
+  zonedTimeToUtc,
+} from "@/lib/time";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import { formatCents } from "@/lib/finance/money";
 import { toStoredKg } from "@/lib/workout/units";
-import { currentPeriodBounds } from "@/lib/finance/period";
+import {
+  bucketsWithin,
+  currentPeriodBounds,
+  customRangeFor,
+  customRangeProblem,
+  exclusiveEndFor,
+  inclusiveLastDay,
+  trendUnitFor,
+  type PeriodUnit,
+} from "@/lib/finance/period";
+import {
+  queryCategorySpend,
+  queryIncomeTotal,
+  querySpendTrend,
+  queryTopMerchants,
+} from "@/lib/finance/report-queries";
+import { resolvePreferences, type WeekStart } from "@/lib/preferences";
 import type { ModuleId, ModuleAccess } from "@/lib/permissions";
 import {
   TASK_HORIZONS,
@@ -14,6 +35,18 @@ import {
   type TaskHorizon,
 } from "@/lib/tasks/types";
 import { friendlyDbError } from "@/lib/db-errors";
+// Routine creation reuses the machinery routines/actions.ts uses, rather than
+// a second, simpler version of it — see the long note above `createRoutine`
+// near the bottom of this file for why that matters.
+import { buildRRuleString, describeRRule, firstReminderInstant } from "@/lib/reminders/rrule";
+import { syncToGcal } from "@/lib/gcal/sync";
+import { clampRoutineIcon, ROUTINE_ICON_NAMES } from "@/lib/routines/icon-names";
+import {
+  recurrenceFromWords,
+  parseWallClockTime,
+  ROUTINE_REPEATS,
+  WEEKDAY_NAMES,
+} from "@/lib/routines/parse";
 import type { FunctionDeclaration, ToolParameterSchema } from "./gemini";
 
 /**
@@ -31,11 +64,27 @@ import type { FunctionDeclaration, ToolParameterSchema } from "./gemini";
  * `log_expense` tool exists. Prompt injection can't reach a tool that was
  * never in the request.
  *
- * WRITES ARE NARROW ON PURPOSE. The assistant can add a task, tick one off,
- * log an expense, and add to the shopping list — the small, reversible,
- * everyday things. It cannot delete anything, cannot move money between
- * accounts, and cannot touch budgets, goals, debts or recurring rules. Those
- * are decisions, and decisions stay on the screens that were built for them.
+ * WRITES ARE ENUMERATED, NOT NARROW — keep this list honest. Every tool with
+ * `writes: true` is one Alan asked for out loud, and the set has grown well
+ * past the "small and reversible" line it started on. As of 6 Sep 2026 there
+ * are twelve: `create_task`, `complete_task`, `update_task`, `log_expense`,
+ * `update_transaction`, `add_shopping_items`, `manage_shopping_item`,
+ * `log_workout`, `manage_budget`, `manage_goal`, `complete_routine`,
+ * `create_routine`.
+ *
+ * So the honest statement of the boundary is no longer "it cannot touch
+ * budgets and goals" — it can, and `manage_*` and `update_transaction` can
+ * delete as well as edit. What still holds is:
+ *   - nothing here moves money between accounts, or touches debts;
+ *   - nothing here runs unasked. A tool fires only inside a turn the person
+ *     started, and the two places where the AI proposes on its own initiative
+ *     (the Today outlook and the Timeline insight) are held to a far shorter
+ *     list in lib/ai/suggestable.ts — add-only, two names.
+ *
+ * The reason to enumerate rather than characterise: this comment has been
+ * wrong before. It claimed budgets and goals were out of reach for the whole
+ * life of `manage_budget`. A list can be checked against `writes: true`; an
+ * adjective cannot.
  */
 
 export interface ToolContext {
@@ -72,6 +121,30 @@ function asString(value: unknown): string | null {
 
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * The account's own "today", and when its weeks start.
+ *
+ * NOT `todayInAppTimezone()` with no argument. That falls back to the hardcoded
+ * Winnipeg constant, and the Reports screen reads the profile instead — so on
+ * any account whose timezone differs, the two would disagree about which day a
+ * range ends on and hand back two different totals for one question. Money
+ * tools that resolve a date range read the same row the screen does.
+ */
+async function toolPeriodContext(
+  ctx: ToolContext
+): Promise<{ today: string; weekStart: WeekStart }> {
+  const { data } = await ctx.supabase
+    .from("profiles")
+    .select("preferences, timezone")
+    .eq("id", ctx.userId)
+    .maybeSingle();
+  return {
+    // `undefined`, not null, so `todayInAppTimezone` applies its own default.
+    today: todayInAppTimezone((data?.timezone as string) || undefined),
+    weekStart: resolvePreferences(data?.preferences).weekStart,
+  };
 }
 
 // Finds the row whose name the model referred to in plain language ("groceries",
@@ -335,7 +408,13 @@ const moneyOverview: AiTool = {
         left: formatCents(b.amount_cents - spent),
         period: b.period,
         period_start: start,
-        period_end: end,
+        // The LAST DAY OF THE PERIOD, not the exclusive end the maths uses.
+        // This used to return `end`, which is the day AFTER the period — and
+        // the model, having been handed "2026-09-01" for August, would pass it
+        // straight back as an inclusive `to_date` on the next tool call and
+        // get a whole extra day of spending in August's total. Nothing the
+        // model is shown is exclusive; see lib/finance/period.ts.
+        period_last_day: inclusiveLastDay(end),
       });
     }
 
@@ -367,6 +446,11 @@ const listTransactions: AiTool = {
     const today = todayInAppTimezone();
     const from = asString(args.from_date) ?? addDaysToDateString(today, -30);
     const to = asString(args.to_date) ?? today;
+    // A model can send "June" or "2026-02-30". Both used to reach the database
+    // as-is; now one of them would reach `exclusiveEndFor`, which throws on a
+    // date it cannot add a day to. Checked first, answered in a sentence.
+    const dateProblem = customRangeProblem(from, to);
+    if (dateProblem) return { error: dateProblem };
 
     const { data: categories } = await ctx.supabase
       .from("categories")
@@ -379,7 +463,11 @@ const listTransactions: AiTool = {
       .select("amount_cents, currency, merchant, note, txn_date, category_id, source")
       .eq("user_id", ctx.userId)
       .gte("txn_date", from)
-      .lte("txn_date", to)
+      // Inclusive in, exclusive out — the app's one rule for the end of a
+      // range (lib/finance/period.ts). Same rows as the old `.lte(to)` for a
+      // date a person named; the point is that there is now a single filter
+      // shape everywhere, so no query can quietly mean a different day.
+      .lt("txn_date", exclusiveEndFor(to))
       .order("txn_date", { ascending: false })
       .limit(100);
 
@@ -417,17 +505,27 @@ const listTransactions: AiTool = {
 const spendingByCategory: AiTool = {
   name: "get_spending_by_category",
   description:
-    "Total spending per category over a date range, biggest first. Use for summaries, comparisons between periods, and reports.",
+    "Total spending per category over a date range, biggest first. Dates are inclusive at both ends. For a whole report over a stretch of time — income, net, daily average, merchants, month by month — use get_money_report instead.",
   module: "money",
   writes: false,
   parameters: obj({
-    from_date: str("Start date, YYYY-MM-DD. Defaults to the start of this month."),
-    to_date: str("End date, YYYY-MM-DD, inclusive. Defaults to today."),
+    from_date: str("First day to include, YYYY-MM-DD. Defaults to the start of this month."),
+    to_date: str("Last day to include, YYYY-MM-DD. Defaults to today."),
   }),
   async run(ctx, args) {
-    const today = todayInAppTimezone();
+    // THE OFF-BY-ONE THIS FIXES, because it was a money one. This query used
+    // to filter `.lte(to_date)` while the Reports screen filtered
+    // `.lt(range.end)`, so "what did I spend in August" had two answers
+    // depending on which boundary date the model happened to send: the
+    // person's "31 August" agreed with Reports, the range-shaped "1 September"
+    // added the whole of 1 September to August. Now the inclusive date a
+    // person names is turned into the exclusive end every other query in the
+    // app uses, once, here at the boundary. See lib/finance/period.ts.
+    const { today } = await toolPeriodContext(ctx);
     const from = asString(args.from_date) ?? `${today.slice(0, 7)}-01`;
     const to = asString(args.to_date) ?? today;
+    const dateProblem = customRangeProblem(from, to);
+    if (dateProblem) return { error: dateProblem };
 
     const { data } = await ctx.supabase
       .from("transactions")
@@ -436,7 +534,7 @@ const spendingByCategory: AiTool = {
       .eq("currency", "CAD")
       .is("transfer_group_id", null)
       .gte("txn_date", from)
-      .lte("txn_date", to);
+      .lt("txn_date", exclusiveEndFor(to));
 
     const totals = new Map<string, number>();
     let incomeCents = 0;
@@ -464,6 +562,126 @@ const spendingByCategory: AiTool = {
       total_income: formatCents(incomeCents),
       net: formatCents(incomeCents - spentCents),
       categories,
+    };
+  },
+};
+
+/**
+ * The whole spending report for a stretch of time, over the SAME queries the
+ * Reports screen runs.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM `get_spending_by_category`. That tool
+ * answers "which categories", and "how did I do since June" is a different
+ * question: it wants the total against the income, the daily rate, where it
+ * went, and whether it got better or worse month by month. Answering it by
+ * making four tool calls and adding up got a different total than the Reports
+ * screen showed, which is how the off-by-one at the top of this file survived
+ * so long. This calls `lib/finance/report-queries.ts` — the same functions
+ * `getReport` calls, with the same four filters and the same paging — so the
+ * assistant and the screen can only ever agree.
+ *
+ * READ-ONLY, AND THAT MATTERS BEYOND THE ASSISTANT. `ALL_TOOLS` is also the
+ * registry the Today outlook and the Timeline look suggestions up in, so
+ * anything added here can in principle be named by a suggestion chip. The
+ * BOTH now filter to the same two-name allowlist in lib/ai/suggestable.ts —
+ * at parse time, so an unauthorised proposal is never stored, and again before
+ * execution, so a row written before that filter existed cannot run either.
+ * This tool is not on that list and could not be proposed even if it were
+ * named. Nothing is written, nothing is
+ * spent, and module access is still checked before it runs.
+ */
+const moneyReport: AiTool = {
+  name: "get_money_report",
+  description:
+    "The full money report for any stretch of time: total spent, total income, net, daily average, biggest categories, top merchants, and how each month or week inside the range compares. Use for 'how did I do since June', 'how was the last three months', or any question about a period rather than a list of transactions. These are the same figures the Reports screen shows.",
+  module: "money",
+  writes: false,
+  parameters: obj(
+    {
+      from_date: str("First day to include, YYYY-MM-DD."),
+      to_date: str("Last day to include, YYYY-MM-DD. Defaults to today."),
+      group_by: {
+        type: "STRING",
+        description:
+          "Bucket size for the period-by-period comparison. Leave out to pick by how long the range is.",
+        enum: ["auto", "month", "week"],
+      },
+      top_merchants: num("How many merchants to list. Default 5, most 20."),
+    },
+    ["from_date"]
+  ),
+  async run(ctx, args) {
+    const { today, weekStart } = await toolPeriodContext(ctx);
+    const from = asString(args.from_date);
+    if (!from) return { error: "Since when?" };
+    const to = asString(args.to_date) ?? today;
+
+    // Answered as a sentence, never thrown: `customRangeFor` throws on exactly
+    // this input, and the model can act on "that range ends before it starts"
+    // where it can do nothing at all with a crash.
+    const problem = customRangeProblem(from, to, today);
+    if (problem) return { error: problem };
+    const range = customRangeFor(from, to);
+
+    // RE-CLAMPED HERE even though the schema declares the enum, for the reason
+    // spelled out on `create_task` above: a schema is a request, not a
+    // guarantee, and any model told about this tool second-hand can send
+    // something else. An unrecognised value is not an error here — it falls
+    // back to picking the bucket by span, which is what "auto" means.
+    const asked = asString(args.group_by);
+    const unit: PeriodUnit = asked === "month" || asked === "week" ? asked : trendUnitFor(range);
+    const buckets = bucketsWithin(range, unit, weekStart);
+
+    const merchantLimit = Math.min(20, Math.max(1, Math.floor(asNumber(args.top_merchants) ?? 5)));
+
+    const [byCategory, income, trend, merchants] = await Promise.all([
+      queryCategorySpend(ctx.supabase, ctx.userId, range),
+      queryIncomeTotal(ctx.supabase, ctx.userId, range),
+      querySpendTrend(ctx.supabase, ctx.userId, buckets),
+      queryTopMerchants(ctx.supabase, ctx.userId, range, merchantLimit),
+    ]);
+
+    // A failed query returns EMPTY, not zero. Handing the model empty lists
+    // would have it tell Alan he spent nothing since June, which is a lie with
+    // a dollar sign on it.
+    if (byCategory.failed || income.failed || trend.failed || merchants.failed) {
+      return { error: "Couldn't load those figures just now." };
+    }
+
+    const spentCents = byCategory.rows.reduce((sum, c) => sum + c.totalCents, 0);
+    const days = daysBetweenDateStrings(range.start, range.end); // `end` exclusive = day count
+    // Integer cents in and out: the division is rounded back to a whole cent
+    // immediately, so nothing downstream ever holds a fraction of one.
+    const perDayCents = days > 0 ? Math.round(spentCents / days) : 0;
+
+    return {
+      period: range.longLabel,
+      from: range.start,
+      to: inclusiveLastDay(range.end), // inclusive, the way it was asked for
+      days,
+      total_spent: formatCents(spentCents),
+      total_income: formatCents(income.totalCents),
+      net: formatCents(income.totalCents - spentCents),
+      average_spend_per_day: formatCents(perDayCents),
+      note: "Canadian dollars. Transfers between the person's own accounts are excluded, and income is counted separately from spending.",
+      categories: byCategory.rows.map((c) => ({
+        category: c.categoryName,
+        total: formatCents(c.totalCents),
+        total_cents: c.totalCents,
+        share_percent: spentCents > 0 ? Math.round((c.totalCents / spentCents) * 100) : 0,
+      })),
+      merchants: merchants.rows.map((m) => ({
+        merchant: m.merchant,
+        total: formatCents(m.totalCents),
+        total_cents: m.totalCents,
+      })),
+      // Same order as `buckets`, so each row can carry the label a person would
+      // recognise rather than the short axis one.
+      by_period: trend.rows.map((row, i) => ({
+        period: buckets[i]?.longLabel ?? row.label,
+        total: formatCents(row.totalCents),
+        total_cents: row.totalCents,
+      })),
     };
   },
 };
@@ -1413,6 +1631,244 @@ const completeRoutine: AiTool = {
   },
 };
 
+/**
+ * Set up a whole routine from a sentence.
+ *
+ * FOUR THINGS HAPPEN WHEN A ROUTINE IS CREATED, and a tool that does one of
+ * them has not created a routine — it has left a half-built one that looks
+ * fine on the Plan screen and never nudges. `routines/actions.ts`
+ * `createRoutine` writes the routine row, writes its steps, writes the linked
+ * reminder, and mirrors the whole thing to Google Calendar. This tool does all
+ * four, in the same order and with the same anchoring, because the alternative
+ * was not shipping it.
+ *
+ * WHY IT DOESN'T JUST CALL THAT SERVER ACTION. Every tool in this file writes
+ * through `ctx.supabase` — the person's own client, so RLS is doing the
+ * security work (see the note at the top). The `"use server"` actions build
+ * their own client from cookies and call `revalidatePath`, which is a
+ * request-scoped thing this can be invoked outside of. The cost of staying
+ * consistent with the rest of the file is that the four steps are written out
+ * again here; the mitigation is that everything with a decision in it —
+ * building the rrule, choosing the first reminder instant, the calendar
+ * payload — is the SAME imported function the action calls, not a copy.
+ *
+ * THE START DATE IS THE PART THAT SILENTLY BREAKS. "Every 3 days" is not a
+ * schedule until you say every 3 days FROM WHEN. The routine's own
+ * `created_at` is that anchor everywhere else in the app (streaks,
+ * "due today", the edit form), so it is read straight back off the insert and
+ * handed to `firstReminderInstant` for both the reminder and the calendar
+ * event. Anchor them on "today" instead and the nudge lands on a different set
+ * of days than the card it belongs to — a drift nobody would ever spot as a
+ * bug, only as a routine that "doesn't work properly".
+ */
+const createRoutine: AiTool = {
+  name: "create_routine",
+  description:
+    "Set up a new repeating routine — something done over and over, like watering the plants every 3 days at 7pm, or stretching every weekday morning. Use this for anything that repeats; use create_task for a one-off. Put the schedule in the arguments, never in the title.",
+  module: "tasks",
+  writes: true,
+  parameters: obj(
+    {
+      title: str("What the routine is, in the person's own words. No schedule in the title."),
+      repeat: {
+        type: "STRING",
+        description: "How often it comes round.",
+        enum: [...ROUTINE_REPEATS],
+      },
+      every_n_days: num("Only with repeat=every_n_days. The gap in days: 3 means every third day."),
+      weekday: {
+        type: "STRING",
+        description: "Only with repeat=weekly. The day, by name.",
+        enum: [...WEEKDAY_NAMES],
+      },
+      day_of_month: num("Only with repeat=monthly. Which date, 1-31."),
+      time_of_day: str(
+        "Time of day as HH:mm, 24-hour — 19:00 for 7pm. Omit if it isn't tied to a time."
+      ),
+      remind: {
+        type: "BOOLEAN",
+        description:
+          "Send a phone notification at that time. On by default whenever a time is given; pass false if they only want it sitting on the list.",
+      },
+      steps: {
+        type: "ARRAY",
+        description: "A checklist, if it has one. Omit for a single habit.",
+        items: { type: "STRING" },
+      },
+      category: {
+        type: "STRING",
+        description: "Which part of life this belongs to.",
+        enum: ["personal", "work", "errand", "pr_application", "french", "other"],
+      },
+      icon: {
+        type: "STRING",
+        description: "A small picture for the routine's card. Pick the closest one.",
+        enum: [...ROUTINE_ICON_NAMES],
+      },
+    },
+    ["title", "repeat"]
+  ),
+  async run(ctx, args) {
+    const title = asString(args.title);
+    if (!title) return { error: "What should the routine be called?" };
+
+    // Every loose argument is re-checked here rather than trusted from the
+    // schema, for the reason spelled out on create_task above: a schema is a
+    // request, and this tool is reachable from prompts that were written
+    // elsewhere (the outlook and the timeline build their own).
+    const parsed = recurrenceFromWords({
+      repeat: args.repeat,
+      every_n_days: args.every_n_days,
+      weekday: args.weekday,
+      day_of_month: args.day_of_month,
+    });
+    if ("error" in parsed) return parsed;
+    const rrule = buildRRuleString(parsed.recurrence) ?? "RRULE:FREQ=DAILY";
+
+    // A time that can't be read is an error, never a default. Guessing 09:00
+    // for "at 7" would produce a nudge at the wrong time every single day.
+    const rawTime = asString(args.time_of_day);
+    const timeOfDay = rawTime ? parseWallClockTime(rawTime) : null;
+    if (rawTime && !timeOfDay) {
+      return { error: `"${rawTime}" isn't a time I can read. Say it like 19:00.` };
+    }
+
+    // An unknown icon name does NOT throw — `getRoutineIcon` falls back to a
+    // generic loop — so nothing downstream would ever report it and the wrong
+    // picture would sit on the card forever. Clamped to a real name here.
+    const icon = clampRoutineIcon(args.icon);
+
+    // `category` is the task_category Postgres enum: an unknown value makes
+    // the insert throw with the raw enum error in its message.
+    const categories = Object.keys(TASK_CATEGORY_LABELS) as TaskCategory[];
+    const category = categories.includes(asString(args.category) as TaskCategory)
+      ? (asString(args.category) as TaskCategory)
+      : "personal";
+
+    // Defaults to ON when there's a time. The routine dialog defaults it off,
+    // but someone typing "remind me to water the plants at 7" has already said
+    // what they want; the model can pass false when they haven't.
+    const remind = typeof args.remind === "boolean" ? args.remind : Boolean(timeOfDay);
+
+    const givenSteps = Array.isArray(args.steps)
+      ? args.steps.map((s) => asString(s)).filter((s): s is string => Boolean(s))
+      : [];
+    // Every routine has at least one step, even a bare habit — 0020's shape.
+    const stepTitles = givenSteps.length > 0 ? givenSteps : [title];
+
+    // A NAME-CLASH CHECK, and deliberately neither of this file's matchers.
+    // `matchByName` is fuzzy on purpose and would refuse to create "Water the
+    // plants" because "Water filter" exists; `matchOneStrictly` exists for
+    // picking out the one row a destructive change will land on, which is not
+    // the question here. The question is only "is this exact name already
+    // taken", so it's exact, case-insensitive equality — enough to stop a
+    // retried or re-tapped suggestion quietly creating the same routine twice.
+    const { data: existingRoutines } = await ctx.supabase
+      .from("routines")
+      .select("id, title")
+      .eq("user_id", ctx.userId)
+      .eq("active", true)
+      .limit(200);
+    const clash = ((existingRoutines as { id: string; title: string }[]) ?? []).find(
+      (r) => r.title.trim().toLowerCase() === title.toLowerCase()
+    );
+    if (clash) {
+      return { error: `There's already a routine called "${clash.title}".` };
+    }
+
+    // --- 1 of 4: the routine itself ----------------------------------------
+    const id = crypto.randomUUID();
+    const { data: created, error } = await ctx.supabase
+      .from("routines")
+      .insert({
+        id,
+        user_id: ctx.userId,
+        title,
+        icon,
+        category,
+        rrule,
+        time_of_day: timeOfDay,
+      })
+      .select("created_at")
+      // maybeSingle, matching the action: `single` would turn "saved fine but
+      // came back empty" into an error and report a failure that didn't
+      // happen. A missing row just leaves the anchor null below.
+      .maybeSingle();
+    if (error) return { error: friendlyDbError(error) ?? "That didn't save." };
+    const routineStart = (created?.created_at as string | undefined)?.slice(0, 10) ?? null;
+
+    // --- 2 of 4: its steps --------------------------------------------------
+    // The error is checked and reported. The action ignores it, which is
+    // survivable there because the person is looking at the form and can see
+    // the result; here the only account of what happened is what this returns.
+    const notes: string[] = [];
+    const { error: stepsError } = await ctx.supabase.from("routine_steps").insert(
+      stepTitles.map((stepTitle, i) => ({
+        routine_id: id,
+        title: stepTitle.trim(),
+        sort_order: i,
+      }))
+    );
+    if (stepsError) {
+      notes.push("The routine saved but its checklist didn't — add the steps on the Plan screen.");
+    }
+
+    // --- 3 of 4: the nudge --------------------------------------------------
+    // Anchored on the routine's own start date, so the first reminder lands on
+    // a day the routine is actually due (and not today at a time that has
+    // already gone by).
+    if (remind && timeOfDay) {
+      const remindAt = firstReminderInstant(rrule, timeOfDay, new Date(), routineStart).toISOString();
+      const { error: reminderError } = await ctx.supabase.from("reminders").insert({
+        user_id: ctx.userId,
+        title,
+        remind_at: remindAt,
+        rrule,
+        linked_routine_id: id,
+      });
+      if (reminderError) {
+        notes.push("The routine saved but the reminder didn't — switch it on from the Plan screen.");
+      }
+    }
+
+    // --- 4 of 4: Google Calendar -------------------------------------------
+    // Same instant as the reminder, same recurrence, and a popup 0 minutes
+    // before because a routine fires AT its time rather than ahead of it. A
+    // no-op for an account that hasn't connected a calendar.
+    if (timeOfDay) {
+      const startIso = firstReminderInstant(rrule, timeOfDay, new Date(), routineStart).toISOString();
+      const synced = await syncToGcal({
+        supabase: ctx.supabase,
+        userId: ctx.userId,
+        table: "routines",
+        rowId: id,
+        existingEventId: null,
+        title,
+        startIso,
+        recurrence: [rrule],
+        reminderMinutesBefore: remind ? 0 : null,
+      });
+      // Never fatal — the routine exists either way — but said out loud
+      // rather than swallowed, and only ever the plain-English message.
+      if (!synced.ok && synced.failure) {
+        notes.push(`It didn't reach Google Calendar. ${synced.failure.message}`);
+      }
+    }
+
+    return {
+      created: {
+        title,
+        repeats: describeRRule(rrule),
+        time_of_day: timeOfDay,
+        reminder: Boolean(remind && timeOfDay),
+        steps: stepTitles.length,
+        starts: routineStart,
+      },
+      ...(notes.length > 0 ? { problems: notes } : {}),
+    };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // The registry
 // ---------------------------------------------------------------------------
@@ -1425,6 +1881,7 @@ export const ALL_TOOLS: AiTool[] = [
   moneyOverview,
   listTransactions,
   spendingByCategory,
+  moneyReport,
   listRecurring,
   reconciliationStatus,
   logExpense,
@@ -1433,6 +1890,7 @@ export const ALL_TOOLS: AiTool[] = [
   workoutSummary,
   // Added when Alan asked for an assistant that can actually change things.
   updateTask,
+  createRoutine,
   completeRoutine,
   manageShoppingItem,
   logWorkout,

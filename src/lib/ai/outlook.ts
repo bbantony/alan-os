@@ -6,6 +6,7 @@ import { resolvePreferences } from "@/lib/preferences";
 import type { ModuleAccess } from "@/lib/permissions";
 import { callGeminiJson, isAiConfigured } from "./gemini";
 import type { SuggestedAction } from "./insights";
+import { sanitiseProposedActions } from "./suggestable";
 
 // The daily outlook — what today actually looks like, once, across everything.
 //
@@ -256,22 +257,15 @@ export async function ensureDailyOutlook(facts: OutlookFacts): Promise<DailyOutl
   // Only the two tools the prompt offers, and only well-formed ones. A model
   // that invents a tool name gets its suggestion dropped here rather than at
   // tap time, where it would be a dead button.
-  const allowed = new Set(["create_task", "add_shopping_items"]);
-  const suggestions: OutlookSuggestion[] = Array.isArray(parsed.suggestions)
-    ? (parsed.suggestions as unknown[])
-        .filter((s): s is SuggestedAction => {
-          const a = s as SuggestedAction | null;
-          return Boolean(
-            a &&
-              typeof a.label === "string" &&
-              a.label.trim().length > 0 &&
-              typeof a.tool === "string" &&
-              allowed.has(a.tool)
-          );
-        })
-        .slice(0, 3)
-        .map((s) => ({ label: s.label.trim(), tool: s.tool, args: s.args ?? {}, actedAt: null }))
-    : [];
+  //
+  // The allowlist itself moved to ./suggestable.ts on 6 Sep 2026 — unchanged in
+  // content, but it now has one home instead of living inline here. The weekly
+  // insight had no filter at all and could propose a money write; giving both
+  // surfaces the same definition is what stops that gap reopening on one side
+  // while the other looks fine.
+  const suggestions: OutlookSuggestion[] = sanitiseProposedActions(parsed.suggestions, 3).map(
+    (s) => ({ ...s, actedAt: null })
+  );
 
   const generatedAt = new Date().toISOString();
 

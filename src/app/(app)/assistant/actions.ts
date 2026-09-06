@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/supabase/profile";
+import { canAccessPath } from "@/lib/permissions";
 import { askAssistant, type AssistantReply } from "@/lib/ai/assistant";
 import {
   CONVERSATION_CAP_PER_USER,
@@ -374,6 +375,38 @@ export async function ask(input: {
 
   const profile = await getCurrentProfile();
   if (!profile) redirect("/login");
+
+  // --- Can this account use the assistant at all? --------------------------
+  //
+  // THE HOLE THIS CLOSES. `/assistant` is gated in ROUTE_MODULE_ALIASES
+  // (lib/permissions.ts) precisely because, as the comment there says, it
+  // "spends the owner's Gemini credit" — but that guard works by ADDRESS, and a
+  // server action posts to whatever page you are already on. A crew account
+  // with workout-only access never visits /assistant and so never trips the
+  // guard, yet could call this action directly from any page it can reach and
+  // bill the owner for every question. No data leaked — `toolsFor()` filters
+  // the tools per account, so it could only ever have asked about workouts —
+  // but the spending was real and uncapped by anything except the monthly
+  // ceiling.
+  //
+  // Asked of `canAccessPath` rather than by reading `moduleAccess.tasks` here.
+  // That file exists because three copies of this check drifted apart once;
+  // putting a fourth literal in a different file is how it happens again. If
+  // the assistant is ever moved to its own module, this line needs no edit.
+  //
+  // Refused BEFORE the conversation lookup and before any model call, so a
+  // blocked account costs one profile read and writes nothing — no row in
+  // `ai_usage`, no empty conversation for 0041's pruning trigger to act on.
+  if (!canAccessPath(profile, "/assistant")) {
+    return {
+      text: "",
+      actions: [],
+      unavailable: "The assistant isn't switched on for this account.",
+      usage: await getUsageSummary(),
+      conversationId: null,
+      persisted: false,
+    };
+  }
 
   // --- Find the conversation. Nothing is CREATED here. ----------------------
   //

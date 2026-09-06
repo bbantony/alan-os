@@ -46,3 +46,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Throwaway ad-hoc verification scripts. Never commit these.
+qa-tmp-*

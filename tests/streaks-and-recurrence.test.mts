@@ -2,7 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { computeStreak, computeDueStreak } from "../src/lib/streaks.ts";
-import { isDueOnDate, nextOccurrenceUtc, nextFutureOccurrenceUtc } from "../src/lib/reminders/rrule.ts";
+import {
+  isDueOnDate,
+  nextOccurrenceUtc,
+  nextFutureOccurrenceUtc,
+  buildRRuleString,
+  firstReminderInstant,
+} from "../src/lib/reminders/rrule.ts";
+import { recurrenceFromWords, parseWallClockTime } from "../src/lib/routines/parse.ts";
+import { clampRoutineIcon, ROUTINE_ICON_NAMES } from "../src/lib/routines/icon-names.ts";
 import { utcToZonedParts, APP_TIMEZONE } from "../src/lib/time.ts";
 
 /**
@@ -135,4 +143,169 @@ test("the iteration guard falls back to the plain single step", () => {
 
   assert.equal(next?.toISOString(), "2026-01-02T15:00:00.000Z");
   assert.equal(next?.toISOString(), nextOccurrenceUtc("RRULE:FREQ=DAILY", oldDue)?.toISOString());
+});
+
+// ---------------------------------------------------------------------------
+// Spoken schedules → the recurrence a routine is actually created with
+// ---------------------------------------------------------------------------
+//
+// The assistant's create_routine tool (lib/ai/tools.ts) takes a sentence's
+// worth of loose arguments and has to produce the exact same RecurrenceOptions
+// the routine dialog produces. Every case below is a way that mapping can be
+// ALMOST right — a schedule off by a day or by a factor of two, which nothing
+// reports as an error and which only shows up weeks later as a routine that
+// nudges on the wrong days.
+
+// The tool's own two steps in one: loose arguments in, the rrule string that
+// would actually be stored on the routine out. Throwing on the error branch
+// keeps each case below to a single readable line.
+function rruleFromWords(input: Parameters<typeof recurrenceFromWords>[0]): string {
+  const parsed = recurrenceFromWords(input);
+  if ("error" in parsed) throw new Error(parsed.error);
+  return buildRRuleString(parsed.recurrence) ?? "(none)";
+}
+
+test("every 3 days builds the every-3-days rule, not every 2", () => {
+  assert.equal(
+    rruleFromWords({ repeat: "every_n_days", every_n_days: 3 }),
+    "RRULE:FREQ=DAILY;INTERVAL=3"
+  );
+});
+
+test("every 1 day is daily, not silently every other day", () => {
+  // buildRRuleString clamps the interval to a minimum of 2, so passing 1
+  // straight through would halve how often the routine came round.
+  assert.equal(rruleFromWords({ repeat: "every_n_days", every_n_days: 1 }), "RRULE:FREQ=DAILY");
+});
+
+test("every Tuesday means Tuesday — the 0=Monday offset is not the model's problem", () => {
+  assert.equal(
+    rruleFromWords({ repeat: "weekly", weekday: "tuesday" }),
+    "RRULE:FREQ=WEEKLY;BYDAY=TU"
+  );
+  assert.equal(rruleFromWords({ repeat: "weekly", weekday: "Tue" }), "RRULE:FREQ=WEEKLY;BYDAY=TU");
+});
+
+test("Sunday is Sunday, the far end of the week where the off-by-one lives", () => {
+  assert.equal(
+    rruleFromWords({ repeat: "weekly", weekday: "sunday" }),
+    "RRULE:FREQ=WEEKLY;BYDAY=SU"
+  );
+});
+
+test("a bare weekday NUMBER is refused rather than guessed", () => {
+  // 0 means Monday here and Sunday in JavaScript's own Date. Guessing wrong
+  // gives a routine that is a day out, forever, with nothing on screen to
+  // say so.
+  assert.ok("error" in recurrenceFromWords({ repeat: "weekly", weekday: 0 }));
+});
+
+test("weekly with no day named asks instead of picking Monday", () => {
+  assert.ok("error" in recurrenceFromWords({ repeat: "weekly" }));
+});
+
+test("monthly on the 1st, and monthly with no date asks", () => {
+  assert.equal(
+    rruleFromWords({ repeat: "monthly", day_of_month: 1 }),
+    "RRULE:FREQ=MONTHLY;BYMONTHDAY=1"
+  );
+  assert.ok("error" in recurrenceFromWords({ repeat: "monthly" }));
+  assert.ok("error" in recurrenceFromWords({ repeat: "monthly", day_of_month: 32 }));
+});
+
+test("the pattern is inferred from whichever detail was given", () => {
+  assert.equal(rruleFromWords({ every_n_days: 4 }), "RRULE:FREQ=DAILY;INTERVAL=4");
+  assert.equal(rruleFromWords({ weekday: "friday" }), "RRULE:FREQ=WEEKLY;BYDAY=FR");
+  assert.equal(rruleFromWords({}), "RRULE:FREQ=DAILY");
+  assert.equal(rruleFromWords({ repeat: "weekdays" }), "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+});
+
+// ---------------------------------------------------------------------------
+// Wall-clock times
+// ---------------------------------------------------------------------------
+
+test("7pm is 19:00 and midday is not midnight", () => {
+  assert.equal(parseWallClockTime("7pm"), "19:00");
+  assert.equal(parseWallClockTime("7:30 PM"), "19:30");
+  assert.equal(parseWallClockTime("12pm"), "12:00");
+  assert.equal(parseWallClockTime("12am"), "00:00");
+  assert.equal(parseWallClockTime("19:00"), "19:00");
+  assert.equal(parseWallClockTime("7:05"), "07:05");
+  assert.equal(parseWallClockTime("07:00:00"), "07:00");
+});
+
+test("a time that cannot be read comes back null, never a default", () => {
+  assert.equal(parseWallClockTime("evening"), null);
+  assert.equal(parseWallClockTime("25:00"), null);
+  assert.equal(parseWallClockTime("7:99"), null);
+  assert.equal(parseWallClockTime("13pm"), null);
+  assert.equal(parseWallClockTime(""), null);
+  assert.equal(parseWallClockTime(undefined), null);
+});
+
+test("the parsed time is a wall clock, not an instant with an offset baked in", () => {
+  // Why HH:MM is stored rather than a moment: firstReminderInstant resolves it
+  // against a real date and the app timezone, so the routine is at 19:00 local
+  // in both halves of the year. A hardcoded offset is what made
+  // assistant-created things an hour early for five months a year.
+  const timeOfDay = parseWallClockTime("7pm")!;
+  const summer = firstReminderInstant(
+    "RRULE:FREQ=DAILY",
+    timeOfDay,
+    new Date("2026-07-01T12:00:00Z"),
+    "2026-07-01"
+  );
+  const winter = firstReminderInstant(
+    "RRULE:FREQ=DAILY",
+    timeOfDay,
+    new Date("2026-12-01T12:00:00Z"),
+    "2026-12-01"
+  );
+  assert.equal(utcToZonedParts(summer, APP_TIMEZONE).hour, 19);
+  assert.equal(utcToZonedParts(winter, APP_TIMEZONE).hour, 19);
+  // Different UTC instants — CDT vs CST — for the same wall clock.
+  assert.equal(summer.toISOString().slice(11, 16), "00:00");
+  assert.equal(winter.toISOString().slice(11, 16), "01:00");
+});
+
+test("an every-3-days routine's first nudge counts from its own start date", () => {
+  // Migration 0040's anchor. Created on the 6th, so its due days are the 6th,
+  // 9th, 12th... Asked at midday on the 7th, the next 19:00 slot is the 9th —
+  // NOT the 8th, which is what an unanchored rule (today as day zero) gives.
+  const anchored = firstReminderInstant(
+    "RRULE:FREQ=DAILY;INTERVAL=3",
+    "19:00",
+    new Date("2026-09-07T17:00:00Z"),
+    "2026-09-06"
+  );
+  // Compared in Winnipeg, not in UTC: 19:00 CDT is already the next day in
+  // UTC, so an ISO-string date comparison here would read 2026-09-10 and
+  // prove nothing about the schedule.
+  assert.equal(utcToZonedParts(anchored, APP_TIMEZONE).day, 9);
+  assert.equal(utcToZonedParts(anchored, APP_TIMEZONE).hour, 19);
+
+  // The same routine asked before its own first slot on day zero: it fires
+  // today.
+  const sameDay = firstReminderInstant(
+    "RRULE:FREQ=DAILY;INTERVAL=3",
+    "19:00",
+    new Date("2026-09-06T17:00:00Z"),
+    "2026-09-06"
+  );
+  assert.equal(utcToZonedParts(sameDay, APP_TIMEZONE).day, 6);
+  assert.equal(utcToZonedParts(sameDay, APP_TIMEZONE).hour, 19);
+});
+
+// ---------------------------------------------------------------------------
+// Routine icons
+// ---------------------------------------------------------------------------
+
+test("an icon the model invented becomes a real one instead of a wrong picture", () => {
+  assert.equal(clampRoutineIcon("Droplet"), "Droplet");
+  assert.equal(clampRoutineIcon("droplet"), "Droplet");
+  assert.equal(clampRoutineIcon("WateringCan"), "Repeat");
+  assert.equal(clampRoutineIcon(undefined), "Repeat");
+  assert.equal(clampRoutineIcon(7), "Repeat");
+  // Every name the tool offers the model is one the registry can draw.
+  for (const name of ROUTINE_ICON_NAMES) assert.equal(clampRoutineIcon(name), name);
 });

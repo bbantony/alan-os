@@ -1099,8 +1099,19 @@ and spend the owner's AI credit. The route guard works by address and a server a
 whatever page you're on, so the guard never sees it. No data leaks — tools are filtered per
 account. The fix is a module check inside the action.
 
-**Next: Wave 2B** — the verbs the assistant still lacks (routines, the evening ritual, reports on
-demand over a real date range) and propose-then-confirm, reusing the outlook's one-tap pattern.
+**Wave 2B is HALF LANDED and NOT signed off. The running notes are in `NEXT-SESSION.md`; read that
+before picking it up.** Landed on 6 Sep but deliberately not marked complete here, because it has
+not had the two reports this project requires: `create_routine` with the loose-language parser
+behind it, custom report date ranges (`customRangeFor` / `customRangeProblem` and the shared
+`lib/finance/report-queries.ts`, so the Reports screen and the assistant run the same queries),
+the `get_money_report` tool, an allowlist (`lib/ai/suggestable.ts`) that stops an AI suggestion chip
+from ever proposing anything but "add a task" or "add to the shopping list", and the module check
+that closes the crew-account billing hole recorded just above. CHANGELOG 68–72. Lint, build and
+166 tests pass. Still to do: prove the billing fix leaves no `ai_usage` row, the evening-ritual
+verbs (`get_day_plan`, `plan_tomorrow`), and propose-then-confirm.
+
+**The rest of Wave 2B** — the evening-ritual verbs, and propose-then-confirm reusing the outlook's
+one-tap pattern.
 Note from the Wave 2 scout: a receipt is a photo, and tools carry text only, so "here's a
 photo" stays a button rather than becoming a verb. Then **Wave 3** — Fold two-pane layouts,
 unlocked orientation, share_target.
