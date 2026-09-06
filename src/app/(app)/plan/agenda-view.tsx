@@ -3,7 +3,6 @@
 import { CalendarDays } from "lucide-react";
 
 import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
-import { cn } from "@/lib/utils";
 import { formatDayRelative } from "@/lib/calendar";
 import { PlanRow } from "./plan-row";
 import type { PlanItem } from "./actions";

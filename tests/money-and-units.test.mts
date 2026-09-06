@@ -2,14 +2,26 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { parseCsvAmount, readCsvAmount, normalizeCsvDate } from "../src/lib/finance/csv-parser.ts";
-import { currentPeriodBounds, daysInMonth } from "../src/lib/finance/period.ts";
+import {
+  currentPeriodBounds,
+  daysInMonth,
+  monthRangeFor,
+  shiftPeriodRange,
+  trendRangesFor,
+  weekRangeFor,
+} from "../src/lib/finance/period.ts";
 import { projectPayoff } from "../src/lib/finance/debt-payoff.ts";
 import { incrementInDisplayUnit, smallestIncrementKg } from "../src/lib/workout/units.ts";
 import { friendlyDbError } from "../src/lib/db-errors.ts";
 import { guessCategoryForMerchant, normaliseMerchant } from "../src/lib/finance/categorise.ts";
 import { balanceDeltaCents, txnIsIncome } from "../src/lib/finance/balance.ts";
-import { adjustmentFor, appBalanceOnDate, reconcileGapCents } from "../src/lib/finance/reconcile.ts";
-import { formatDateOnlyInAppTimezone } from "../src/lib/time.ts";
+import {
+  adjustmentFor,
+  appBalanceOnDate,
+  monthEndCheckStatus,
+  reconcileGapCents,
+} from "../src/lib/finance/reconcile.ts";
+import { daysBetweenDateStrings, formatDateOnlyInAppTimezone } from "../src/lib/time.ts";
 
 /**
  * The first tests in this project.
@@ -457,4 +469,200 @@ test("a bare YYYY-MM-DD renders as that same calendar day in Winnipeg", () => {
   assert.equal(formatDateOnlyInAppTimezone("2026-01-01", ymd), "2026-01-01");
   // And the exact shape of the original bug, shown not to happen.
   assert.notEqual(formatDateOnlyInAppTimezone("2026-09-02", ymd), "2026-09-01");
+});
+
+// ---------------------------------------------------------------------------
+// Report periods — the week, and the week-start preference
+// ---------------------------------------------------------------------------
+//
+// Reports only ever spoke in calendar months. Adding the week means adding a
+// second definition of when a week begins unless it reuses `startOfWeek`, and
+// means a whole new class of off-by-one: month boundaries, year boundaries,
+// and the daylight-saving change. House rule — date maths gets tests.
+
+test("week offset 0 is the week containing today, Monday to Sunday", () => {
+  // Tue 1 Sep 2026. Monday-start: 31 Aug -> 6 Sep, `end` exclusive on 7 Sep.
+  const r = weekRangeFor("2026-09-01", 0, "monday");
+  assert.equal(r.start, "2026-08-31");
+  assert.equal(r.end, "2026-09-07");
+  assert.equal(r.longLabel, "31 Aug – 6 Sep 2026");
+});
+
+test("the week-start preference actually moves the week", () => {
+  // Same Tuesday, Sunday-start: the week began the day before, 30 August.
+  const r = weekRangeFor("2026-09-01", 0, "sunday");
+  assert.equal(r.start, "2026-08-30");
+  assert.equal(r.end, "2026-09-06");
+  // The preference had existed since the streaks work and only `lib/ai/insights.ts`
+  // ever read it, so both screens that showed weeks silently used Monday.
+  assert.notEqual(r.start, weekRangeFor("2026-09-01", 0, "monday").start);
+});
+
+test("today itself always falls inside week offset 0, on either setting", () => {
+  for (const start of ["monday", "sunday"] as const) {
+    for (let day = 1; day <= 30; day++) {
+      const today = `2026-09-${String(day).padStart(2, "0")}`;
+      const r = weekRangeFor(today, 0, start);
+      assert.ok(today >= r.start && today < r.end, `${today} (${start}) outside its own week`);
+    }
+  }
+});
+
+test("negative week offsets step back a clean seven days each", () => {
+  assert.equal(weekRangeFor("2026-09-01", -1, "monday").start, "2026-08-24");
+  assert.equal(weekRangeFor("2026-09-01", -5, "monday").start, "2026-07-27");
+  assert.equal(weekRangeFor("2026-09-01", -5, "monday").end, "2026-08-03");
+  assert.equal(weekRangeFor("2026-09-01", -5, "sunday").start, "2026-07-26");
+});
+
+test("a week spanning a month boundary is still one week, labelled with both months", () => {
+  const r = weekRangeFor("2026-10-02", 0, "monday"); // Fri 2 Oct -> week of Mon 28 Sep
+  assert.equal(r.start, "2026-09-28");
+  assert.equal(r.end, "2026-10-05");
+  assert.equal(r.longLabel, "28 Sep – 4 Oct 2026");
+});
+
+test("a week spanning a year boundary keeps both years", () => {
+  const r = weekRangeFor("2027-01-01", 0, "monday"); // Fri 1 Jan 2027 -> week of Mon 28 Dec 2026
+  assert.equal(r.start, "2026-12-28");
+  assert.equal(r.end, "2027-01-04");
+  assert.equal(r.longLabel, "28 Dec 2026 – 3 Jan 2027");
+});
+
+test("a week containing the Winnipeg daylight-saving change is still exactly seven days", () => {
+  // Clocks go forward Sun 8 Mar 2026 and back Sun 1 Nov 2026. Both weeks must
+  // contain exactly seven dates: the maths runs on YYYY-MM-DD strings at UTC
+  // midnight precisely so an hour appearing or vanishing cannot shorten a week.
+  for (const today of ["2026-03-09", "2026-11-02"]) {
+    const r = weekRangeFor(today, -1, "monday");
+    const days = daysBetweenDateStrings(r.start, r.end);
+    assert.equal(days, 7, `week before ${today} was ${days} days`);
+  }
+  const spring = weekRangeFor("2026-03-09", -1, "monday");
+  assert.equal(spring.start, "2026-03-02");
+  assert.equal(spring.end, "2026-03-09"); // 8 March, the day the clocks moved, is inside it
+  assert.ok("2026-03-08" >= spring.start && "2026-03-08" < spring.end);
+});
+
+test("months still work, and a month offset crossing a year does not produce month zero", () => {
+  // The original bug: `((month - 1) % 12) + 1` kept the sign of its left
+  // operand, so stepping back past January produced "2025-00-01", Postgres
+  // rejected it, and the screen showed $0 spent rather than an error.
+  const r = monthRangeFor("2026-01-15", -2);
+  assert.equal(r.start, "2025-11-01");
+  assert.equal(r.end, "2025-12-01");
+  assert.equal(r.label, "Nov");
+  assert.equal(r.longLabel, "November 2025");
+});
+
+test("the trend buckets end at the selected period and never overlap", () => {
+  const weeks = trendRangesFor("2026-09-01", { unit: "week", offset: 0 }, 6, "monday");
+  assert.equal(weeks.length, 6);
+  assert.equal(weeks[5].start, "2026-08-31"); // last bucket is the selected week
+  assert.equal(weeks[0].start, "2026-07-27");
+  for (let i = 1; i < weeks.length; i++) {
+    assert.equal(weeks[i - 1].end, weeks[i].start, "gap or overlap between trend buckets");
+  }
+
+  const months = trendRangesFor("2026-09-01", { unit: "month", offset: -1 }, 3, "monday");
+  assert.deepEqual(months.map((m) => m.label), ["Jun", "Jul", "Aug"]);
+});
+
+test("a week's trend labels are days, not month names", () => {
+  // Labels always travelled with the data; what they came from was a fixed
+  // twelve-entry month-name table in the server action, which cannot name a
+  // week at all. The table is gone and each range labels itself instead.
+  const weeks = trendRangesFor("2026-09-01", { unit: "week", offset: 0 }, 2, "monday");
+  assert.deepEqual(weeks.map((w) => w.label), ["24 Aug", "31 Aug"]);
+});
+
+// ---------------------------------------------------------------------------
+// Shifting a range you already have, with no clock
+// ---------------------------------------------------------------------------
+//
+// This is what the Reports navigator uses when the connection drops mid-tap.
+// Getting it wrong means the heading names a different period from the one the
+// arrows took you to, which is the exact lie the whole period module exists to
+// prevent — so it is anchored on a date the server chose, never on `new Date()`.
+
+test("a shifted month range crosses a year boundary correctly", () => {
+  const january = monthRangeFor("2026-01-15", 0);
+  assert.equal(shiftPeriodRange(january, "month", -1).longLabel, "December 2025");
+  assert.equal(shiftPeriodRange(january, "month", -1).start, "2025-12-01");
+  assert.equal(shiftPeriodRange(january, "month", 2).longLabel, "March 2026");
+  // Shifting by nothing is the range you already had.
+  assert.deepEqual(shiftPeriodRange(january, "month", 0), january);
+});
+
+test("a shifted week keeps the user's week start without being told it", () => {
+  // Sunday weeks: shifting by whole weeks from a known Sunday can only land on
+  // Sundays, so the preference travels with the anchor and is never guessed.
+  const sundayWeek = weekRangeFor("2026-09-02", 0, "sunday");
+  assert.equal(sundayWeek.start, "2026-08-30");
+  const back = shiftPeriodRange(sundayWeek, "week", -1);
+  assert.equal(back.start, "2026-08-23");
+  assert.equal(back.end, "2026-08-30");
+  assert.equal(back.longLabel, "23–29 Aug 2026");
+});
+
+test("shifting a week that crosses a month is labelled with both months", () => {
+  const week = weekRangeFor("2026-09-02", 0, "monday"); // Mon 31 Aug – Sun 6 Sep
+  assert.equal(shiftPeriodRange(week, "week", 0).longLabel, "31 Aug – 6 Sep 2026");
+  assert.equal(shiftPeriodRange(week, "week", 1).longLabel, "7–13 Sep 2026");
+});
+
+test("shifting agrees with computing the same period from today", () => {
+  // The offline answer must equal the online one, or the heading changes
+  // meaning the moment the connection comes back.
+  for (const offset of [-1, -3, -12, -13]) {
+    const fromToday = monthRangeFor("2026-09-02", offset);
+    const shifted = shiftPeriodRange(monthRangeFor("2026-09-02", 0), "month", offset);
+    assert.deepEqual(shifted, fromToday, `month offset ${offset}`);
+
+    const weekFromToday = weekRangeFor("2026-09-02", offset, "monday");
+    const weekShifted = shiftPeriodRange(weekRangeFor("2026-09-02", 0, "monday"), "week", offset);
+    assert.deepEqual(weekShifted, weekFromToday, `week offset ${offset}`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Is the month-end check due?
+// ---------------------------------------------------------------------------
+
+test("a statement from a month that has closed makes the check due", () => {
+  assert.equal(monthEndCheckStatus("2026-08-28", "2026-09-01").due, true);
+  assert.equal(monthEndCheckStatus("2026-08-28", "2026-09-01").monthsSince, 1);
+  // Calendar months, not 30-day stretches: 28 August is stale on 1 September.
+  assert.equal(monthEndCheckStatus("2026-12-31", "2027-01-01").monthsSince, 1);
+});
+
+test("a statement from the current month is not yet due", () => {
+  assert.equal(monthEndCheckStatus("2026-09-01", "2026-09-30").due, false);
+  assert.equal(monthEndCheckStatus("2026-09-01", "2026-09-30").monthsSince, 0);
+});
+
+test("never having reconciled is said plainly, not dressed up as zero months", () => {
+  const status = monthEndCheckStatus(null, "2026-09-01");
+  assert.equal(status.due, true);
+  assert.equal(status.neverReconciled, true);
+  assert.equal(status.monthsSince, null);
+});
+
+test("brand-new books are not nagged on day one", () => {
+  // Nothing reconciled, but the first account was opened this morning: there
+  // is no closed month to check, so nothing is due. Being told off on day one
+  // is how a monthly prompt teaches you to ignore it.
+  const fresh = monthEndCheckStatus(null, "2026-09-05", "2026-09-05");
+  assert.equal(fresh.due, false);
+  assert.equal(fresh.neverReconciled, true);
+  assert.equal(fresh.monthsSince, null);
+
+  // Same books a month later, still never reconciled: now it is due.
+  const later = monthEndCheckStatus(null, "2026-10-01", "2026-09-05");
+  assert.equal(later.due, true);
+  assert.equal(later.neverReconciled, true);
+
+  // Called without the start date at all, the old unqualified answer stands —
+  // that is what keeps every existing caller behaving exactly as before.
+  assert.equal(monthEndCheckStatus(null, "2026-09-05").due, true);
 });

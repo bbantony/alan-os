@@ -1773,3 +1773,22 @@ back at 7am where it belongs.
   actually moves it now; the arrows used to do nothing for that one row.
 - **Ticking a task with unfinished subtasks asks first**, the same way it always has on the
   Plan screen. Same question, same words, both places.
+
+## "What did I spend this week?" now has an answer
+
+Money → Reports used to only speak in whole months. There's now a **Month / Week switch** at the
+top: pick Week and the arrows step back a week at a time, and every panel on the screen tells you
+which stretch of days it's showing. It follows your Monday-or-Sunday setting from the gear →
+Account.
+
+**Money's tabs remember where you were.** Budgets, Goals, Debts and Reports now each have their
+own web address, so the Back button walks back through them instead of dumping you out of Money,
+and you can bookmark or share a link straight to one.
+
+**The month-end check comes to you.** "Check against your bank" was one quiet row down the
+Overview screen. When a month has actually closed since you last checked, Money now says so at
+the top. When it hasn't, it stays quiet — and if you've only just opened your first account, it
+won't nag you about books you haven't kept yet.
+
+**Today links to its own settings.** At the very bottom of the Today screen there's now
+"Choose what's on this screen", which opens the page where you reorder and hide the panels.

@@ -10,15 +10,16 @@ import {
 } from "./actions";
 import { getPendingReceipts } from "./receipt-actions";
 import { getRecurringTransactions, postDueRecurringTransactions } from "./recurring-actions";
-import { getReconciliationHistory } from "./reconcile-actions";
+import { getMonthEndCheckStatus } from "./reconcile-actions";
 import { getGoalPlans } from "./goal-actions";
 import { getPreferences } from "@/app/(app)/settings/preferences-actions";
 import { MoneyShell } from "./money-shell";
+import { parseMoneyTab } from "./tabs";
 
 export default async function MoneyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ new?: string }>;
+  searchParams: Promise<{ new?: string; tab?: string }>;
 }) {
   // Anything repeating that has come due posts itself here, BEFORE the reads
   // below — so the balances, budgets and transaction list on this page already
@@ -28,9 +29,9 @@ export default async function MoneyPage({
   await postDueRecurringTransactions();
 
   const [
-    { new: isNew },
+    { new: isNew, tab },
     accounts, categories, transactions, budgets, goals, debts, merchants, remittance, receipts, recurring,
-    reconciliations,
+    monthEndCheck,
     goalPlans,
     preferences,
   ] = await Promise.all([
@@ -45,7 +46,14 @@ export default async function MoneyPage({
       getRemittanceSummary(),
       getPendingReceipts(),
       getRecurringTransactions(),
-      getReconciliationHistory(1),
+      // "Is the month-end check due?" is decided HERE, not on the screen. It
+      // depends on today's date in the profile's own timezone and on when the
+      // books began, neither of which a client component can know honestly —
+      // its `new Date()` is the phone's clock, which near midnight on the 1st
+      // is a different day. The screen renders the answer; it doesn't work it
+      // out. This also replaces the separate `getReconciliationHistory(1)`
+      // read that used to fetch the same last-statement date on its own.
+      getMonthEndCheckStatus(),
       getGoalPlans(),
       getPreferences(),
     ]);
@@ -71,10 +79,16 @@ export default async function MoneyPage({
       remittance={remittance}
       initialReceipts={receipts}
       initialRecurring={recurring}
-      lastReconciled={reconciliations[0]?.statement_date ?? null}
+      monthEndCheck={monthEndCheck}
       goalPlans={goalPlans}
       defaultAccountId={defaultAccountId}
       autoOpenQuickLog={isNew === "1"}
+      // Which of the five tabs to open on, straight out of the address —
+      // so /money?tab=budgets can be linked to, bookmarked and shared, and
+      // the Back button returns to the tab you were looking at. Validated
+      // here rather than in the browser: an unknown ?tab= falls back to
+      // Overview instead of rendering nothing at all.
+      initialTab={parseMoneyTab(tab)}
     />
   );
 }

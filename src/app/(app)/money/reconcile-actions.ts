@@ -8,9 +8,12 @@ import {
   ADJUSTMENT_CATEGORY,
   adjustmentFor,
   appBalanceOnDate,
+  monthEndCheckStatus,
   reconcileGapCents,
   type AppTxn,
+  type MonthEndCheckStatus,
 } from "@/lib/finance/reconcile";
+import { todayInAppTimezone } from "@/lib/time";
 import type { AccountType, Category } from "@/lib/finance/types";
 import { friendlyDbError } from "@/lib/db-errors";
 
@@ -443,4 +446,70 @@ export async function getReconciliationHistory(limit = 12): Promise<Reconciliati
   return ((data as unknown as (ReconciliationSummary & { accounts: { name: string } | null })[]) ?? []).map(
     (r) => ({ ...r, account_name: r.accounts?.name ?? "Account" })
   );
+}
+
+export type MonthEndCheck = MonthEndCheckStatus & {
+  /** Statement date of the most recent reconciliation, any account. */
+  lastReconciled: string | null;
+};
+
+/**
+ * "Is the month-end check due?" — the whole answer, computed once, here.
+ *
+ * The Money screen already knew the date of the last check but had no way to
+ * say whether it MATTERED, so the reconcile nudge sat buried at the bottom of
+ * the overview reading like a timestamp.
+ *
+ * ONE QUESTION, ONE ANSWER, ON THE SERVER. This briefly existed alongside a
+ * second copy of the same decision inside `overview-view.tsx`, which is a
+ * client component — so the "today" it compared against was the DEVICE clock,
+ * and it fed the helper a different set of arguments, so the two could
+ * genuinely disagree. Both problems are gone: `today` comes from the profile's
+ * own timezone (at 8pm on 31 August a UTC device has already rolled into
+ * September and would nag a day early), the books' start date is read here
+ * too, and the screen renders the result rather than working it out.
+ *
+ * `keepingBooksSince` is the oldest account's creation date. It stops "nothing
+ * reconciled yet" from meaning "nag immediately" on a set of books opened this
+ * morning. With no accounts at all there is nothing to reconcile, so the
+ * answer is simply "not due".
+ *
+ * The decision itself is pure and tested (`monthEndCheckStatus` in
+ * lib/finance/reconcile.ts).
+ */
+export async function getMonthEndCheckStatus(): Promise<MonthEndCheck> {
+  const { supabase, user } = await requireUser();
+
+  const [{ data: lastRow }, { data: profile }, { data: oldestAccount }] = await Promise.all([
+    supabase
+      .from("reconciliations")
+      .select("statement_date")
+      .eq("user_id", user.id)
+      .order("statement_date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from("profiles").select("timezone").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("accounts")
+      .select("created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const lastReconciled = (lastRow?.statement_date as string | undefined) ?? null;
+  const today = todayInAppTimezone((profile?.timezone as string) || undefined);
+
+  // No accounts, nothing to check against a statement. Only `due` is
+  // overridden — how long it has been is still reported honestly.
+  if (!oldestAccount?.created_at) {
+    return { ...monthEndCheckStatus(lastReconciled, today), due: false, lastReconciled };
+  }
+
+  // `created_at` is a UTC timestamp. Which side of midnight it lands on can
+  // only change the answer on the 1st, and being a day late with a monthly
+  // nudge costs nothing.
+  const keepingBooksSince = (oldestAccount.created_at as string).slice(0, 10);
+  return { ...monthEndCheckStatus(lastReconciled, today, keepingBooksSince), lastReconciled };
 }

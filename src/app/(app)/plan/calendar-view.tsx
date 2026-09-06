@@ -6,7 +6,6 @@ import { Plus } from "lucide-react";
 
 import { Panel, PanelHead, PanelEmpty } from "@/components/ui/panel";
 import { CalendarGrid, type DayMark } from "@/components/ui/calendar-grid";
-import { cn } from "@/lib/utils";
 import { addMonths, formatDayLong, parseDateString, toDateString } from "@/lib/calendar";
 import { PlanRow } from "./plan-row";
 import { getPlanRange, type PlanItem } from "./actions";

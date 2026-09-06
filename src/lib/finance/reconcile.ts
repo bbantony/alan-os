@@ -163,3 +163,62 @@ export const ADJUSTMENT_CATEGORY = {
   expense: "Balance adjustment",
   income: "Balance adjustment (money in)",
 } as const;
+
+// ---------------------------------------------------------------------------
+// Is the month-end check due?
+// ---------------------------------------------------------------------------
+
+export interface MonthEndCheckStatus {
+  /** True when a whole calendar month has closed since the last check — or when there has never been one. */
+  due: boolean;
+  /** Nothing has ever been reconciled. Said out loud rather than dressed up as "0 months ago". */
+  neverReconciled: boolean;
+  /** Whole calendar months between the last statement's month and today's. Null when never reconciled. */
+  monthsSince: number | null;
+}
+
+/**
+ * "Has a month closed since I last checked the books against a statement?"
+ *
+ * Deliberately counts CALENDAR months, not 30-day stretches: the thing being
+ * prompted for is a month-end check, so a statement dated 28 August is stale
+ * the moment September starts, not 30 days later. A statement dated in the
+ * current month is never stale.
+ *
+ * Pure — every argument is a YYYY-MM-DD string in the app timezone. The caller
+ * gets `today` from `todayInAppTimezone()`, which is what keeps this honest
+ * across the Winnipeg/UTC boundary: at 8pm on 31 August, UTC has already
+ * rolled into September and a naive check would nag a day early.
+ *
+ * `keepingBooksSince` is the day the books themselves start — in practice the
+ * oldest account's creation date. It exists so "never reconciled" does not mean
+ * "nag immediately": someone who opened their first account this morning has
+ * nothing to check against a statement, and being told off for it on day one
+ * teaches you to ignore the prompt. With no month closed since the books
+ * began, nothing is due. Omit it and the old behaviour returns — due as soon
+ * as there is no reconciliation on record — which is why it is optional rather
+ * than required.
+ *
+ * This whole rule lives HERE rather than half here and half on the Money
+ * screen. It was briefly split across the two, and a business rule kept in two
+ * heads is one that drifts apart the first time either is edited.
+ */
+export function monthEndCheckStatus(
+  lastReconciled: string | null,
+  today: string,
+  keepingBooksSince?: string | null
+): MonthEndCheckStatus {
+  if (!lastReconciled) {
+    const due = keepingBooksSince ? monthsBetween(keepingBooksSince, today) >= 1 : true;
+    return { due, neverReconciled: true, monthsSince: null };
+  }
+  const monthsSince = monthsBetween(lastReconciled, today);
+  return { due: monthsSince >= 1, neverReconciled: false, monthsSince };
+}
+
+/** Whole calendar months from one YYYY-MM-DD to another. */
+function monthsBetween(fromDate: string, toDate: string): number {
+  const [fy, fm] = fromDate.split("-").map(Number);
+  const [ty, tm] = toDate.split("-").map(Number);
+  return ty * 12 + tm - (fy * 12 + fm);
+}

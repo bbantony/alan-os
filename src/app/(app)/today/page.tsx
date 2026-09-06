@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { History, Settings } from "lucide-react";
+import { ChevronRight, History, Settings, SlidersHorizontal } from "lucide-react";
 
 import { getCurrentProfile } from "@/lib/supabase/profile";
 import { getTasks } from "@/app/(app)/tasks/actions";
@@ -398,6 +398,28 @@ export default async function TodayPage() {
             return null;
           })}
 
+          {/* The door to Settings → Today, which is the only place these
+              panels can be reordered or switched off — and until now nothing
+              on this screen pointed at it, so the feature existed and was
+              unfindable from the screen it changes.
+
+              A quiet text link at the foot of the stack rather than a third
+              masthead button: the masthead already carries the clock and the
+              gear, a third 36px square would crowd `meta` on a narrow phone,
+              and repointing the gear here would remove the only way into
+              general Settings. Deliberately unframed so it reads as a footnote
+              to the stack, not as another panel — `tap-reach` gives it the
+              44px hit area a small label can't have on its own. */}
+          <Reveal>
+            <Link
+              href="/settings/today"
+              className="micro-sm tap-press tap-reach inline-flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <SlidersHorizontal className="size-3.5 shrink-0" strokeWidth={2.5} />
+              Choose what&rsquo;s on this screen
+              <ChevronRight className="size-3.5 shrink-0" strokeWidth={2.5} />
+            </Link>
+          </Reveal>
         </DashboardGrid>
       </div>
     </div>

@@ -5069,3 +5069,124 @@ changelog fixes recorded above had not actually been made — the text replaceme
 failed to match and I reported it as done. It is made now, along with a misattribution (entry
 62, not 64, is where the "all four places agree" claim first appeared). Recording it because a
 changelog that misreports its own corrections is worse than one that never claimed them.
+
+## 66. Wave 1C — the week exists, tabs get an address, and the month-end check stops hiding (5 Sep 2026)
+
+**What Alan asked for:** the last part of Wave 1 from the approved flow plan. Four fixes, all of
+them doors that were shut or hidden.
+
+**On the plan's own list:** the shorthand in PROGRESS.md named the week view, Money's tabs,
+receipts on the capture sheet, and the reconcile prompt. Receipts had already shipped in Wave 1A
+— the capture sheet has had a Receipt option since it was built — so that note was stale rather
+than the work being skipped; PROGRESS.md has been corrected. The fourth item here, the link from
+Today to its own settings, is from the critique's Wave 1 list and was simply missing from that
+shorthand.
+
+*(This entry was written from scratch after four earlier drafts failed accuracy review. The
+pattern each time was patching the sentences a reviewer named while stale facts survived beside
+them, so this version was rebuilt from the diff and every number in it was counted rather than
+recalled. Alan chose the rewrite over a fifth patch. The failure itself is worth keeping in the
+record: a history file that misreports its own history is worse than a thin one.)*
+
+**Files changed:** `money/actions.ts`, `money/page.tsx`, `money/money-shell.tsx`,
+`money/overview-view.tsx`, `money/reports-view.tsx`, `money/reconcile-actions.ts`, new
+`money/tabs.ts`, `lib/finance/period.ts`, `lib/finance/reconcile.ts`, `today/page.tsx`,
+`tests/money-and-units.test.mts`, plus an unused import dropped from `plan/agenda-view.tsx` and
+`plan/calendar-view.tsx`. No migration, no schema change, no new dependency.
+
+### 1. "What did I spend this week?" now has an answer
+
+Reports spoke only in calendar months — the critique's tap ledger listed this question as
+*impossible*, and it was. Reports now has a **Month / Week switch**; the arrows page by whichever
+you chose, each panel says which period it is showing, and the empty state says "this week" or
+"this month" rather than one sentence pretending to fit both.
+
+It **honours your week-start setting** (Monday or Sunday, in Settings → Account). Before this,
+one thing in the whole app read that preference — the AI's insights — so this makes two. The
+week maths reuses the app's existing `startOfWeek` rather than adding a second definition of when
+a week begins. **It does not close the audit finding about that preference**, which names the two
+workout screens; both still ignore it.
+
+The **merchant list follows the view**. It was hardcoded to the current month, so a week view
+would otherwise have shown month-long merchant totals under a week heading.
+
+A real timezone bug went with it: the screen built its heading from the **browser's** clock, so a
+late-evening tap near a month boundary could name the wrong month. Labels now come from the
+server in your timezone, and the local helper was deleted rather than left to be copied.
+
+### 2. Money's five tabs live in the address
+
+The tab was held only inside the screen, so you could not link to Budgets and Back did not
+return you to where you were. `/money?tab=budgets` now works as a link, Back walks the tabs, and
+tapping the tab you are already on does nothing. (Before this wave the tabs wrote no history at
+all — the stacking was introduced by a draft inside it and caught before shipping.) An
+unrecognised `?tab=` opens Overview and is tidied out of the address so a shared link stops
+carrying it.
+
+The tab is written with the browser's own history rather than a router navigation, because a
+router push would re-render five tabs' worth of data on every tap. That required care: this
+version of Next patches that history call into its router, so a page refresh already in flight
+could land late and pull you to a different tab than the address bar showed. The guard reads the
+live address to prevent it.
+
+### 3. The month-end check stops hiding
+
+"Check against your bank" was one quiet row in a panel below Receipts, Accounts and Repeating —
+invisible for something you do once a month. When a month has actually closed since your last
+statement check, it now says so at the top of Money in the warning tone, naming the last date
+checked. When it isn't due, nothing is added; a prompt that always shouts stops being read.
+
+The decision is made **once, on the server**, in your timezone. It was briefly being made in the
+browser from the device clock, which contradicted the comment explaining why that belongs on the
+server. Brand-new books are not nagged: someone who opened their first account this morning has
+nothing to reconcile. That rule was also briefly split between a helper and the screen; it now
+lives entirely in the helper, which takes the day the books began.
+
+### 4. Today points at the screen that configures Today
+
+Settings → Today is the only place to reorder or hide the dashboard's panels, and nothing on
+Today linked there. There is now a quiet text link at the foot of the panel stack — left-aligned and only as wide as
+its words, with a 44px tap area. It is
+not a third masthead button: the clock and gear are already there, a third would crowd the header
+on a narrow phone, and repointing the gear would have removed the only way into general Settings.
+
+### What the two verification rounds changed
+
+The reviewer and QA between them found ten things, all fixed. The ones that would have cost the
+most, in that order:
+
+- **The trend chart could have silently under-reported spending.** Collapsing six queries into
+  one made it a single unbounded request across six months, against a row cap that returns fewer
+  rows with no error — bars that look right and are wrong, the worst class of bug in this
+  project. All three report queries now page explicitly, **in a guaranteed order**: paging
+  without a defined order can itself overlap and drop rows, so a careless fix would have traded
+  one silent under-report for another. Past even the paged ceiling the screen says it could not
+  load rather than charting part of the data.
+- **The period boundaries ignored your timezone** — every new date decision used the hardcoded
+  default in a file whose neighbours already read the profile properly.
+- **"Nothing spent in the August 2026."** The definite article belongs only to the week case.
+- **Going offline made the heading lie**: tapping back three times with no signal left the
+  navigator naming the month you started on while the panels correctly said they could not load.
+  It now derives the period from the last known one, with no clock involved.
+- **Dead endpoints removed.** Against the last commit the net effect is three gone and two added
+  (`getReport`, `getMonthEndCheckStatus`) — that much is checkable in git. Several more were
+  created and deleted inside this wave without ever reaching a commit; no exact count of those is
+  given here, because none is verifiable and this entry exists because unverifiable figures kept
+  ending up in it. In a server-actions file every export is a live
+  authenticated endpoint, and an earlier session had deliberately cleared out dead code — letting
+  it re-accumulate here would have undone that.
+- Report inputs are validated rather than looped over unbounded; and a lint workaround whose
+  comment claimed a behaviour it did not have was replaced by the real fix — the loading state is
+  now derived from whether the loaded period matches the requested one.
+
+**Tests:** 18 new cases in `tests/money-and-units.test.mts` (44 → 62, counted). The suite as a
+whole goes 90 → 108 across its three files. Week offsets, both week-start settings including an
+assertion that the two genuinely differ, weeks spanning a month and a year boundary, both
+Winnipeg daylight-saving changes proving a week is still exactly seven days, contiguous
+non-overlapping trend buckets, the offline period shift matching the online answer, and the four
+month-end-check cases including "brand-new books are not nagged on day one".
+
+**Recorded, not fixed:** the same timezone gap exists in older code this wave did not touch,
+notably the budget period boundaries that feed safe-to-spend — worth its own unit rather than a
+drive-by. And the week-start preference is still ignored by the two workout screens named in the
+audit.

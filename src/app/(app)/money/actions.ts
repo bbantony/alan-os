@@ -4,7 +4,14 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { todayInAppTimezone } from "@/lib/time";
-import { currentPeriodBounds } from "@/lib/finance/period";
+import {
+  currentPeriodBounds,
+  periodRangeFor,
+  trendRangesFor,
+  type PeriodRange,
+  type ReportPeriod,
+} from "@/lib/finance/period";
+import { resolvePreferences, type WeekStart } from "@/lib/preferences";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import { friendlyDbError } from "@/lib/db-errors";
 import { normaliseMerchant, type MerchantMemoryEntry } from "@/lib/finance/categorise";
@@ -775,51 +782,186 @@ export interface CategorySpend {
   totalCents: number;
 }
 
-const MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+// Re-exported for convenience so a screen can import the period type from the
+// same module as the actions it feeds. Type-only, so this stays legal inside a
+// "use server" file — client components can equally import them straight from
+// `@/lib/finance/period`, which is a plain module with no server code in it.
+export type { PeriodRange, PeriodUnit, ReportPeriod } from "@/lib/finance/period";
 
-// The month `monthOffset` months from now, as an inclusive start / exclusive
-// end pair of YYYY-MM-DD strings.
+// The report period — a month or a week, `offset` 0 = current, -1 = previous.
+// The range and label maths are pure and live in lib/finance/period.ts so they
+// can be tested; everything here only anchors them to the app timezone and
+// applies the same three filters to the database.
 //
-// THE BUG THIS FIXES. The old version normalised with `((month - 1) % 12) + 1`,
-// and JavaScript's `%` keeps the sign of its left operand — so any offset that
-// crossed back over a year boundary produced a *negative* month number and
-// dates like "2025-00-01" or "2025--4-01". Postgres rejects those outright
-// ("date/time field value out of range"), the query's error was discarded by
-// `const { data } =`, and the screen showed $0 spent rather than a failure.
-// Reachable by tapping Reports' month navigator back past January, and it
-// would have emptied five of the six bars in the trend chart every January.
-//
-// Date.UTC does the normalisation correctly for any offset in either
-// direction, so the arithmetic is handed to it rather than done by hand.
-function monthRange(monthOffset: number): { start: string; end: string; label: string } {
-  const [year, month] = todayInAppTimezone().split("-").map(Number);
-  const startDate = new Date(Date.UTC(year, month - 1 + monthOffset, 1));
-  const endDate = new Date(Date.UTC(year, month + monthOffset, 1));
+// ANCHORED ON `todayInAppTimezone()`, NEVER A BROWSER CLOCK. `reports-view.tsx`
+// used to build its own header label from `new Date()`, which is the device's
+// timezone — on the 1st of a month, a phone an hour behind Winnipeg labelled
+// the data with the wrong month. The label now comes back from the server with
+// the data, so there is nothing left for the screen to recompute.
+
+/** The Supabase client `requireUser()` hands back, named so helpers can take it. */
+type ReportClient = Awaited<ReturnType<typeof requireUser>>["supabase"];
+
+/**
+ * The two profile settings every report needs, read together.
+ *
+ * `timezone` is what "today" means for THIS account. Without it every date
+ * boundary on this screen falls back to the hardcoded Winnipeg constant, which
+ * is a guess rather than the setting — the same fix goal-actions.ts and
+ * recurring-actions.ts already carry. `weekStart` is how a week is anchored.
+ * They live in the same row, so one read gets both and they can never
+ * disagree about which profile they came from.
+ */
+async function reportProfile(
+  supabase: ReportClient,
+  userId: string
+): Promise<{ weekStart: WeekStart; timezone: string | undefined }> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("preferences, timezone")
+    .eq("id", userId)
+    .maybeSingle();
   return {
-    start: startDate.toISOString().slice(0, 10),
-    end: endDate.toISOString().slice(0, 10),
-    label: MONTH_LABELS[startDate.getUTCMonth()],
+    weekStart: resolvePreferences(data?.preferences).weekStart,
+    // `undefined`, not null, so `todayInAppTimezone` applies its own default.
+    timezone: (data?.timezone as string) || undefined,
   };
 }
 
-export async function getMonthlySpendByCategory(monthOffset = 0): Promise<CategorySpend[]> {
-  const { supabase, user } = await requireUser();
-  const { start, end } = monthRange(monthOffset);
+const CURRENT_MONTH: ReportPeriod = { unit: "month", offset: 0 };
 
-  const { data } = await supabase
-    .from("transactions")
-    .select("amount_cents, category_id, categories(name, kind)")
-    .eq("user_id", user.id)
-    .eq("currency", "CAD")
-    .is("transfer_group_id", null)
-    .gte("txn_date", start)
-    .lt("txn_date", end);
+/** Defaults for `getReport`; the screen passes its own so the two always agree. */
+const TREND_COUNT_DEFAULT = 6;
+const MERCHANT_LIMIT_DEFAULT = 5;
+
+// Ceilings for the same two numbers. They arrive from the browser, and this is
+// a public authenticated endpoint — anything that gets looped over or turned
+// into a date has to be bounded here, not in the screen that happens to call it
+// politely today.
+const TREND_COUNT_MAX = 24;
+const MERCHANT_LIMIT_MAX = 50;
+/** How far back reports go: ten years of months, or a bit over two of weeks. */
+const OFFSET_MAX_BACK = 120;
+
+/** A whole number inside `[1, max]`, or the default when it is nonsense. */
+function clampCount(value: number | undefined, fallback: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(1, Math.floor(value)));
+}
+
+/**
+ * Why a requested period can't be reported on, in plain English — or null.
+ *
+ * A non-integer or absurd offset is not a harmless input: `Date.UTC(2026, NaN,
+ * 1)` is an Invalid Date, which becomes an unusable date string, which Postgres
+ * rejects — a thrown server error the screen can only show as a blank panel.
+ */
+function reportPeriodProblem(period: ReportPeriod): string | null {
+  if (period.unit !== "month" && period.unit !== "week") {
+    return "Reports can only show a month or a week.";
+  }
+  if (!Number.isInteger(period.offset)) {
+    return "That's not a period I can report on.";
+  }
+  if (period.offset > 0) {
+    return "That period hasn't happened yet, so there's nothing to show.";
+  }
+  if (period.offset < -OFFSET_MAX_BACK) {
+    return `That's further back than reports go. Try a more recent ${period.unit}.`;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// The query bodies, shared
+// ---------------------------------------------------------------------------
+//
+// Each of these is the database work behind one panel, with the client, the
+// user id and the ALREADY-RESOLVED date range handed in. They are private on
+// purpose: `getReport` is the only way in, so there is one authenticated
+// endpoint for this screen rather than a per-panel one nothing calls. (Several
+// such were briefly created and removed inside the same piece of work — dead
+// code with a login attached. No count is given because none reached a commit
+// and so none is checkable.)
+//
+// The filters they share, and why:
+//   currency = CAD          - one currency per chart, or the totals are fiction
+//   transfer_group_id null  - moving your own money between accounts is not spend
+//   categories.kind expense - a payday deposit is not "where the money went"
+// plus user_id, which RLS also enforces - defence in depth, per SPEC Part B3.
+//
+// `failed` is returned rather than thrown so `getReport` can tell the screen
+// the difference between "nothing spent" and "couldn't load it" - see `error`
+// on ReportSummary.
+
+// ---------------------------------------------------------------------------
+// Reading EVERY matching row, not just the first thousand
+// ---------------------------------------------------------------------------
+//
+// Supabase's API caps the rows one request may return (1000 by default, set on
+// the server, not by us). A capped response looks exactly like a complete one:
+// no error, no flag, just fewer rows. The trend chart spans six periods in a
+// single query, so a busy six months of CSV-imported transactions would have
+// drawn bars that read LOW with nothing anywhere saying so - a wrong number on
+// a money screen, which is the worst class of bug this app has. The category
+// and merchant queries are the same shape over one period, so they carry the
+// same exposure and get the same treatment.
+//
+// Paging, rather than aggregating in SQL: a `sum(...) group by` in the database
+// would ship fewer bytes, but it would mean a migration and a database function
+// per chart, with the four filters below restated in a second language and two
+// places to keep them in step. One copy of the rules is worth the extra bytes
+// at this size.
+//
+// Paging needs a TOTAL ORDER or pages can overlap and rows can vanish between
+// them, so every query below adds `.order("id")`. It is an arbitrary order and
+// deliberately so - nothing here depends on it beyond stability, and the
+// sorting Alan actually sees happens after the totalling.
+const ROWS_PER_PAGE = 1000;
+
+// 60,000 rows in one report is not a real account; it is a runaway import or a
+// bug. Rather than page forever, stop and FAIL - the screen then says it
+// couldn't load the figures, which is true, instead of charting part of them,
+// which would not be.
+const MAX_REPORT_PAGES = 60;
+
+async function fetchAllRows(
+  page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: unknown }>
+): Promise<{ rows: Record<string, unknown>[]; failed: boolean }> {
+  const all: Record<string, unknown>[] = [];
+  for (let pageIndex = 0; pageIndex < MAX_REPORT_PAGES; pageIndex++) {
+    const from = pageIndex * ROWS_PER_PAGE;
+    const { data, error } = await page(from, from + ROWS_PER_PAGE - 1);
+    if (error) return { rows: [], failed: true };
+    const batch = (data ?? []) as Record<string, unknown>[];
+    all.push(...batch);
+    // A short page is the last page. A full one might not be, so ask again.
+    if (batch.length < ROWS_PER_PAGE) return { rows: all, failed: false };
+  }
+  return { rows: [], failed: true };
+}
+
+async function queryCategorySpend(
+  supabase: ReportClient,
+  userId: string,
+  range: PeriodRange
+): Promise<{ rows: CategorySpend[]; failed: boolean }> {
+  const { rows: data, failed } = await fetchAllRows((from, to) =>
+    supabase
+      .from("transactions")
+      .select("amount_cents, category_id, categories(name, kind)")
+      .eq("user_id", userId)
+      .eq("currency", "CAD")
+      .is("transfer_group_id", null)
+      .gte("txn_date", range.start)
+      .lt("txn_date", range.end)
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (failed) return { rows: [], failed: true };
 
   const totals = new Map<string, { name: string; total: number }>();
-  for (const row of data ?? []) {
+  for (const row of data) {
     const category = (row as unknown as { categories: { name: string; kind: string } | null }).categories;
     if (!category || category.kind !== "expense") continue;
     const key = row.category_id as string;
@@ -828,61 +970,179 @@ export async function getMonthlySpendByCategory(monthOffset = 0): Promise<Catego
     totals.set(key, existing);
   }
 
-  return [...totals.entries()]
-    .map(([categoryId, v]) => ({ categoryId, categoryName: v.name, totalCents: v.total }))
-    .sort((a, b) => b.totalCents - a.totalCents);
+  return {
+    rows: [...totals.entries()]
+      .map(([categoryId, v]) => ({ categoryId, categoryName: v.name, totalCents: v.total }))
+      .sort((a, b) => b.totalCents - a.totalCents),
+    failed: false,
+  };
 }
 
-export async function getMonthlyTrend(monthsBack = 6): Promise<{ label: string; totalCents: number }[]> {
-  const { supabase, user } = await requireUser();
-  const results: { label: string; totalCents: number }[] = [];
+// One request spans every bucket and the rows are bucketed in memory, rather
+// than the old one-query-per-bucket loop: same numbers, five fewer round trips.
+// Spanning six periods at once is also what made the row cap a real risk here,
+// which is why this reads through `fetchAllRows` rather than taking whatever
+// one response happened to contain.
+async function querySpendTrend(
+  supabase: ReportClient,
+  userId: string,
+  ranges: PeriodRange[]
+): Promise<{ rows: { label: string; totalCents: number }[]; failed: boolean }> {
+  if (ranges.length === 0) return { rows: [], failed: false };
 
-  for (let i = monthsBack - 1; i >= 0; i--) {
-    const { start, end, label } = monthRange(-i);
-    const { data } = await supabase
+  const { rows: data, failed } = await fetchAllRows((from, to) =>
+    supabase
       .from("transactions")
-      .select("amount_cents, categories(kind)")
-      .eq("user_id", user.id)
+      .select("amount_cents, txn_date, categories(kind)")
+      .eq("user_id", userId)
       .eq("currency", "CAD")
       .is("transfer_group_id", null)
-      .gte("txn_date", start)
-      .lt("txn_date", end);
-    const total = (data ?? []).reduce((sum, row) => {
-      const kind = (row as unknown as { categories: { kind: string } | null }).categories?.kind;
-      return kind === "expense" ? sum + (row.amount_cents as number) : sum;
-    }, 0);
-    results.push({ label, totalCents: total });
+      .gte("txn_date", ranges[0].start)
+      .lt("txn_date", ranges[ranges.length - 1].end)
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (failed) return { rows: [], failed: true };
+
+  const totals = new Array<number>(ranges.length).fill(0);
+  for (const row of data) {
+    const kind = (row as unknown as { categories: { kind: string } | null }).categories?.kind;
+    if (kind !== "expense") continue;
+    const date = row.txn_date as string;
+    const index = ranges.findIndex((r) => date >= r.start && date < r.end);
+    if (index >= 0) totals[index] += row.amount_cents as number;
   }
-  return results;
+
+  return { rows: ranges.map((r, i) => ({ label: r.label, totalCents: totals[i] })), failed: false };
 }
 
-export async function getTopMerchants(limit = 5): Promise<{ merchant: string; totalCents: number }[]> {
-  const { supabase, user } = await requireUser();
-  const { start, end } = monthRange(0);
-  // Expenses only — this answers "where is the money going", so a payday
+async function queryTopMerchants(
+  supabase: ReportClient,
+  userId: string,
+  range: PeriodRange,
+  limit: number
+): Promise<{ rows: { merchant: string; totalCents: number }[]; failed: boolean }> {
+  // Expenses only - this answers "where is the money going", so a payday
   // deposit that happens to carry an employer name doesn't belong at the top
   // of the list (it used to sit there, dwarfing everything real).
-  const { data } = await supabase
-    .from("transactions")
-    .select("amount_cents, merchant, categories(kind)")
-    .eq("user_id", user.id)
-    .eq("currency", "CAD")
-    .is("transfer_group_id", null)
-    .not("merchant", "is", null)
-    .gte("txn_date", start)
-    .lt("txn_date", end);
+  const { rows: data, failed } = await fetchAllRows((from, to) =>
+    supabase
+      .from("transactions")
+      .select("amount_cents, merchant, categories(kind)")
+      .eq("user_id", userId)
+      .eq("currency", "CAD")
+      .is("transfer_group_id", null)
+      .not("merchant", "is", null)
+      .gte("txn_date", range.start)
+      .lt("txn_date", range.end)
+      .order("id", { ascending: true })
+      .range(from, to)
+  );
+  if (failed) return { rows: [], failed: true };
 
   const totals = new Map<string, number>();
-  for (const row of data ?? []) {
+  for (const row of data) {
     const kind = (row as unknown as { categories: { kind: string } | null }).categories?.kind;
     if (kind !== "expense") continue;
     const merchant = row.merchant as string;
     totals.set(merchant, (totals.get(merchant) ?? 0) + (row.amount_cents as number));
   }
-  return [...totals.entries()]
-    .map(([merchant, totalCents]) => ({ merchant, totalCents }))
-    .sort((a, b) => b.totalCents - a.totalCents)
-    .slice(0, limit);
+  return {
+    rows: [...totals.entries()]
+      .map(([merchant, totalCents]) => ({ merchant, totalCents }))
+      .sort((a, b) => b.totalCents - a.totalCents)
+      .slice(0, limit),
+    failed: false,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The whole Reports screen, in one call
+// ---------------------------------------------------------------------------
+
+export interface ReportSummary {
+  /** The period actually queried, with its labels. */
+  range: PeriodRange;
+  byCategory: CategorySpend[];
+  trend: { label: string; totalCents: number }[];
+  merchants: { merchant: string; totalCents: number }[];
+  /**
+   * Present only when a query failed. The lists are then empty, and an empty
+   * list must NOT be read as "nothing was spent" - check this first.
+   */
+  error?: string;
+}
+
+/**
+ * Everything the Reports screen shows for one period, in a single round trip.
+ *
+ * Next runs server actions from one client SEQUENTIALLY, so several calls per
+ * period change cost several sequential round trips - a visible stall on a
+ * phone every time an arrow or the Month/Week switch was tapped. (Exactly how
+ * many depends on which draft you compare against; the shipped screen before
+ * this made three, one of which only ran on the current month. What matters is
+ * that they queued.)
+ * The queries are independent of each other, so here they are one hop and a
+ * `Promise.all` on the server, where the concurrency is real.
+ *
+ * The period's label comes back with the figures, so the heading and the
+ * numbers under it are always from the same period, and the screen never
+ * recomputes a date from the browser clock.
+ *
+ * `options` exists so the caller's own constants (six trend buckets, five
+ * merchants) stay the single source of truth for what it renders;
+ * `getReport(period)` on its own is a perfectly good call. Both are still
+ * bounded here — this is an authenticated endpoint, and what the screen sends
+ * today is not a guarantee about what arrives tomorrow.
+ */
+export async function getReport(
+  period: ReportPeriod = CURRENT_MONTH,
+  options: { trendCount?: number; merchantLimit?: number } = {}
+): Promise<ReportSummary> {
+  const { supabase, user } = await requireUser();
+  // The account's own timezone decides where every one of these date
+  // boundaries falls, so it is read before any of them are worked out.
+  const { weekStart, timezone } = await reportProfile(supabase, user.id);
+  const today = todayInAppTimezone(timezone);
+
+  const problem = reportPeriodProblem(period);
+  if (problem) {
+    // Answered, not thrown. The screen can render a sentence; it cannot render
+    // a 500. The range is the current month purely so the shape is valid —
+    // `error` is set, so the screen shows the message, not these empty lists.
+    return {
+      range: periodRangeFor(today, CURRENT_MONTH, weekStart),
+      byCategory: [],
+      trend: [],
+      merchants: [],
+      error: problem,
+    };
+  }
+
+  // Clamped rather than refused: asking for 500 trend bars is out of range,
+  // not nonsense, and quietly showing 24 is a better answer than an error.
+  // `trendCount` is the one that must not be trusted — it is looped over, and
+  // each turn of the loop is a date and a bucket.
+  const trendCount = clampCount(options.trendCount, TREND_COUNT_DEFAULT, TREND_COUNT_MAX);
+  const merchantLimit = clampCount(options.merchantLimit, MERCHANT_LIMIT_DEFAULT, MERCHANT_LIMIT_MAX);
+
+  const range = periodRangeFor(today, period, weekStart);
+  const trendRanges = trendRangesFor(today, period, trendCount, weekStart);
+
+  const [byCategory, trend, merchants] = await Promise.all([
+    queryCategorySpend(supabase, user.id, range),
+    querySpendTrend(supabase, user.id, trendRanges),
+    queryTopMerchants(supabase, user.id, range, merchantLimit),
+  ]);
+
+  const failed = byCategory.failed || trend.failed || merchants.failed;
+  return {
+    range,
+    byCategory: byCategory.rows,
+    trend: trend.rows,
+    merchants: merchants.rows,
+    ...(failed ? { error: "Couldn't load these figures." } : {}),
+  };
 }
 
 // ---------- Today dashboard ----------

@@ -1042,6 +1042,32 @@ creation time, so an evening-created routine was already wrong before any snooze
 tests/reminders.test.mts pin all of it.
 
 **Next: Wave 1C** — the week view for spending (currently unanswerable: Reports is
-calendar-month only), Money's tabs in the URL, receipts on the capture sheet, and reconcile
-surfacing itself when a month closes. Then Wave 2 (the AI as a layer) and Wave 3 (Fold panes +
-share_target).
+calendar-month only), Money's tabs in the URL, reconcile surfacing itself when a month closes,
+and the link from Today to its own settings. (An earlier version of this line also listed
+receipts on the capture sheet; that shipped in Wave 1A, where the sheet was built with a Receipt
+option from the start.) Then Wave 2 (the AI as a layer) and Wave 3 (Fold panes + share_target).
+
+## 5 Sep 2026 — Wave 1C: the week exists, and Wave 1 is complete
+
+CHANGELOG entry 66. Reports gained a Month/Week switch that honours the week-start preference
+(the second thing in the app to read it); Money's tabs live in the address so they can be linked
+and walked with Back; the month-end check surfaces itself when a month has actually closed,
+decided once on the server in the profile's timezone; and Today links to the screen that
+configures it. 18 new tests in the money suite (108 across the project).
+
+Two verification rounds found ten things, all fixed — the costliest being that collapsing the
+trend into one query had lifted it toward a row cap that would have silently under-reported
+spending.
+
+**Process note worth carrying forward.** The code passed review twice; the CHANGELOG entry for
+it failed accuracy review four times, each round fixing the named sentences while stale facts
+survived beside them. Alan chose a rewrite over a fifth patch. The rebuilt entry was written from
+the diff with every number measured, and the round after it still found seven errors — including
+a false "four round trips" claim that had been purged from the record but left alive in two code
+comments. The lesson is narrow and repeatable: when correcting a record, re-derive the facts,
+don't edit the sentences; and check the code comments say the same thing as the entry.
+
+**Wave 1 is complete** (1A capture sheet, 1B reminders + Today, 1C the week). Next: **Wave 2** —
+the assistant as a layer over any screen, with memory and the missing verbs (routines, the
+evening ritual, receipts, reports on demand). Then **Wave 3** — Fold two-pane layouts, unlocked
+orientation, and share_target.

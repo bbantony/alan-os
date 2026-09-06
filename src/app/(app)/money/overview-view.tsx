@@ -1,8 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, Pencil, Plus, Scale, Send, Trash2, Upload, Wallet } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowDownLeft,
+  ArrowUpRight,
+  ChevronRight,
+  Pencil,
+  Plus,
+  Scale,
+  Send,
+  Trash2,
+  Upload,
+  Wallet,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { Panel, PanelHead, PanelEmpty, PanelRow } from "@/components/ui/panel";
@@ -13,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { formatDateOnlyInAppTimezone } from "@/lib/time";
 import { formatCents } from "@/lib/finance/money";
 import { getFinanceIcon } from "@/lib/finance/icon-registry";
+import type { MonthEndCheck } from "./reconcile-actions";
 import { ACCOUNT_TYPE_LABELS } from "@/lib/finance/types";
 import type {
   Account,
@@ -35,7 +49,7 @@ export function OverviewView({
   remittance,
   receipts,
   recurring,
-  lastReconciled,
+  monthEndCheck,
   defaultAccountId = null,
   onAccountsChanged,
   onTransactionDeleted,
@@ -49,8 +63,20 @@ export function OverviewView({
   remittance: { cadTotalCents: number; inrTotalCents: number };
   receipts: Receipt[];
   recurring: RecurringTransaction[];
-  /** Statement date of the most recent reconciliation, any account. */
-  lastReconciled: string | null;
+  /**
+   * "Is the month-end check due?" — DECIDED ON THE SERVER, in the profile's own
+   * timezone, and handed down here as an answer to render.
+   *
+   * It was briefly decided in this file instead, from `todayInAppTimezone()`
+   * with no argument, inside a client component: the device's clock measured
+   * against a hardcoded timezone. At 8pm on 31 August a phone already in
+   * September would have nagged a day early. Worse, it fed the rule a
+   * different set of arguments from the server's own copy of the same call, so
+   * the two could genuinely give different answers to one question. One
+   * question, one answer, computed once — see `getMonthEndCheckStatus` in
+   * reconcile-actions.ts. It carries the last statement date with it.
+   */
+  monthEndCheck: MonthEndCheck;
   /** The "Default account" money preference, already validated by the server.
       Seeds every form here that picks an account, same as quick-log. */
   defaultAccountId?: string | null;
@@ -78,6 +104,7 @@ export function OverviewView({
   // an Indian one.
   const cadAccounts = accounts.filter((a) => a.currency === "CAD");
 
+  const { lastReconciled } = monthEndCheck;
   const lastReconciledLabel = lastReconciled
     ? `Last checked against a statement dated ${formatDateOnlyInAppTimezone(lastReconciled, {
         month: "short",
@@ -85,6 +112,22 @@ export function OverviewView({
         year: "numeric",
       })}`
     : null;
+
+  // THE MONTH-END CHECK, WHEN IT'S ACTUALLY DUE.
+  //
+  // The quiet "Check against your bank" row further down is right for the
+  // other twenty-odd days of the month, but it sits under four panels — so for
+  // a ritual that comes round once a month it was, in practice, invisible.
+  // When a month has genuinely closed since the last check, it gets said out
+  // loud at the top instead. When it hasn't, nothing is added: this must never
+  // become the thing that's always shouting, or it stops being read at all.
+  //
+  // Whether it is due is the server's answer (see the prop). `accounts.length`
+  // is checked here as well, and only here, because this list is LIVE client
+  // state: delete your last account and the prompt should go with it rather
+  // than wait for a refresh. That is a "do I have any accounts" question, not
+  // a date one, so it is the only part of this still asked on the phone.
+  const reconcileDue = accounts.length > 0 && monthEndCheck.due;
 
   async function askToDeleteAccount(account: Account) {
     const txnCount = await getAccountTransactionCount({ id: account.id });
@@ -141,6 +184,37 @@ export function OverviewView({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* ---------------- Month-end check, when due ----------------
+
+          Framed in the semantic warn tone — the same one the reconcile screen
+          uses for "these didn't appear on your statement" — rather than the
+          theme accent, because "something needs your attention" has to mean
+          the same thing in every palette. */}
+      {reconcileDue && (
+        <Link
+          href="/money/reconcile"
+          className="tap-press flex items-start gap-2.5 border-2 border-warn bg-surface px-3 py-2.5 transition-colors hover:bg-muted"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warn" strokeWidth={2.25} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Time to check against your bank</span>
+            <Micro className="mt-0.5 block">
+              {lastReconciled
+                ? `${
+                    monthEndCheck.monthsSince === 1
+                      ? "A month has"
+                      : `${monthEndCheck.monthsSince} months have`
+                  } closed since your books were last checked against a statement (${formatDateOnlyInAppTimezone(
+                    lastReconciled,
+                    { month: "short", day: "numeric", year: "numeric" }
+                  )}). Anything logged twice, or never logged at all, is still hiding.`
+                : "Your books have never been checked against a bank statement. It takes a few minutes and catches anything logged twice or missed."}
+            </Micro>
+          </span>
+          <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" strokeWidth={2.5} />
+        </Link>
+      )}
+
       {/* ---------------- Receipts awaiting review ---------------- */}
       <Panel>
         <PanelHead
