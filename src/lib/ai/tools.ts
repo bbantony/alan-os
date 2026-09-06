@@ -129,8 +129,22 @@ function asNumber(value: unknown): number | null {
  * NOT `todayInAppTimezone()` with no argument. That falls back to the hardcoded
  * Winnipeg constant, and the Reports screen reads the profile instead — so on
  * any account whose timezone differs, the two would disagree about which day a
- * range ends on and hand back two different totals for one question. Money
- * tools that resolve a date range read the same row the screen does.
+ * range ends on and hand back two different totals for one question.
+ *
+ * EVERY TOOL IN THIS FILE NOW GOES THROUGH THIS, or through `toolToday`
+ * below — there is not one bare `todayInAppTimezone()` call left, and a test
+ * in tests/money-and-units.test.mts fails if one comes back. For a while it
+ * was only the two range-resolving report tools, which was already wrong the
+ * day it was written: `get_money_overview` worked out which budget period we
+ * are in from the hardcoded Winnipeg day while `get_spending_by_category`
+ * resolved "this month" from the profile day, so a single conversation could
+ * hold two different "todays". Two of the bare calls were worse than a display
+ * difference — `log_expense`'s `txn_date` and `manage_budget`'s `anchor_date`
+ * STORED the wrong day, and an anchor is what every later "which period are we
+ * in" answer is measured from.
+ *
+ * On a Winnipeg profile none of it was visible, which is exactly why it lasted.
+ * The cost of the rule is one small profile read per tool call.
  */
 async function toolPeriodContext(
   ctx: ToolContext
@@ -145,6 +159,11 @@ async function toolPeriodContext(
     today: todayInAppTimezone((data?.timezone as string) || undefined),
     weekStart: resolvePreferences(data?.preferences).weekStart,
   };
+}
+
+/** The account's own "today" alone, for tools that need no week boundary. */
+async function toolToday(ctx: ToolContext): Promise<string> {
+  return (await toolPeriodContext(ctx)).today;
 }
 
 // Finds the row whose name the model referred to in plain language ("groceries",
@@ -180,7 +199,7 @@ const listTasks: AiTool = {
   }),
   async run(ctx, args) {
     const filter = asString(args.filter) ?? "all";
-    const today = todayInAppTimezone();
+    const today = await toolToday(ctx);
 
     let query = ctx.supabase
       .from("tasks")
@@ -327,7 +346,7 @@ const listRoutines: AiTool = {
   writes: false,
   parameters: NO_ARGS,
   async run(ctx) {
-    const today = todayInAppTimezone();
+    const today = await toolToday(ctx);
     const { data: routines } = await ctx.supabase
       .from("routines")
       .select("id, title, rrule, time_of_day")
@@ -362,7 +381,7 @@ const moneyOverview: AiTool = {
   writes: false,
   parameters: NO_ARGS,
   async run(ctx) {
-    const today = todayInAppTimezone();
+    const today = await toolToday(ctx);
     const [{ data: accounts }, { data: budgets }, { data: categories }] = await Promise.all([
       ctx.supabase
         .from("accounts")
@@ -430,6 +449,10 @@ const moneyOverview: AiTool = {
   },
 };
 
+// The newest hundred — and the model is told when it was only the newest
+// hundred. See the note where the rows are returned.
+const TRANSACTION_LIST_LIMIT = 100;
+
 const listTransactions: AiTool = {
   name: "list_transactions",
   description:
@@ -443,7 +466,7 @@ const listTransactions: AiTool = {
     category: str("Only transactions in this category, by name."),
   }),
   async run(ctx, args) {
-    const today = todayInAppTimezone();
+    const today = await toolToday(ctx);
     const from = asString(args.from_date) ?? addDaysToDateString(today, -30);
     const to = asString(args.to_date) ?? today;
     // A model can send "June" or "2026-02-30". Both used to reach the database
@@ -469,7 +492,7 @@ const listTransactions: AiTool = {
       // shape everywhere, so no query can quietly mean a different day.
       .lt("txn_date", exclusiveEndFor(to))
       .order("txn_date", { ascending: false })
-      .limit(100);
+      .limit(TRANSACTION_LIST_LIMIT);
 
     const merchant = asString(args.merchant);
     if (merchant) query = query.ilike("merchant", `%${merchant}%`);
@@ -498,7 +521,27 @@ const listTransactions: AiTool = {
       category: nameById.get(t.category_id),
       source: t.source,
     }));
-    return { from, to, count: rows.length, transactions: rows };
+    // A LIST IS NOT A TOTAL, and the model has to be told so.
+    //
+    // This is the one money tool that deliberately does NOT filter to CAD, to
+    // expenses, or away from transfers — "show me last week" means show me
+    // everything — and it stops at the newest hundred. Add these rows up and
+    // the number is none of the app's answers: it can mix CAD with INR, count
+    // both legs of a transfer, count income as spending, and silently leave
+    // out everything past the hundredth row. The cut-off is therefore stated
+    // instead of looking like the whole story, and totals are pointed at the
+    // two tools that compute them the way the Reports screen does.
+    const truncated = rows.length >= TRANSACTION_LIST_LIMIT;
+    return {
+      from,
+      to,
+      count: rows.length,
+      truncated,
+      note: truncated
+        ? `Only the ${TRANSACTION_LIST_LIMIT} most recent in that range are listed, so they do not add up to it. Use get_spending_by_category or get_money_report for any total.`
+        : "Individual transactions, each in the currency it was logged in. Use get_spending_by_category or get_money_report for a total.",
+      transactions: rows,
+    };
   },
 };
 
@@ -513,54 +556,66 @@ const spendingByCategory: AiTool = {
     to_date: str("Last day to include, YYYY-MM-DD. Defaults to today."),
   }),
   async run(ctx, args) {
-    // THE OFF-BY-ONE THIS FIXES, because it was a money one. This query used
-    // to filter `.lte(to_date)` while the Reports screen filtered
-    // `.lt(range.end)`, so "what did I spend in August" had two answers
-    // depending on which boundary date the model happened to send: the
-    // person's "31 August" agreed with Reports, the range-shaped "1 September"
-    // added the whole of 1 September to August. Now the inclusive date a
-    // person names is turned into the exclusive end every other query in the
-    // app uses, once, here at the boundary. See lib/finance/period.ts.
+    // THE SAME QUERIES THE REPORTS SCREEN RUNS, not a second narrower copy.
+    //
+    // This tool used to run its own inline query, and every difference between
+    // that query and the shared one was a way for the assistant and the
+    // Reports screen to answer "what did I spend in August" with two different
+    // numbers. There were three, in the order they were found:
+    //
+    //   1. The BOUNDARY. It filtered `.lte(to_date)` where the screen filtered
+    //      `.lt(range.end)`, so the range-shaped "1 September" the model was
+    //      handed elsewhere added a whole extra day to August.
+    //   2. PAGING. It read one response and believed it. Supabase caps a
+    //      response at 1000 rows with no error and no flag, so a long range on
+    //      a busy account reported a total that was too low and said nothing
+    //      about it — see the note in lib/finance/report-queries.ts.
+    //   3. What "spending" MEANS. It counted everything that was not income;
+    //      the shared query counts `categories.kind = 'expense'` only. There
+    //      is no CHECK constraint on that column, so a third kind would have
+    //      been counted here and not there.
+    //
+    // All three are gone the same way: this calls `queryCategorySpend` and
+    // `queryIncomeTotal`, the functions `getReport` itself calls, over a range
+    // built by `customRangeFor` — the one place an inclusive date a person
+    // named becomes the exclusive end the queries use. What the model is shown
+    // is adapted below, after the numbers exist, rather than by asking the
+    // database a different question.
     const { today } = await toolPeriodContext(ctx);
     const from = asString(args.from_date) ?? `${today.slice(0, 7)}-01`;
     const to = asString(args.to_date) ?? today;
-    const dateProblem = customRangeProblem(from, to);
+    // Same validation, and the same `today`, as get_money_report.
+    const dateProblem = customRangeProblem(from, to, today);
     if (dateProblem) return { error: dateProblem };
+    const range = customRangeFor(from, to);
 
-    const { data } = await ctx.supabase
-      .from("transactions")
-      .select("amount_cents, category_id, categories(name, kind)")
-      .eq("user_id", ctx.userId)
-      .eq("currency", "CAD")
-      .is("transfer_group_id", null)
-      .gte("txn_date", from)
-      .lt("txn_date", exclusiveEndFor(to));
-
-    const totals = new Map<string, number>();
-    let incomeCents = 0;
-    for (const row of (data as unknown as {
-      amount_cents: number;
-      categories: { name: string; kind: string } | null;
-    }[]) ?? []) {
-      if (!row.categories) continue;
-      if (row.categories.kind === "income") {
-        incomeCents += row.amount_cents;
-        continue;
-      }
-      totals.set(row.categories.name, (totals.get(row.categories.name) ?? 0) + row.amount_cents);
+    const [byCategory, income] = await Promise.all([
+      queryCategorySpend(ctx.supabase, ctx.userId, range),
+      queryIncomeTotal(ctx.supabase, ctx.userId, range),
+    ]);
+    // A failed query returns EMPTY, not zero. Reporting that as "you spent
+    // nothing" is a lie with a dollar sign on it — same rule as
+    // get_money_report, and the reason those functions return `failed` at all.
+    if (byCategory.failed || income.failed) {
+      return { error: "Couldn't load those figures just now." };
     }
 
-    const categories = [...totals.entries()]
-      .map(([name, cents]) => ({ category: name, total: formatCents(cents), total_cents: cents }))
-      .sort((a, b) => b.total_cents - a.total_cents);
-    const spentCents = categories.reduce((sum, c) => sum + c.total_cents, 0);
+    // Already sorted biggest first by the shared query; this only renames the
+    // fields into the shape the model has always been shown.
+    const categories = byCategory.rows.map((c) => ({
+      category: c.categoryName,
+      total: formatCents(c.totalCents),
+      total_cents: c.totalCents,
+    }));
+    const spentCents = byCategory.rows.reduce((sum, c) => sum + c.totalCents, 0);
 
     return {
-      from,
-      to,
+      from: range.start,
+      to: inclusiveLastDay(range.end), // inclusive, the way it was asked for
       total_spent: formatCents(spentCents),
-      total_income: formatCents(incomeCents),
-      net: formatCents(incomeCents - spentCents),
+      total_income: formatCents(income.totalCents),
+      net: formatCents(income.totalCents - spentCents),
+      note: "Canadian dollars. Transfers between the person's own accounts are excluded, and income is counted separately from spending. These are the same figures the Reports screen shows.",
       categories,
     };
   },
@@ -582,13 +637,13 @@ const spendingByCategory: AiTool = {
  *
  * READ-ONLY, AND THAT MATTERS BEYOND THE ASSISTANT. `ALL_TOOLS` is also the
  * registry the Today outlook and the Timeline look suggestions up in, so
- * anything added here can in principle be named by a suggestion chip. The
- * BOTH now filter to the same two-name allowlist in lib/ai/suggestable.ts —
- * at parse time, so an unauthorised proposal is never stored, and again before
- * execution, so a row written before that filter existed cannot run either.
- * This tool is not on that list and could not be proposed even if it were
- * named. Nothing is written, nothing is
- * spent, and module access is still checked before it runs.
+ * anything added here can in principle be named by a suggestion chip. Both of
+ * those surfaces now filter to the same two-name allowlist in
+ * lib/ai/suggestable.ts — at parse time, so an unauthorised proposal is never
+ * stored, and again before execution, so a row written before that filter
+ * existed cannot run either. This tool is not on that list and so could not be
+ * proposed even if a model named it. Nothing is written, nothing is spent, and
+ * module access is still checked before it runs.
  */
 const moneyReport: AiTool = {
   name: "get_money_report",
@@ -785,6 +840,10 @@ const logExpense: AiTool = {
       };
     }
 
+    // The account's own today, not the hardcoded one: this DATE IS STORED, so
+    // a wrong one puts the expense in the wrong day (and, at a month boundary,
+    // the wrong budget period and the wrong report).
+    const txnDate = asString(args.date) ?? (await toolToday(ctx));
     const { error } = await ctx.supabase.from("transactions").insert({
       user_id: ctx.userId,
       account_id: account.id,
@@ -792,7 +851,7 @@ const logExpense: AiTool = {
       amount_cents: amountCents,
       currency: account.currency,
       merchant: asString(args.merchant),
-      txn_date: asString(args.date) ?? todayInAppTimezone(),
+      txn_date: txnDate,
       source: "quick_capture",
     });
     if (error) return { error: friendlyDbError(error) ?? "That didn't save." };
@@ -836,6 +895,7 @@ const reconciliationStatus: AiTool = {
   writes: false,
   parameters: NO_ARGS,
   async run(ctx) {
+    const today = await toolToday(ctx);
     const { data } = await ctx.supabase
       .from("reconciliations")
       .select("statement_date, difference_cents, cleared_count, accounts(name)")
@@ -851,7 +911,7 @@ const reconciliationStatus: AiTool = {
     }[]) ?? [];
 
     return {
-      today: todayInAppTimezone(),
+      today,
       checks: rows.map((r) => ({
         account: r.accounts?.name ?? "Account",
         statement_date: r.statement_date,
@@ -941,7 +1001,7 @@ const workoutSummary: AiTool = {
   parameters: obj({ days: num("How many days back to look. Defaults to 30.") }),
   async run(ctx, args) {
     const days = asNumber(args.days) ?? 30;
-    const since = addDaysToDateString(todayInAppTimezone(), -Math.abs(days));
+    const since = addDaysToDateString(await toolToday(ctx), -Math.abs(days));
     // Runs hang off a workout rather than standing alone (0005), so the join
     // is how a run's date is known at all.
     const { data: workouts } = await ctx.supabase
@@ -1217,7 +1277,7 @@ const logWorkout: AiTool = {
     if (rawExercises.length === 0) return { error: "What did you do?" };
 
     const unit = await weightUnitFor(ctx);
-    const workoutDate = asString(args.date) ?? todayInAppTimezone();
+    const workoutDate = asString(args.date) ?? (await toolToday(ctx));
 
     // The exercise library is per-account since 0008 (`user_id` NOT NULL, and
     // `created_by` dropped in the same migration), so this is a plain
@@ -1341,6 +1401,9 @@ const manageBudget: AiTool = {
     if (!amount || amount <= 0) return { error: "How much a month?" };
     const amountCents = Math.round(amount * 100);
     const period = asString(args.period) ?? "monthly";
+    // STORED, and every later "which period are we in" answer is measured from
+    // it (`currentPeriodBounds`), so it is the account's own today.
+    const anchorDate = await toolToday(ctx);
 
     // `unique (user_id, category_id)` on budgets (0016), so this is an upsert
     // rather than a create — asking for a budget that exists means change it.
@@ -1350,7 +1413,7 @@ const manageBudget: AiTool = {
         category_id: found.match.id,
         amount_cents: amountCents,
         period,
-        anchor_date: todayInAppTimezone(),
+        anchor_date: anchorDate,
         is_active: true,
       },
       { onConflict: "user_id,category_id" }
@@ -1611,7 +1674,7 @@ const completeRoutine: AiTool = {
     );
     if ("error" in found) return found;
 
-    const today = todayInAppTimezone();
+    const today = await toolToday(ctx);
     const { data: steps } = await ctx.supabase
       .from("routine_steps")
       .select("id")

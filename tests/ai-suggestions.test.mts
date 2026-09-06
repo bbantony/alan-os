@@ -153,3 +153,67 @@ test("every allowlisted name is still a real tool in the registry", () => {
     );
   }
 });
+
+/**
+ * The test above proves the tool is DECLARED. It does not prove it EXISTS.
+ *
+ * A tool object that is never added to `ALL_TOOLS` typechecks, lints, and is
+ * silently absent at runtime — the registry array is the only thing the
+ * assistant, the Today outlook and the Timeline actually look in. So a rename
+ * that missed the array, or a tool declared and never registered, would pass
+ * the name check and still leave a chip that errors on tap.
+ *
+ * This walks it the other way round: read the identifiers listed in
+ * `ALL_TOOLS`, resolve each back to the `name:` on its declaration, and require
+ * every allowlisted name to be in THAT set. Text again, for the same reason —
+ * `tools.ts` is `server-only` and cannot be imported here.
+ */
+test("every allowlisted name is registered in ALL_TOOLS, not merely declared", () => {
+  const source = readFileSync(
+    fileURLToPath(new URL("../src/lib/ai/tools.ts", import.meta.url)),
+    "utf8"
+  );
+
+  const array = /export const ALL_TOOLS: AiTool\[\] = \[([\s\S]*?)\n\];/.exec(source);
+  assert.ok(array, "could not find the ALL_TOOLS array in lib/ai/tools.ts");
+
+  const identifiers = array[1]
+    // The array carries prose comments ("// Added when Alan asked for an
+    // assistant that can actually change things."), and every word in one
+    // looks like an identifier once you split on whitespace. Strip comments
+    // before splitting or the test accuses `Added` of not being a tool.
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ")
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter((s) => /^[A-Za-z_$][\w$]*$/.test(s));
+  assert.ok(identifiers.length > 0, "ALL_TOOLS parsed as empty — the regex above has rotted");
+
+  const registered = new Set<string>();
+  for (const id of identifiers) {
+    // Deliberately indexOf and not a built regex. The first attempt at this
+    // interpolated the identifier into a `new RegExp` template literal, where
+    // the `\s` of `[\s\S]` is not a valid string escape and silently becomes a
+    // bare `s` — so the pattern quietly stopped matching anything and the test
+    // failed on a tool that was registered perfectly well. Plain string search
+    // has no escaping layer to get wrong.
+    const at = source.indexOf(`const ${id}: AiTool = {`);
+    assert.notStrictEqual(
+      at,
+      -1,
+      `ALL_TOOLS lists \`${id}\` but no \`const ${id}: AiTool\` declares it`
+    );
+    // `name:` is the first field on every tool object, so the first one after
+    // the declaration is that tool's own name and not a nested one.
+    const named = /name: "([^"]+)"/.exec(source.slice(at));
+    assert.ok(named, `\`${id}\` is declared but has no name field`);
+    registered.add(named[1]);
+  }
+
+  for (const name of SUGGESTABLE_TOOLS) {
+    assert.ok(
+      registered.has(name),
+      `${name} is on the suggestion allowlist but is not in ALL_TOOLS — it would be offered as a chip and fail on tap`
+    );
+  }
+});

@@ -132,10 +132,10 @@ export function TimelineView({
   async function handleAction() {
     if (!currentInsight?.suggested_action) return;
     setActing(true);
-    const result = await runSuggestedAction({
-      insightId: currentInsight.id,
-      action: currentInsight.suggested_action,
-    });
+    // The id and nothing else. The server re-reads the stored action itself —
+    // sending one from here would be sending the browser's copy of something
+    // executable, and it was already being ignored.
+    const result = await runSuggestedAction({ insightId: currentInsight.id });
     setActing(false);
     if (result.error) {
       toast.error(result.error);

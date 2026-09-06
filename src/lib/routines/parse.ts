@@ -107,15 +107,45 @@ export function parseWallClockTime(value: unknown): string | null {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
+/** True when an argument was actually supplied (rather than left out). */
+function supplied(value: unknown): boolean {
+  return value !== undefined && value !== null && value !== "";
+}
+
+/** How each pattern reads in a sentence, for the "two patterns at once" ask. */
+const REPEAT_IN_WORDS: Record<RoutineRepeat, string> = {
+  daily: "every day",
+  weekdays: "every weekday",
+  every_n_days: "every few days",
+  weekly: "once a week",
+  monthly: "once a month",
+};
+
 /**
  * The recurrence a routine should be created with, or a question to ask back.
  *
- * `repeat` is inferred from whichever detail was supplied when it is missing
- * or unrecognised, because "every 3 days" and "on the 1st" each say the
- * pattern on their own. What is NEVER inferred is the detail itself: a weekly
- * routine with no day named, or a monthly one with no date, comes back as an
- * error so the assistant asks rather than picking Monday the 1st and being
- * quietly wrong every week from then on.
+ * `repeat` is inferred from whichever detail was supplied when it is MISSING,
+ * because "every 3 days" and "on the 1st" each say the pattern on their own.
+ * What is NEVER inferred is the detail itself: a weekly routine with no day
+ * named, or a monthly one with no date, comes back as an error so the
+ * assistant asks rather than picking Monday the 1st and being quietly wrong
+ * every week from then on.
+ *
+ * TWO THINGS THAT USED TO BE GUESSED AND ARE NOW ASKED (6 Sep 2026). Both are
+ * the exact "almost right" failure this file was written to prevent, and both
+ * had slipped in through the fallback at the end of the inference chain:
+ *
+ *  1. AN UNRECOGNISED WORD became daily. "Fortnightly" is a real thing a
+ *     person says and not a pattern this app has, so it fell through every
+ *     branch and landed on the default — a routine nudging every single day,
+ *     forever, with nothing anywhere saying it wasn't what was asked for.
+ *  2. A NAMED PATTERN CONTRADICTING ITS DETAIL kept the pattern and dropped
+ *     the detail. `{repeat: "daily", every_n_days: 3}` became plain daily:
+ *     three times too often. Which half was meant is genuinely unknowable
+ *     from here, so it is asked rather than picked.
+ *
+ * A non-whole interval is refused for the same reason: 2.6 quietly rounded to
+ * 3, so "every two and a half days" became a schedule nobody chose.
  */
 export function recurrenceFromWords(input: {
   repeat?: unknown;
@@ -124,29 +154,85 @@ export function recurrenceFromWords(input: {
   day_of_month?: unknown;
 }): { recurrence: RecurrenceOptions } | { error: string } {
   const asked = typeof input.repeat === "string" ? input.repeat.trim().toLowerCase() : "";
-  const interval =
-    typeof input.every_n_days === "number" && Number.isFinite(input.every_n_days)
-      ? Math.round(input.every_n_days)
-      : null;
-  const weekday = parseWeekdayName(input.weekday);
-  const monthDay =
-    typeof input.day_of_month === "number" && Number.isFinite(input.day_of_month)
-      ? Math.round(input.day_of_month)
-      : null;
+  // A pattern was NAMED. Blank and whitespace-only count as saying nothing, so
+  // they still infer from the details below rather than being asked about.
+  const namedAPattern = typeof input.repeat === "string" ? asked !== "" : supplied(input.repeat);
 
+  // --- The interval, refused rather than rounded ---------------------------
+  let interval: number | null = null;
+  if (supplied(input.every_n_days)) {
+    if (typeof input.every_n_days !== "number" || !Number.isFinite(input.every_n_days)) {
+      return { error: "How many days apart should it repeat — every 2 days, every 3?" };
+    }
+    if (!Number.isInteger(input.every_n_days)) {
+      return {
+        error:
+          "A gap between repeats has to be a whole number of days. " +
+          "Should it be every 2 days, or every 3?",
+      };
+    }
+    interval = input.every_n_days;
+  }
+
+  const weekday = parseWeekdayName(input.weekday);
+
+  let monthDay: number | null = null;
+  if (supplied(input.day_of_month)) {
+    if (
+      typeof input.day_of_month !== "number" ||
+      !Number.isInteger(input.day_of_month) ||
+      !Number.isFinite(input.day_of_month)
+    ) {
+      return { error: "Which day of the month should it repeat on — a number from 1 to 31?" };
+    }
+    monthDay = input.day_of_month;
+  }
+
+  // --- Which pattern was asked for ----------------------------------------
   let repeat: RoutineRepeat;
   if ((ROUTINE_REPEATS as string[]).includes(asked)) {
     repeat = asked as RoutineRepeat;
   } else if (asked === "weekday") {
     repeat = "weekdays";
+  } else if (namedAPattern) {
+    // Said something, and it isn't one of ours. Never fall through to daily:
+    // see note 1 above.
+    return {
+      error:
+        `I don't have a "${String(input.repeat).trim()}" repeat. ` +
+        "It can go every day, every weekday, every few days, once a week on a day you name, " +
+        "or once a month on a date. Which of those is closest?",
+    };
   } else if (interval !== null) {
     repeat = "every_n_days";
-  } else if (input.weekday !== undefined && input.weekday !== null) {
+  } else if (supplied(input.weekday)) {
     repeat = "weekly";
   } else if (monthDay !== null) {
     repeat = "monthly";
   } else {
     repeat = "daily";
+  }
+
+  // --- Does the detail agree with the pattern? -----------------------------
+  //
+  // Only checked when the pattern was NAMED. When it was inferred it came from
+  // the detail, so it cannot disagree with it.
+  if (namedAPattern) {
+    const named = REPEAT_IN_WORDS[repeat];
+    const clash = (detail: string) => ({
+      error: `That's two patterns at once — ${named}, and ${detail}. Which one did you mean?`,
+    });
+
+    // "Every 1 day" IS daily, so it agrees rather than clashes.
+    if (interval !== null && repeat !== "every_n_days" && !(repeat === "daily" && interval === 1)) {
+      return clash(`every ${interval} days`);
+    }
+    if (supplied(input.weekday) && repeat !== "weekly") {
+      return clash("a set day of the week");
+    }
+    if (monthDay !== null && repeat !== "monthly") {
+      return clash("a set date each month");
+    }
   }
 
   switch (repeat) {
@@ -171,10 +257,9 @@ export function recurrenceFromWords(input: {
     case "weekly": {
       if (weekday === null) {
         return {
-          error:
-            input.weekday === undefined || input.weekday === null
-              ? "Which day of the week should it repeat on?"
-              : "Say the day by name — Monday, Tuesday, and so on.",
+          error: supplied(input.weekday)
+            ? "Say the day by name — Monday, Tuesday, and so on."
+            : "Which day of the week should it repeat on?",
         };
       }
       return { recurrence: { preset: "weekly", weekday } };

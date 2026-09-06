@@ -1101,17 +1101,23 @@ account. The fix is a module check inside the action.
 
 **Wave 2B is HALF LANDED and NOT signed off. The running notes are in `NEXT-SESSION.md`; read that
 before picking it up.** Landed on 6 Sep but deliberately not marked complete here, because it has
-not had the two reports this project requires: `create_routine` with the loose-language parser
+had the live-database check its security fix needs: `create_routine` with the loose-language parser
 behind it, custom report date ranges (`customRangeFor` / `customRangeProblem` and the shared
 `lib/finance/report-queries.ts`, so the Reports screen and the assistant run the same queries),
 the `get_money_report` tool, an allowlist (`lib/ai/suggestable.ts`) that stops an AI suggestion chip
 from ever proposing anything but "add a task" or "add to the shopping list", and the module check
 that closes the crew-account billing hole recorded just above. CHANGELOG 68–72. Lint, build and
-166 tests pass. Still to do: prove the billing fix leaves no `ai_usage` row, the evening-ritual
-verbs (`get_day_plan`, `plan_tomorrow`), and propose-then-confirm.
+166 tests pass (`test-runner`), and `unit-reviewer` passed 10 of 13 items — the three it failed were
+the checks not having been shown to it, two files missing from the CHANGELOG, and a comment
+overreaching; all three are addressed in CHANGELOG 73.
 
-**The rest of Wave 2B** — the evening-ritual verbs, and propose-then-confirm reusing the outlook's
-one-tap pattern.
+**Still to do, in order:** prove the billing fix leaves no `ai_usage` row (the assertion that
+actually shows the spending is closed); the evening-ritual verbs `get_day_plan` and `plan_tomorrow`;
+and propose-then-confirm, reusing the outlook's one-tap pattern. Two further billing paths the
+review turned up are logged in `NEXT-SESSION.md` — the assistant's other actions are still ungated,
+and `/today` calls `ensureDailyOutlook` for any account that can reach it, so "the crew billing hole
+is closed" is true only of `ask()`.
+
 Note from the Wave 2 scout: a receipt is a photo, and tools carry text only, so "here's a
 photo" stays a button rather than becoming a verb. Then **Wave 3** — Fold two-pane layouts,
 unlocked orientation, share_target.

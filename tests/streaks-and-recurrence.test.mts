@@ -221,6 +221,54 @@ test("the pattern is inferred from whichever detail was given", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Repeats that used to be guessed
+// ---------------------------------------------------------------------------
+// Three real cases QA found on 6 Sep 2026, all the same shape: a routine that
+// nudges on a schedule nobody asked for, with nothing anywhere saying so.
+
+test("fortnightly is asked about, not silently turned into daily", () => {
+  // "Fortnightly" is a thing people say and not a pattern this app has, so it
+  // fell off the end of the inference chain onto the daily default: a nudge
+  // every single day, forever.
+  const parsed = recurrenceFromWords({ repeat: "fortnightly" });
+  assert.ok("error" in parsed);
+  // The question has to name the word back, or it's unanswerable.
+  assert.ok("error" in parsed && parsed.error.includes("fortnightly"));
+
+  assert.ok("error" in recurrenceFromWords({ repeat: "every other week" }));
+  assert.ok("error" in recurrenceFromWords({ repeat: 3 }));
+  // Saying nothing at all is still daily — that is a default, not a guess.
+  assert.equal(rruleFromWords({ repeat: "" }), "RRULE:FREQ=DAILY");
+});
+
+test("daily AND every 3 days is two patterns, so it asks which", () => {
+  // This used to keep "daily" and drop the 3 entirely: three times as often as
+  // asked for.
+  assert.ok("error" in recurrenceFromWords({ repeat: "daily", every_n_days: 3 }));
+  assert.ok("error" in recurrenceFromWords({ repeat: "weekdays", every_n_days: 2 }));
+  assert.ok("error" in recurrenceFromWords({ repeat: "daily", weekday: "monday" }));
+  assert.ok("error" in recurrenceFromWords({ repeat: "monthly", day_of_month: 3, weekday: "mon" }));
+  assert.ok("error" in recurrenceFromWords({ repeat: "weekly", weekday: "mon", day_of_month: 3 }));
+  // "Every 1 day" IS daily, so those two agree and nothing is asked.
+  assert.equal(rruleFromWords({ repeat: "daily", every_n_days: 1 }), "RRULE:FREQ=DAILY");
+  // A detail with no pattern named still infers — it can't contradict itself.
+  assert.equal(
+    rruleFromWords({ repeat: "every_n_days", every_n_days: 3 }),
+    "RRULE:FREQ=DAILY;INTERVAL=3"
+  );
+});
+
+test("two and a half days apart is asked about, not rounded up to three", () => {
+  assert.ok("error" in recurrenceFromWords({ repeat: "every_n_days", every_n_days: 2.6 }));
+  assert.ok("error" in recurrenceFromWords({ every_n_days: 0.5 }));
+  // A number that isn't a number at all asks too, rather than falling through
+  // to daily the way it used to.
+  assert.ok("error" in recurrenceFromWords({ every_n_days: "3" }));
+  assert.ok("error" in recurrenceFromWords({ every_n_days: Number.NaN }));
+  assert.ok("error" in recurrenceFromWords({ repeat: "monthly", day_of_month: 15.5 }));
+});
+
+// ---------------------------------------------------------------------------
 // Wall-clock times
 // ---------------------------------------------------------------------------
 

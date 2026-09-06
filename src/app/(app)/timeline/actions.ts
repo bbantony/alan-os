@@ -36,16 +36,18 @@ export async function getLedgerDays(from: string, to: string): Promise<LedgerDay
  *     This is a server action, so its argument is whatever the browser sends —
  *     a handcrafted `{tool, args}` used to be executable as a general-purpose
  *     write endpoint. `runOutlookSuggestion` in today/outlook-actions.ts had
- *     always done it this way; this is the same reasoning, applied late. The
- *     `action` field is still accepted so existing callers compile, and is
- *     deliberately IGNORED.
+ *     always done it this way; this is the same reasoning, applied late.
  *
- * `acted_at` is stamped so the chip doesn't come back and offer to do it twice.
+ *     An `action` field lingered in the signature after that fix, accepted and
+ *     ignored, and the chip kept sending one. It is GONE as of the same day:
+ *     an ignored parameter that looks executable is a standing invitation for
+ *     the next reader to wire it back up. The only argument now is an id.
+ *
+ * `acted_at` is stamped BEFORE the tool runs and only if no one else has
+ * stamped it, which is what makes the chip single-use — see the claim below.
  */
 export async function runSuggestedAction(input: {
   insightId: string;
-  /** Ignored — kept only so existing callers still typecheck. See above. */
-  action?: SuggestedAction;
 }): Promise<{ ok?: true; error?: string }> {
   const supabase = await createClient();
   const {
@@ -56,41 +58,89 @@ export async function runSuggestedAction(input: {
   const profile = await getCurrentProfile();
   if (!profile) redirect("/login");
 
-  const { data: row } = await supabase
+  // CLAIM FIRST, RUN SECOND. This used to read `acted_at`, run the tool, then
+  // stamp — three separate trips, so two taps a moment apart both read "not
+  // done yet" and both ran the write. `.is("acted_at", null)` moves the
+  // decision into the database: the stamp and the check are one statement, so
+  // exactly one of any number of simultaneous taps can match a row. The
+  // returned row is what makes it a claim rather than a hope — no rows back
+  // means somebody else got there first, and nothing runs.
+  //
+  // The stored action comes back FROM the claim, so what runs is what was in
+  // the row at the moment it was claimed, not a copy read earlier.
+  const claimedAt = new Date().toISOString();
+  const { data: claimed, error: claimError } = await supabase
     .from("insights")
-    .select("suggested_action, acted_at")
+    .update({ acted_at: claimedAt })
     .eq("id", input.insightId)
     .eq("user_id", user.id)
+    .is("acted_at", null)
+    .select("suggested_action")
     .maybeSingle();
 
-  const stored = (row?.suggested_action as SuggestedAction | null) ?? null;
-  if (!stored) return { error: "That suggestion isn't there any more." };
-  // Idempotent: a double tap, or a tap on a stale render, must not run the
-  // same write twice.
-  if (row?.acted_at) return { error: "That one's already done." };
+  if (claimError) return { error: "That didn't go through — try again in a moment." };
+
+  if (!claimed) {
+    // Nothing was claimed. Say which of the two reasons it was, which needs a
+    // read — but only on this cold path, and it changes nothing either way.
+    const { data: existing } = await supabase
+      .from("insights")
+      .select("acted_at")
+      .eq("id", input.insightId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (existing?.acted_at) return { error: "That one's already done." };
+    return { error: "That suggestion isn't there any more." };
+  }
+
+  // Releases the claim, so a suggestion refused below can still be tapped once
+  // the reason is fixed. Guarded on our own timestamp: if some other write has
+  // touched `acted_at` since, it isn't ours to undo.
+  const userId = user.id;
+  const insightId = input.insightId;
+  async function release() {
+    await supabase
+      .from("insights")
+      .update({ acted_at: null })
+      .eq("id", insightId)
+      .eq("user_id", userId)
+      .eq("acted_at", claimedAt);
+  }
+
+  const stored = (claimed.suggested_action as SuggestedAction | null) ?? null;
+  if (!stored) {
+    await release();
+    return { error: "That suggestion isn't there any more." };
+  }
 
   // The allowlist first, the registry second. A stored proposal naming a tool
   // that isn't offerable — an old row from before the parse-time filter, or
   // anything else — is refused outright rather than run.
   if (!isSuggestableTool(stored.tool)) {
+    await release();
     return { error: "That suggestion isn't something the app will do on a tap." };
   }
 
   const tool = ALL_TOOLS.find((t) => t.name === stored.tool);
-  if (!tool) return { error: "That suggestion isn't something the app can do." };
+  if (!tool) {
+    await release();
+    return { error: "That suggestion isn't something the app can do." };
+  }
   if (tool.module !== null && !profile.moduleAccess[tool.module]) {
+    await release();
     return { error: "That isn't switched on for this account." };
   }
 
   const ctx: ToolContext = { supabase, userId: user.id };
+  // Deliberately NOT wrapped in a try/catch that releases. A tool that returns
+  // an error refused cleanly and wrote nothing, so the claim goes back; a tool
+  // that THROWS may have written half of something, and offering to run it
+  // again is the worse of the two failures.
   const result = (await tool.run(ctx, stored.args ?? {})) as { error?: string };
-  if (result?.error) return { error: result.error };
-
-  await supabase
-    .from("insights")
-    .update({ acted_at: new Date().toISOString() })
-    .eq("id", input.insightId)
-    .eq("user_id", user.id);
+  if (result?.error) {
+    await release();
+    return { error: result.error };
+  }
 
   revalidatePath("/timeline");
   revalidatePath("/plan");

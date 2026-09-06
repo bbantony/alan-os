@@ -18,7 +18,9 @@ The assistant learned two new things this round: it can now **make a routine** f
 time you name** ("how have I done since June"), instead of only whole months. On top of that two
 holes got closed: an AI suggestion chip could have offered to change your budget with one tap
 (it can't now — chips may only ever add a task or add to the shopping list), and someone with a
-workout-only account could have made the app ask AI questions on your card (they can't now).
+workout-only account could have made the app ask AI questions on your card (they can't now, through
+the ask box — but the review found two other doors onto your card that are still open, and they are
+the first job below).
 
 **None of it is on your phone yet.** It is saved and safe, but it has not had the second pair of
 eyes the project rules require, so nothing has been marked finished. The next session picks up at
@@ -28,20 +30,48 @@ exactly that point.
 
 ## State of the tree
 
-Last commit at time of writing: `c609460` (Wave 2A). Everything below sits in the commit this
-handoff is part of, so nothing is at risk of being lost — but it is **landed, not blessed.**
+Wave 2A was `c609460`; this work landed as `fa73b93` plus the review-fix commit this file is part
+of. Nothing is at risk of being lost — but it is **landed, not blessed.**
 
 | Check | Result | When |
 |---|---|---|
 | `npm run lint` | passes | 6 Sep, this tree |
-| `npm test` | **166 tests, 0 failures** (was 149 earlier in the session, 108 in PROGRESS.md) | 6 Sep, this tree |
-| `npm run build` | passes — a stale lock had been hiding this, see below | 6 Sep, this tree |
-| `unit-reviewer` | ran against an *earlier snapshot*; its findings are triaged below | 6 Sep |
+| `npm test` | **174 tests, 174 pass, 0 fail** (149 earlier in the session, 108 in PROGRESS.md) | 6 Sep, this tree |
+| `npm run build` | passes | 6 Sep, this tree |
+| `unit-reviewer` | **10 of 13 PASS, 3 FAIL** — all three addressed, see below | 6 Sep, this tree |
 
-> **The build lock, because it will happen again.** A crashed `next build` leaves
-> `.next/diagnostics/build-diagnostics.json` with `"buildStage": "static-generation"`, and every
-> later build refuses with *"Another next build process is already running."* Nothing is actually
-> running. Delete that one file and the build works. Do not go hunting for a phantom process.
+**What the reviewer failed, and what was done about it.** (1) It was told not to run the checks
+because a `test-runner` was running concurrently, and correctly refused to take "they pass" on the
+author's word — the `ALL CHECKS PASS` line exists and is recorded in the row above. (2) The
+CHANGELOG did not mention `.gitignore` or the `PROGRESS.md` edit, and entry 70 wrongly said the
+Today outlook changed with "no behaviour change" when it gained a new runtime check — both corrected
+in entry 73. (3) The `toolPeriodContext` doc block claimed "money tools that resolve a date range
+read the same row the screen does", which is untrue of `list_transactions` and `get_money_overview`
+— the comment now says which two tools actually use it and points at the open job below. The
+reviewer also strengthened the case for that job by noticing two of the ten bare calls are defaults
+on *writes*.
+
+Its ten passes are worth knowing, because they are the expensive things to re-derive: no secrets
+reach the browser, money stays integer cents, the new recurrence anchors on the row's own
+`created_at` rather than the device clock, migration 0022's "no orphan reminder" invariant holds,
+all 22 tools are genuinely in `ALL_TOOLS` (checked mechanically), the `tools.ts` header's list of
+twelve write tools is exactly right, and every new user-facing string is plain English.
+
+> **The build lock — read the whole of this before deleting anything.** `npm run build` refusing
+> with *"Another next build process is already running"* has **two** causes and they want opposite
+> responses:
+>
+> 1. **A build really is running.** Usually because two `test-runner` agents were launched with
+>    overlapping lifetimes. `tasklist | grep node` shows the workers — a live build shows one or two
+>    node processes north of 1 GB. **Wait.** Deleting the lock here starts a second build writing
+>    into the same `.next` and is how you get genuinely corrupt output.
+> 2. **Nothing is running, and a killed build left the flag set.** `.next/diagnostics/build-diagnostics.json`
+>    still reads `"buildStage": "static-generation"` and every later build believes it. Deleting that
+>    one file is the whole fix.
+>
+> So: check for node processes FIRST, and only delete the file if there are none. This session hit
+> both, diagnosed the second correctly, then wrote down "delete the file" as though it were the only
+> answer and immediately hit the first. **Do not run two `test-runner` agents at once.**
 
 ---
 
@@ -66,13 +96,28 @@ handoff is part of, so nothing is at risk of being lost — but it is **landed, 
 
 ## The jobs left, in order
 
-### Job 1 — prove the billing hole is actually closed *(was task #47)*
+### Job 1 — finish closing the billing hole, and prove it *(was task #47)*
 
-The code is in. The test that matters is not. Against the live database in a `BEGIN` / `ROLLBACK`:
-set a second account to workout-only, call the path `ask()` takes, and assert **two** things —
-that it returns the `unavailable` shape, *and that no row lands in `ai_usage`*. The absent usage
-row is the whole point; a polite refusal that still bills is not a fix. Do this first: it is the
-only thing in this commit that claims a security property without evidence.
+`ask()` is gated and `unit-reviewer` confirmed that gate is correct and sufficient **for `ask()`**.
+Two other paths onto the owner's card are still open, both pre-existing, both found in the review
+rather than by this session's own reading — so treat "the crew billing hole is closed" as false
+until these are done:
+
+1. **`ensureDailyOutlook`, called from `src/app/(app)/today/page.tsx:161`** for any account with the
+   outlook panel on. `/today` is deliberately not module-gated, so this is a real second door and it
+   spends model credit on a schedule rather than on a tap. **This is the one that matters** — it
+   costs money without anyone doing anything.
+2. **`startConversation`, `listConversations`, `deleteConversation`**
+   (`src/app/(app)/assistant/actions.ts:163`, `211`, `272`) are ungated. No credit is spent and RLS
+   keeps every row to its own account, so nothing leaks — but a workout-only account can still
+   create empty conversation rows by calling the action directly. Lower stakes; same one-line fix.
+
+**Then the test that actually proves it.** Against the live database in a `BEGIN` / `ROLLBACK`: set
+a second account to workout-only, call the path `ask()` takes, and assert **two** things — that it
+returns the `unavailable` shape, *and that no row lands in `ai_usage`*. The absent usage row is the
+whole point; a polite refusal that still bills is not a fix. Do the same for the outlook path once
+it is gated. This is the only claim in the commit that asserts a security property without
+evidence.
 
 ### Job 2 — the evening ritual and the day-plan verbs *(was task #48)*
 
@@ -148,6 +193,11 @@ three untrue comments. **Still open, none blocking:**
    "remind me at 7pm" should mean a phone notification or just a time on the card.
 4. **`report-queries.ts` types its client as plain `SupabaseClient`**, looser than the typed client
    used elsewhere.
+5. **The two money tools can still disagree, just not by a day.** `get_spending_by_category`
+   (`tools.ts:530`) has no paging, while `report-queries.ts` pages to 60,000 rows. Over a range
+   containing more than 1000 CAD transactions the older tool silently under-reports and
+   `get_money_report` does not. Not urgent at Alan's transaction volume, but it is the same class of
+   bug as the off-by-one this wave existed to fix, and it will not announce itself.
 
 ---
 
@@ -155,6 +205,10 @@ three untrue comments. **Still open, none blocking:**
 
 - **A tool that isn't in `ALL_TOOLS` typechecks, lints, and silently does not exist.** Adding the
   export is not adding the tool. Check the array every time.
+- **Do not build a regex inside a JavaScript template literal.** `` new RegExp(`...[\s\S]*?...`) ``
+  looks right and is not: `\s` is not a valid string escape, so it collapses to a bare `s` and the
+  pattern silently matches nothing — and the failure blames the code being searched, not the search.
+  Use a regex literal, or plain `indexOf`.
 - **Bash heredocs truncate on long content** and fail with *"unexpected EOF while looking for
   matching `''"*. Use the Write tool for whole files, or a short Python script for patching.
 - **`node` cannot resolve extensionless imports** in `.ts` run via type-stripping. To exercise pure
@@ -183,3 +237,46 @@ From `CLAUDE.md`, and both were nearly skipped this session:
 
 The approved plan this all came from is at
 `C:\Users\Alan\.claude\plans\effervescent-yawning-waffle.md`.
+
+---
+
+## Second review pass — added 6 Sep by a parallel session
+
+**Read this before trusting the "landed, not blessed" table above.** A second session was working
+in this same tree at the same time as the one that wrote this file. It ran `unit-reviewer` and `qa`
+against the **current** tree (the review recorded above saw an earlier snapshot) and then fixed
+what they found. `npm run lint`, `npm run build` and `npm test` all pass on the tree as it now
+stands. See CHANGELOG entries 74 and 75 for the detail.
+
+**Fixed since this handoff was written:**
+- `get_spending_by_category` had never actually moved onto the shared query — it kept its own,
+  unpaged (silently capped at 1000 rows) and with a looser definition of "spending" (not-income
+  rather than expense-only). So the assistant and Reports could still give two different answers,
+  which is the fault the wave existed to end. It now calls the shared query.
+- **Ten** bare `todayInAppTimezone()` calls in `tools.ts`, not the two the earlier review found —
+  and two of them were **writes**, not displays: `log_expense`'s transaction date and
+  `manage_budget`'s anchor date. Near midnight those could land on the wrong day.
+- `getCurrentProfile()` defaulted a failed or empty read to **owner**, so entry 71's new assistant
+  gate failed open. Now fails closed; the reasoning for why that can't lock Alan out is in entry 75.
+- An unrecognised or contradictory repeat word silently produced a **daily** routine.
+- Both one-tap suggestion buttons were check-then-act and could double-run; they now claim before
+  running. Fixing that put an index into a query filter, which is now shape-validated.
+- The Timeline chip's ignored-but-executable-looking payload is gone.
+
+**Still open, and both need a schema change — deliberately not done here:**
+1. Two *different* suggestion chips claimed within milliseconds can still lose one "done" mark
+   (the suggestions share one JSON column, so a claim can't touch a single element). The same chip
+   cannot double-run.
+2. Budget "spent so far" is duplicated in two files and neither pages — a category with >1000
+   transactions in one budget period under-reports on both screens. They agree with each other, so
+   it is a shared blind spot rather than a disagreement.
+
+**Also still open** (from the list above, unchanged): `list_transactions` can emit a
+Reports-specific "about five years" message.
+
+**A warning for whoever picks this up.** Two sessions were editing this working tree at once.
+Comments were observed changing between one agent's read and its write. Nothing appears to have
+been lost — the checks pass and the entries reconcile — but **verify the tree against
+`git diff` before trusting any single file**, and don't run two sessions on one checkout again.
+Nothing has been committed by the second session; the staged work is exactly as the first left it,
+plus the fixes above.

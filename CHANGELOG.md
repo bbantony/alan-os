@@ -5484,10 +5484,14 @@ rather than only a whole month or week, and give the assistant a tool that uses 
   above, are in a comment at the top of that section.
 - **Three query paths brought onto it.** `get_spending_by_category` and `list_transactions` now
   translate the inclusive date they were given and filter `< end` like everything else (identical
-  results for a date a person named, no possible disagreement for anything else), and
-  `get_money_overview` reports `period_last_day` instead of the exclusive `period_end`, so nothing
-  exclusive is ever shown to the model again. The assistant's own instructions now say the rule out
-  loud too.
+  results for a date a person named), and `get_money_overview` reports `period_last_day` instead of
+  the exclusive `period_end`, so nothing exclusive is ever shown to the model again. The assistant's
+  own instructions now say the rule out loud too.
+  **Corrected 6 Sep 2026:** this bullet originally ended that parenthesis with "no possible
+  disagreement for anything else". That was false the day it was written. Filtering `< end` fixed
+  the *boundary* and nothing else: `get_spending_by_category` was still running its own query, with
+  no paging and its own definition of what counts as spending, so the same question could still come
+  back with two different totals on a long range. Fixed, and the claim rewritten, in entry 74.
 - **The report queries moved to one shared home**, `src/lib/finance/report-queries.ts` — the same
   category, trend and merchant queries, byte for byte, with the same four filters (CAD only, no
   transfers, expense categories only, user-scoped) and the same all-pages reading. They were private
@@ -5545,8 +5549,10 @@ choosing a change and Alan confirming something he didn't really choose is exact
 - **The weekly insight now applies that list when the model answers**, so an unauthorised suggestion
   is never written to the database at all, rather than being caught later at tap time.
 - **The Today outlook now uses the same shared list** instead of its own copy of the same two names.
-  No behaviour change there — it is the same two tools — but there is now one definition instead of
-  two that could drift apart.
+  It is the same two tools, so nothing it offers has changed — but it also gained the same re-check
+  at tap time that the Timeline gained, which it did not have before. (Corrected 6 Sep: this entry
+  originally said "no behaviour change there", which review found to be wrong. The list it filters
+  by is unchanged; the moment it filters is new.)
 - **The Timeline "do it" button re-checks before running**, because rows written before today could
   already name something unsafe. (Checked the live database read-only: there are no stored
   suggestions at all yet, on either screen, so nothing existing is affected.)
@@ -5639,9 +5645,220 @@ accordingly and give me instructions what to do."
 - **The build was fixed, and it was never broken.** `npm run build` had been refusing with "Another
   next build process is already running" — there was no such process. A build killed part-way leaves
   `.next/diagnostics/build-diagnostics.json` saying `"buildStage": "static-generation"`, and every
-  later build believes it. Deleting that one file was the whole fix; it is written down in
-  `HANDOFF.md` because it will happen again.
+  later build believes it. Deleting that one file cleared it.
+
+  **Corrected an hour later, in the same session, by getting it wrong the other way.** That message
+  has *two* causes, and this entry originally described only one of them as though it were the whole
+  story. The second is that a build genuinely is running — which is what happened next, because two
+  check-runners had been launched with overlapping lifetimes. Deleting the lock in that case starts a
+  second build writing into the same `.next`. The rule that covers both is in `NEXT-SESSION.md`:
+  look for the node processes first, and only delete the file if there are none.
 
 **Where this leaves it:** lint, build and all 166 tests pass on this tree. What is in this commit is
 landed but **not blessed** — `unit-reviewer` has not seen the final state, so nothing has been marked
 complete in `PROGRESS.md` and nothing is claimed finished.
+
+## 73. The review of 72, and what it caught (6 Sep 2026)
+
+**Asked for:** nothing new — this is the second of the two reports the project requires before
+anything is called done, and the fixes it demanded.
+
+**`test-runner`: lint, build and 166 tests pass.** The build had to be un-stuck first (entry 72),
+and one lint failure along the way turned out to be a throwaway `qa-tmp-*` scratch script that had
+been left in the repo root, not app code.
+
+**`unit-reviewer`: 10 of 13 items PASS, 3 FAIL.** All three failures were real and all three are
+fixed here. Worth recording that it caught things this session had not:
+
+- **It refused to take "the checks pass" on my word.** It had been told not to run them itself
+  (a concurrent build would have collided on the lock), was never shown the result, and marked the
+  item FAIL rather than assume. That is the correct call and the reason the rule exists.
+- **Two files in the commit had no CHANGELOG line:** `.gitignore` gained a `qa-tmp-*` rule, and
+  `PROGRESS.md` gained the half-landed marker. Both are now recorded — the `.gitignore` rule exists
+  because ad-hoc verification scripts kept getting swept into the staging area, and one of them
+  reached the linter.
+- **Entry 70 contained a false claim.** It said moving the Today outlook onto the shared allowlist
+  was "no behaviour change". It wasn't: the outlook also gained a check at tap time that it did not
+  have before. The list is unchanged, the moment it filters is new. Entry 70 now says so and is
+  marked as corrected rather than quietly rewritten.
+- **A comment written *in entry 72* — the entry about fixing wrong comments — was itself
+  overreaching.** The note on `toolPeriodContext` ended "Money tools that resolve a date range read
+  the same row the screen does." Only two do. `list_transactions` and `get_money_overview` still
+  take the day from a hardcoded zone, and so can disagree with the other two about which day it is
+  on any account not in Winnipeg. The comment now names the two tools that use it, says plainly that
+  it is not a convention the file keeps, and points at the open job. The review also spotted that
+  two of the ten remaining bare calls are the default day on a *write* — `log_expense`'s `txn_date`
+  and `manage_goal`'s `anchor_date` — where a wrong day is stored rather than merely displayed.
+
+**Also changed, one by one:**
+- **A garbled doc block** on `get_money_report` was rewritten — a sentence had lost its subject
+  ("The BOTH now filter to…") and another had broken mid-clause. It is the one comment in the unit
+  that asks to be trusted on a security property, so it should read as written rather than as
+  patched.
+- **A new test: "every allowlisted name is registered in `ALL_TOOLS`, not merely declared."** The
+  existing test proved each suggestion-chip tool was *declared* in `tools.ts`. That is not the same
+  as existing: a tool object never added to the `ALL_TOOLS` array typechecks, lints, and is silently
+  absent at runtime, which would leave a chip that errors when tapped. The new test reads the array,
+  resolves each entry back to the name on its declaration, and requires every allowlisted name to be
+  in that set. The reviewer named this exact gap.
+
+  **It failed twice before it passed, and never once because a tool was actually missing** — all 22
+  are registered. Both failures were the test's own:
+  - It built its search pattern inside a JavaScript template string, where `\s` is not a valid
+    escape and silently collapses to a plain `s`. The pattern then matched nothing and the test
+    accused a perfectly well-registered tool of not existing. It now finds the declaration with a
+    plain text search, which has no escaping layer to get wrong.
+  - It then read the words out of a prose comment inside the array — "// Added when Alan asked for
+    an assistant that can actually change things." — and demanded to know why there was no tool
+    called `Added`. Comments are now stripped before the names are split out.
+
+  Both reasons are written into the test itself. A test that cries wolf gets deleted by the next
+  person who trips over it, so it needs to say why it looks the way it does.
+- **`PROGRESS.md` tidied** — the half-landed marker had left a duplicated "still to do" sentence
+  running into an older note. It now reads as one paragraph and carries both reports' verdicts.
+- **`NEXT-SESSION.md` corrected on the point that mattered most.** It said the crew-account billing
+  hole was closed. It is closed for the ask box only. The review found **two other doors**: the
+  assistant's other actions (`startConversation`, `listConversations`, `deleteConversation`) are
+  ungated — no credit spent and no data reachable, but empty rows can be created — and, more
+  importantly, `/today` calls `ensureDailyOutlook` for any account that can reach it, which spends
+  model credit on a schedule rather than on a tap. That is now the first job in the queue, ahead of
+  the test that was going to prove the first door shut.
+- **A residual worth knowing** was added to the open list: `get_spending_by_category` has no paging
+  while the shared report queries page to 60,000 rows, so past ~1000 transactions in a range the two
+  money tools can still disagree — not by a day any more, but by the rows the older one never
+  fetched.
+
+## 74. Wave 2B fix pass — the money tool that never actually moved onto the shared query (6 Sep 2026)
+
+**Asked for:** the reviewer and the end-to-end pass both failed Wave 2B on the same thing, so fix it
+properly rather than softening the comment that described it. Entry 69 said the assistant and the
+Reports screen could no longer answer a money question two different ways. They still could.
+
+**The fault.** `get_spending_by_category` — the tool the whole wave existed to fix — was never
+actually moved onto the shared report query. It still ran its own inline one, and that query
+differed from the shared one in two ways that both produce a wrong total with no error anywhere:
+
+- **It read one response and believed it.** Supabase caps a response at 1000 rows. A capped response
+  looks exactly like a complete one: no error, no flag, just fewer rows. The Reports screen pages
+  through up to 60,000; this tool did not page at all. So on a long range over a busy account — a
+  CSV import, a year of history — the assistant would state a total that was simply too low and say
+  nothing about it. A quietly wrong money number is this project's worst class of bug.
+- **It meant something different by "spending".** It counted everything that was not income; the
+  shared query counts categories whose kind is `expense`. There is no CHECK constraint on that
+  column (confirmed against the live database), so a third kind would have been counted by one and
+  ignored by the other.
+
+**What changed, one by one:**
+
+- **`get_spending_by_category` now calls the shared functions** — `queryCategorySpend` and
+  `queryIncomeTotal`, the same ones `getReport` and `get_money_report` call, over a range built by
+  `customRangeFor`. It no longer queries the transactions table itself at all. Both faults above are
+  gone because there is no second query left to differ.
+- **It can no longer report zeros for a failure.** The shared queries return a "this failed" flag
+  rather than throwing, and the tool now turns that into "couldn't load those figures just now" —
+  the rule `get_money_report` already followed. Before, a database error produced an empty list,
+  which reads as "you spent nothing".
+- **It validates a range exactly like `get_money_report`**, including "that range hasn't started
+  yet", so the two tools accept and refuse the same inputs.
+- **One small behaviour change worth naming:** category totals are now grouped by the category's id
+  rather than its name, so two categories that happen to share a name are listed separately instead
+  of being silently added together. That is what the Reports screen has always done.
+- **`list_transactions` is not the same fault, but it could be misread as a total.** It is a list —
+  deliberately not filtered to Canadian dollars, not filtered to expenses, not excluding transfers —
+  and it stops at the hundred most recent. Add those rows up and you get a number that is none of
+  the app's answers. It now returns a `truncated` flag and a plain sentence saying the list is cut
+  off and that totals come from `get_spending_by_category` or `get_money_report`, instead of leaving
+  a hundred rows looking like the whole story.
+- **One "today" for the whole assistant.** Ten tools still worked out today from the hardcoded
+  Winnipeg zone while the report tools read the account's profile, so a single conversation could
+  hold two different todays. Every one of them now reads the profile. Two of them were storing the
+  day rather than displaying it — the date a `log_expense` transaction is filed under, and the
+  anchor date a new budget's periods are counted from ever after. (Entry 73 attributed that anchor
+  to `manage_goal`; it belongs to `manage_budget`. A savings goal stores a deadline the person
+  gives, not an anchor.)
+- **Two overclaims corrected rather than softened.** Entry 69's "no possible disagreement for
+  anything else" is marked corrected above. The header of `src/lib/finance/report-queries.ts` said
+  the two category queries "no longer can" disagree, which was true only about the date boundary; it
+  now says that every category total in the app is this one query, and lists what is still *not*
+  shared instead of implying nothing is.
+- **What is still not shared, written into that header rather than claimed away:** the budget
+  "spent so far" figure is a different query living in two files (`getBudgetsWithProgress` in
+  `money/actions.ts` and `get_money_overview` in `lib/ai/tools.ts`). Their filters match byte for
+  byte, so they agree with each other, but neither pages — a single category with more than 1000
+  transactions inside one budget period would under-report on both. And `getBudgetsWithProgress`
+  still takes today from the hardcoded zone where the assistant now reads the profile, so on an
+  account outside Winnipeg the two can disagree for a few hours a day about which budget period is
+  the current one. Neither is visible on Alan's own account; both are now written down.
+- **Four new tests** in `tests/money-and-units.test.mts`, in the same read-the-source style
+  `tests/ai-suggestions.test.mts` uses (that file is `server-only`, so the plain-node runner cannot
+  import it): the category tool must call the shared queries and must not query transactions itself;
+  the old forked query's fingerprints must not reappear anywhere in the tools file; both range tools
+  must validate a range the same way; and no tool may call the hardcoded-timezone `today` helper
+  bare. The last one is the guard that keeps the ten conversions from creeping back one at a time.
+
+**No schema change, no migration** — this is query and comment work only.
+
+**Not blessed:** `test-runner` and `unit-reviewer` were deliberately not run from this pass; whoever
+picks it up runs both before anything here is marked complete.
+
+## 75. Wave 2B fix pass — a permission gate that failed open, and three guards that could be got round (6 Sep 2026)
+
+**Where this came from:** a second review and QA pass over Wave 2B, run against the current tree
+rather than the earlier snapshot entry 73's review saw. Four findings, all fixed.
+
+### The one that mattered — the new gate failed open
+
+Entry 71 added a check so a workout-only account can't spend Alan's AI budget. It asks
+`getCurrentProfile()` who you are. That function defaulted `role` to **`"owner"`** when it got
+nothing back — so the gate would have waved through exactly the accounts it was written to stop.
+A gate that fails open is worse than no gate, because it looks like protection.
+
+**The investigation mattered more than the diff, so it is recorded.** A missing profiles row is
+almost impossible by accident: a trigger creates it inside the same transaction as the signup, so
+a failed insert fails the signup. But "no row" was never the main way in — the code used
+`.single()` and threw the error away, so **any** failed read (a timeout, a policy problem, a column
+from a migration that hadn't been applied) produced the same empty answer and was then read as
+"this is the owner", handing over every module, the admin link and the assistant.
+
+**Why failing closed cannot lock Alan out**, which was the risk worth checking before touching it:
+`profiles.role` has defaulted to `workout_member` since migration 0005, so `owner` is never
+implied — a real owner has a row that says so. The database already bets everything on that: its
+own `is_admin()` check reads that same row, so if Alan's were missing he would already be refused
+by every admin function today. And closed is degraded, not locked — Today and Settings aren't
+module-gated, so the account still opens and can sign out.
+
+The fix distinguishes "no row" from "read failed", logs the failure instead of swallowing it, and
+defaults to the lowest access rather than the highest. No migration: the trigger and the column
+default that make this safe already exist.
+
+### Three guards that could be got round
+
+- **A routine you didn't ask for.** An unrecognised repeat word became a **daily** routine in
+  silence — ask for "fortnightly" and you'd be nudged every day, never told. So did contradictory
+  input ("daily" plus "every 3 days" quietly dropped the 3) and a fractional interval. The file's
+  own header says it "either returns a value it is sure of, or an error sentence", and its weekly
+  and monthly branches do exactly that; the daily branch didn't. It asks now.
+- **A one-tap suggestion could run twice.** Both suggestion buttons read "not done yet", ran the
+  action, and marked it afterwards — two taps could both pass the check. The Today one was worse:
+  it rewrote the whole suggestions list from a copy taken before the action ran, so two taps on
+  two different chips could lose one's "done" mark and make it live again. Both now **claim** the
+  suggestion with a conditional write before running anything, so the claim is what makes it
+  single-use, and the write's result is checked.
+- **An index straight into a database filter.** Making that claim work meant putting the
+  suggestion's position into a query filter — which turned an unvalidated number into an injection
+  surface. It's shape-checked before it goes anywhere near the query.
+- **The Timeline chip stopped shipping an executable-looking payload.** The server had already
+  been changed to ignore it; the parameter is now gone entirely, because an ignored field that
+  looks executable is an invitation to a future reader to start trusting it again.
+
+### Two things deliberately left, because they need a schema change
+
+Recorded rather than rushed, since another session is mid-handoff and a surprise migration would
+be unkind:
+1. **Two different chips claimed within a few milliseconds of each other can still lose one mark.**
+   The suggestions live in one JSON column, and the whole column has to be written at once, so the
+   claim can't touch a single element. Closing it needs a small database function or a table per
+   suggestion. The same chip can never double-run — that part is fixed.
+2. **Budget "spent so far" is still a separate rule in two files, and neither pages**, so a
+   category with more than a thousand transactions in one budget period under-reports on both
+   screens. They agree with each other, so it isn't a disagreement — it's a shared blind spot.

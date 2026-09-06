@@ -13,16 +13,40 @@ import type { PeriodRange } from "./period";
  * both call these, so "how did I do since June" cannot give two answers
  * depending on who asked.
  *
- * WHAT THIS IS NOT. It is not yet the only category query in the app.
- * `get_spending_by_category` in lib/ai/tools.ts still runs its own, narrower
- * one -- it answers "which categories" alone, without the trend, the merchants
- * or the daily rate, and folding it in here would mean fetching four things to
- * answer one. The two DID once disagree by a day, which is the bug the long
- * note in lib/finance/period.ts describes; they no longer can, because both
- * now turn the inclusive date at their own boundary with `exclusiveEndFor` and
- * query `.lt`. That is a shared RULE rather than shared CODE, so it is worth
- * saying out loud: change the boundary convention and there are two call sites
- * to change, not one.
+ * EVERY CATEGORY TOTAL IN THE APP IS NOW THIS QUERY. The Reports screen, the
+ * assistant's `get_money_report` and its `get_spending_by_category` all call
+ * `queryCategorySpend`. That last one held out for a while on the grounds that
+ * it answers "which categories" alone and folding it in would mean fetching
+ * four things to answer one — it now calls this and `queryIncomeTotal` and
+ * nothing else, which is two, and it was worth it, because being narrower is
+ * exactly how it stayed wrong. It read ONE response, so it stopped at the
+ * API's 1000-row cap (see the paging note below) while the screen paged to
+ * 60,000, and it counted everything that was not income as spending where this
+ * counts `kind = 'expense'` only. Neither shows up as an error; both show up
+ * as a total that is quietly too high or too low.
+ *
+ * WHAT IS STILL NOT SHARED, said plainly rather than glossed:
+ *   - The BUDGET "spent so far" figure is a different query, written twice:
+ *     `getSafeToSpend`/`getBudgetsWithProgress` in money/actions.ts and
+ *     `get_money_overview` in lib/ai/tools.ts. They are byte-for-byte the same
+ *     rules — one category, CAD, no transfers, the budget's own period — so
+ *     the ROWS they count agree, but neither pages, so both would under-report
+ *     a category with more than 1000 transactions in one period. They are not
+ *     folded in here because "spent against this budget" is a different
+ *     question from "where did the money go": it is scoped to one category
+ *     over a period this file knows nothing about.
+ *   - Which PERIOD those two think we are in can still differ by a few hours a
+ *     day on a profile that is not in Winnipeg: the assistant's tools all read
+ *     the profile timezone, while `getBudgetsWithProgress` still calls
+ *     `todayInAppTimezone()` bare (money/actions.ts, and `getReport` in the
+ *     same file does read the profile). It is invisible on Alan's own account
+ *     and it is a one-line fix in a file the money-report work did not own, so
+ *     it is written down here rather than claimed away.
+ *   - The DATE BOUNDARY is a shared rule, not shared code. Every caller turns
+ *     the inclusive date a person named into an exclusive end at its own edge
+ *     (`exclusiveEndFor`, usually via `customRangeFor`) before calling in
+ *     here. Change that convention and there is more than one call site to
+ *     change.
  *
  * It is a plain module, not a `"use server"` one, on purpose: everything here
  * takes the CALLER'S already-authenticated Supabase client, so nothing in this

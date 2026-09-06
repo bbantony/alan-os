@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import { parseCsvAmount, readCsvAmount, normalizeCsvDate } from "../src/lib/finance/csv-parser.ts";
 import {
@@ -844,4 +846,105 @@ test("brand-new books are not nagged on day one", () => {
   // Called without the start date at all, the old unqualified answer stands —
   // that is what keeps every existing caller behaving exactly as before.
   assert.equal(monthEndCheckStatus(null, "2026-09-05").due, true);
+});
+
+// ---------------------------------------------------------------------------
+// One answer per money question — the assistant's tools, read as text
+// ---------------------------------------------------------------------------
+//
+// Added 6 Sep 2026, after a review found that `get_spending_by_category` had
+// never actually been moved onto the shared report query even though the wave
+// that claimed to end the two-answers problem said it had. Three real
+// differences survived in it: it read one response and so stopped at the API's
+// 1000-row cap while the Reports screen paged to 60,000; it counted anything
+// that was not income as spending where the shared query counts
+// `kind = 'expense'` only; and, earlier, it turned the end of the range into a
+// different day. All three produce a wrong TOTAL with no error anywhere.
+//
+// These are text checks, not behaviour checks, because lib/ai/tools.ts is
+// `server-only` and cannot be imported by the plain-node runner (the same
+// reason tests/ai-suggestions.test.mts reads it as text). A text check is
+// weaker than running the code, but it catches the thing that actually keeps
+// happening here: someone writing a second copy of a money query.
+
+const TOOLS_SOURCE = readFileSync(
+  fileURLToPath(new URL("../src/lib/ai/tools.ts", import.meta.url)),
+  "utf8"
+);
+
+/**
+ * One tool's source, from its `name:` line to the `};` that closes its object.
+ * Every tool in that file is a top-level `const`, so the first line that is
+ * exactly `};` after the name is the end of that tool and nothing else.
+ */
+function toolSource(name: string): string {
+  const start = TOOLS_SOURCE.indexOf(`name: "${name}"`);
+  assert.notEqual(start, -1, `${name} no longer exists in lib/ai/tools.ts`);
+  const after = TOOLS_SOURCE.slice(start);
+  const end = after.indexOf("\n};");
+  return end === -1 ? after : after.slice(0, end);
+}
+
+test("the assistant's category totals come from the shared query, not a second copy", () => {
+  const src = toolSource("get_spending_by_category");
+  assert.ok(
+    src.includes("queryCategorySpend("),
+    "get_spending_by_category must total categories with the shared queryCategorySpend"
+  );
+  assert.ok(
+    src.includes("queryIncomeTotal("),
+    "get_spending_by_category must take income from the shared queryIncomeTotal"
+  );
+  // The moment it queries transactions itself, it can page differently, filter
+  // differently, or define spending differently from the Reports screen —
+  // which is exactly what it did.
+  assert.ok(
+    !src.includes('.from("transactions")'),
+    "get_spending_by_category is querying transactions itself again"
+  );
+  assert.ok(
+    !src.includes('.eq("currency"'),
+    "get_spending_by_category is restating the shared query's filters"
+  );
+});
+
+test("the old forked category query has not come back anywhere in the tools", () => {
+  // The select the forked query used, and the boundary it used to filter on.
+  assert.ok(
+    !TOOLS_SOURCE.includes("categories(name, kind)"),
+    "a tool is selecting category rows to total itself again"
+  );
+  assert.ok(
+    !TOOLS_SOURCE.includes('.lte("txn_date"'),
+    "a tool is filtering an inclusive end date again — see lib/finance/period.ts"
+  );
+});
+
+test("both money-range tools accept and refuse exactly the same ranges", () => {
+  for (const name of ["get_spending_by_category", "get_money_report"]) {
+    const src = toolSource(name);
+    assert.ok(
+      src.includes("customRangeProblem(from, to, today)"),
+      `${name} must validate its range the same way, including "hasn't started yet"`
+    );
+    assert.ok(
+      src.includes("customRangeFor(from, to)"),
+      `${name} must build its range with the one inclusive-to-exclusive conversion`
+    );
+  }
+});
+
+test("no assistant tool works out its own today from the hardcoded timezone", () => {
+  // `todayInAppTimezone()` with no argument falls back to Winnipeg. Every tool
+  // must go through `toolToday`/`toolPeriodContext`, which read the profile,
+  // or one conversation can hold two different todays — and two of them STORE
+  // the day they pick (`log_expense`'s txn_date, `manage_budget`'s anchor).
+  const code = TOOLS_SOURCE.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  assert.equal(
+    /todayInAppTimezone\(\s*\)/.test(code),
+    false,
+    "a tool is calling todayInAppTimezone() bare instead of reading the profile"
+  );
+  // And the profile-reading version is still there to go through.
+  assert.ok(code.includes("async function toolToday("));
 });
