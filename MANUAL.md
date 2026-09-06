@@ -1792,3 +1792,31 @@ won't nag you about books you haven't kept yet.
 
 **Today links to its own settings.** At the very bottom of the Today screen there's now
 "Choose what's on this screen", which opens the page where you reorder and hide the panels.
+
+## Talking to it wherever you are
+
+The **+** button on any screen now opens the assistant itself, not a link to it. Type or talk,
+read the answer, keep going — all without leaving the screen you were on. The Expense, Task,
+Shopping and Receipt buttons are still in the same panel underneath.
+
+**It remembers now.** Conversations are saved, so closing the app and coming back later picks up
+where you left off. There's a **New** button to start a fresh one and a **Chats** button to see
+past conversations or delete them (it asks first).
+
+A few things worth knowing:
+
+- **If a save ever fails**, the answer still appears — it's just marked as not saved, so you know
+  it won't be there next time. You never lose an answer you've already paid for.
+- **If your connection drops mid-question**, the app tells you honestly that it may still have
+  gone through, and offers a free **check** button rather than letting you ask again and pay
+  twice.
+- **Ask something while it's still answering** and your question waits its turn rather than being
+  lost — and it now survives closing the panel, too.
+- **Opening the full Assistant screen** picks up your most recent real conversation, even if you'd
+  just started a blank one in the + panel. The blank one is remembered by your phone; the screen
+  asks the app what your last chat was.
+- **Old chats tidy themselves.** The app keeps your 30 most recent conversations and the last 200
+  messages in each, so nothing grows forever.
+
+**It costs you no more than before.** It still only sends the last dozen messages to the AI, and
+now caps their size too — so the expensive case is actually cheaper than it was.

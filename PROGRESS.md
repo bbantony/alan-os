@@ -1071,3 +1071,36 @@ don't edit the sentences; and check the code comments say the same thing as the 
 the assistant as a layer over any screen, with memory and the missing verbs (routines, the
 evening ritual, receipts, reports on demand). Then **Wave 3** — Fold two-pane layouts, unlocked
 orientation, and share_target.
+
+## 6 Sep 2026 — Wave 2A: the assistant becomes a layer, and it remembers
+
+CHANGELOG entry 67. Migrations 0041 (conversations + messages, RLS in the same file, retention by
+trigger) and 0042 (revoking EXECUTE the way 0035 does — 0041's claim that nothing was callable by
+the public was false, because revoking from PUBLIC doesn't remove Supabase's default grants).
+Both applied to production and verified by querying it: RLS genuinely on, policies attached,
+triggers present, and the prune functions now callable only by postgres and service_role.
+
+The chat lives in the capture sheet as well as at /assistant — **one component, two frames**, with
+the sheet dropping its chat on the assistant page so only one is ever mounted. Conversations
+persist; only the last twelve messages (and now a character budget) go to the model, so cost is
+unchanged and the worst case is cheaper.
+
+**Three review rounds and a QA trace: 18 findings, then 2, then 4 residuals.** The one worth
+remembering failed three times — "which chat am I in" was stored as an id in one place, a
+deliberate-blank flag in another, and a third value decided what was actually sent. Each patch
+fixed the named path and the next round found a narrower variant. The third attempt deleted the
+duplicated state instead: one `ChatIntent` (resume / fresh / specific) in the shared store, one
+writer, one reader, one place it becomes a server argument. **The lesson is the diagnostic value
+of the pattern** — repeated narrower failures of the same item mean the fix is too local, not that
+the reviewer is being fussy.
+
+**Recorded, its own unit:** a crew account (workout only) can invoke the assistant action directly
+and spend the owner's AI credit. The route guard works by address and a server action posts to
+whatever page you're on, so the guard never sees it. No data leaks — tools are filtered per
+account. The fix is a module check inside the action.
+
+**Next: Wave 2B** — the verbs the assistant still lacks (routines, the evening ritual, reports on
+demand over a real date range) and propose-then-confirm, reusing the outlook's one-tap pattern.
+Note from the Wave 2 scout: a receipt is a photo, and tools carry text only, so "here's a
+photo" stays a button rather than becoming a verb. Then **Wave 3** — Fold two-pane layouts,
+unlocked orientation, share_target.

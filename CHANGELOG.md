@@ -5190,3 +5190,224 @@ month-end-check cases including "brand-new books are not nagged on day one".
 notably the budget period boundaries that feed safe-to-spend — worth its own unit rather than a
 drive-by. And the week-start preference is still ignored by the two workout screens named in the
 audit.
+
+## 67. Wave 2A — the assistant becomes a layer, and it remembers (6 Sep 2026)
+
+**What Alan asked for:** the thing he described at the start of the whole commission — "I just
+want to talk to it somewhere and have it do the thing". The critique found the ability already
+existed (eleven write tools) but lived in a room you had to walk to, and forgot everything the
+moment you left. This makes it a layer over any screen, with memory.
+
+### The chat is where you are
+
+Tap **+** on any screen and the assistant is right there, cursor in the box, with the mic beside
+it. Ask, read the answer, ask again — without leaving the screen you were on. The Expense, Task,
+Shopping and Receipt forms are still in the same sheet; the box is what you talk to, the chips
+are what you fill in.
+
+**It is one chat, not two.** The full-screen `/assistant` page and the sheet share a single
+implementation with a `variant` that changes the frame only — height, where the composer sits,
+how far it scrolls. This codebase has been bitten before by two of something drifting apart
+(two toast systems, three ways to format a time), and a second chat UI would have been the worst
+one yet. There is one dictation session app-wide, and the chat has exactly one
+composer; the sheet hands its focus to that box rather than keeping a second one of its own.
+
+### It remembers
+
+**Migration 0041** (applied to production and verified live: both tables exist, row-level
+security is genuinely enabled on each — checked, not assumed — the owner-only policies are
+attached, and both pruning triggers are in place).
+
+- **Two tables, not one row holding a JSON blob**, and the reasoning is written into the
+  migration: appending to a blob is read-modify-write, and the chat page and the global sheet can
+  both be open at once, so a concurrent append would silently lose a message. "Keep the newest N"
+  is also one delete against rows versus rewriting a whole document that Postgres would eventually
+  move off-row and drag back on every read. And deletion has to be a fact in the database, not
+  "removed from the array the browser last sent us".
+- **Retention is enforced by database triggers, not app code**: 200 messages per conversation and
+  30 conversations per account, oldest and least-recently-used dropped first. A ceiling of 6,000
+  rows per account, so a chat log can't grow forever on a free tier. Triggers rather than actions
+  because anything that can insert a row must not be able to skip the pruning.
+- Message rows use `clock_timestamp()` rather than `now()`: a question and its answer are written
+  in one statement, and `now()` is transaction-start time, so both rows would carry an identical
+  instant and replay in arbitrary order.
+- The messages policy also checks the parent conversation belongs to you. Scoping on `user_id`
+  alone would have let an account attach its own rows to someone else's conversation — unreadable
+  by them, but their storage to fill.
+
+### Two things this fixed on the way
+
+**Deleted now means deleted.** The browser used to send its copy of the conversation with every
+question, so a tab left open from before a deletion would have re-uploaded the deleted messages
+and written them straight back. `ask` now reads history from the database, which is the only
+thing that knows what was removed.
+
+**Trimming had two real defects** that were unreachable while history lived in the browser and
+become reachable the moment it comes from a database: an odd-length log could hand the model a
+conversation that opens on its own turn, and twelve stored messages could be far larger than
+twelve typed ones. Both are fixed and pinned by tests.
+
+### What it costs
+
+**Nothing more per turn, and less at the worst case.** It still sends only the last twelve
+messages to the model, now with a character budget on top — so the expensive case (twelve very
+long messages) is cheaper than it would have been. Memory adds two reads (the conversation, then its history) and one write per
+turn against Supabase — two writes on the first turn of a brand-new chat, where the conversation
+row is created as well, plus a title update. All free on this tier. The one real increase is the first question after
+you navigate away: it used to carry no history because the browser had thrown it away, and now
+carries up to twelve messages, which is the entire point. That is a fraction of a cent, on that
+one turn.
+
+### Failing safely
+
+A save that fails must never cost an answer already paid for. Every write in `ask` is
+best-effort: a failed conversation lookup, a stale conversation id, a failed history read or a
+failed insert all log and continue, and the reply is returned regardless with `persisted: false`
+— which the screen shows as a quiet note under the message rather than an error. The plain
+save/delete actions are the opposite: those are the user asking for something to be kept, so they
+report failure honestly.
+
+**Also:** deleting a past conversation goes through the shared confirmation dialog rather than
+just vanishing — deleting-without-asking is one of the audit findings this project is working
+through, and a new feature shouldn't add another instance of it. And an assistant answer that
+can't be given (over budget, no key) now returns the typed words to the box instead of leaving
+an orphaned question on screen that would disappear on the next load.
+
+**What this entry didn't name, for the next session reading cold.** New file
+`src/lib/ai/history.ts` (the `AssistantMessage` type moved here and re-exported so no importer
+changed, plus `historyWindow`, the retention constants and `conversationTitle` — all pure, all
+tested). Four new server actions in `assistant/actions.ts`: `getConversation`,
+`listConversations`, `startConversation`, `deleteConversation`. (A fifth, `appendMessage`, was
+written and deleted before shipping — see the round notes below.) Five new
+plain-English mappings in `lib/db-errors.ts`, one per constraint the migration adds.
+`capture-actions.ts` gained a module-gated `assistant` block (whether a key exists, the running
+cost, the timezone) so the sheet's chat gets its server data through the same single lazy fetch
+as the expense and shopping forms rather than a second path.
+
+### Wave 2A — the review and QA rounds
+
+Between them the two passes found eighteen things. All are fixed except one recorded below. The
+ones that mattered:
+
+- **"One chat, not two" was false in practice.** The capture sheet renders on every screen —
+  including the assistant page — so opening it there mounted a *second* chat with its own
+  composer and microphone, two independent copies of the same conversation, and dictation from
+  one running into a box hidden behind the other. Exactly the failure the design existed to
+  prevent, written into a comment claiming the opposite. The sheet now drops its chat when
+  you're already on the assistant page (the capture forms still work there), and both comments
+  say what the code does.
+- **Deleting the chat you were in filed your next question into a different one.** "No
+  conversation" meant "carry on where I left off", which after a delete resolved to some
+  unrelated older thread — so a blank-looking new chat would silently send a dozen messages of
+  someone else's context to the model and append the exchange there. The server now tells three
+  cases apart: the key omitted means resume, an explicit `null` means deliberately start fresh,
+  and an id means that chat or a new one — never the next chat along.
+- **Sending before the conversation finished loading destroyed the transcript.** The composer
+  was live while the history was still arriving; send in that window and the question vanished
+  when the load landed, then the entire scrollback was replaced by the one new exchange. Words
+  typed during a load are now held and sent when it's ready, and nothing is written into the
+  transcript until an exchange is complete.
+- **The chat had pushed the capture forms off the screen.** With the keyboard up, the
+  Expense/Task/Shopping/Receipt chips fell below the fold — turning a two-tap expense back into
+  tap, dismiss, scroll, tap, scroll, which is the friction Wave 1A existed to remove. The chat
+  now opens as a single compact strip and expands when you engage it or when there's something
+  to show, so the chips sit roughly where they did. The transcript also scrolls itself instead
+  of dragging the whole sheet with it.
+- **Two paths could charge you twice.** Closing the sheet mid-answer stranded the reply with no
+  sign one was coming, so the natural move was to ask again and pay again; and a dropped
+  connection *after* the answer had saved did the same. An in-flight exchange now survives the
+  sheet closing and reopening, and a lost response says plainly that the question may already
+  have gone through, with a free button to check before re-asking.
+- **A question that couldn't be answered still created a conversation** — and at the 30-chat cap
+  that evicted a real one in exchange for a permanently blank thread. Nothing is created now
+  until there's an exchange worth storing.
+- **Migration 0042**, because 0041's claim that "nothing here is callable by the public" was
+  false: revoking from `public` doesn't remove the grants Supabase hands out by default, so both
+  retention functions were still callable by any signed-in account. Verified live after applying
+  — the permissions now read postgres and service_role only, and both triggers still fire.
+- **62 lines of new dead code deleted** (`appendMessage`, exported and called by nothing) along
+  with `ask`'s unused `history` parameter, whose comment described a fallback the shipped code
+  could never reach. Removing the first also made "no client path can resurrect a deleted
+  message" true without an asterisk.
+- Smaller: both halves of an unsaved exchange are now marked rather than just the answer;
+  browser-Back to the assistant page no longer serves a transcript predating an exchange made in
+  the sheet; and the sheet resolves to the thread you were actually last in rather than the most
+  recently *written* one.
+
+**Recorded, not fixed — and it should be its own unit.** A crew member's account (workout only)
+can invoke the assistant directly and spend the owner's AI credit. The route guard works by
+address, and a server action posts to whatever page you're on, so the guard never sees it. No
+data leaks — the tool list is filtered per account, so a workout-only session is never even shown
+the money or shopping tools — but the budget is the owner's. This predates the wave; what the
+wave changed is that the assistant's code now ships to every signed-in account rather than only
+to those who can reach its page. The right fix is a module check inside the action itself, which
+is a permissions change deserving its own pass.
+
+**One more closed the same day:** on the assistant page, starting dictation and then opening the
+capture sheet left the microphone running into a box now hidden behind it — the "two
+microphones" confusion the wave had just fixed, moved rather than removed. Opening the sheet now
+ends the session cleanly. Everything already transcribed stays in the box (it is what he said);
+only the live listening stops, the mic button returns to idle by the same path a tap uses, and
+tapping it again later appends rather than overwrites.
+
+### The conversation-identity fix, done structurally
+
+The reviewer failed this same thing three times, each round finding a narrower version — which is
+diagnostic, not random: the patches were too local. So the third fix changed the shape instead of
+the symptoms.
+
+**What was wrong.** "Which chat am I in" was stored as an id in one place, a was-that-deliberate
+flag in another, and a third value decided what actually got sent. They fell out of step at the
+seams:
+
+- **Deleting the chat you were in, then closing and reopening, resumed an unrelated chat.** The
+  deliberate-blank state didn't survive a remount, so the next question went out as "carry on
+  where I left off" — filing it into your most recently used other thread and handing the model a
+  dozen messages of that thread as context, while the screen showed a blank new chat.
+- **"Check if it got through" could tell you the opposite of the truth about your money.** After
+  a failed send in a fresh chat it asked about a conversation the server is obliged to say
+  nothing about, then reported *"nothing was saved and nothing was charged — send it again"*. A
+  fresh ask does create and save the exchange, so the question may well have been answered,
+  stored and billed. The button built to prevent a duplicate paid ask was causing one.
+
+**What it is now.** One value in one place — resume, fresh, or a specific chat — written by one
+function, read by one function, and turned into a server argument in exactly one place. It
+survives a remount the same way an in-flight answer already does. The mirrored copies are
+deleted, so there is no second place to forget. Nothing shown to Alan now asserts that his money is safe:
+the check has four honest answers, including "I can't tell whether that went through — open your
+chats and look", because asserting either way was the bug. (The phrase survives in the file only
+in a comment describing the old behaviour, and as the hedge "I can't promise it wasn't charged".)
+
+**Two smaller losses closed with it:** questions queued behind an answer used to be dropped when
+the sheet closed (the in-flight answer survived, the queue didn't — the same class of loss the
+queue exists to prevent), and a rescued question was discarded outright if you'd started typing
+something else. Both now survive.
+
+**Known and recorded:** closing the sheet with questions still queued doesn't say so — they do
+send when you reopen, but the closing message only mentions an answer in flight.
+
+**Residuals closed after the unit passed.** Four, two of them about not misleading Alan over
+money:
+
+- **"It did get through" could say yes on the strength of an older identical question.** It
+  matched the text anywhere in the chat with no ordering, so asking the same short sentence twice
+  and having the second fail could report it delivered while the screen showed the first answer.
+  It now checks the *newest* question in the chat, and a match that is only an older copy is
+  reported as exactly that — "I can't tell, and I can't promise it wasn't charged". Deliberately
+  not done with a clock: the gap between a phone's clock and the server's could push a real
+  landing into "too old" or an old one into "recent enough", so ordering is the honest test.
+- **A rescued question containing a line break wasn't removed from the box** after a successful
+  check, leaving text that could be sent — and paid for — again.
+- **The last silent downgrade of the conversation intent**: if the server read failed on the
+  assistant page, a specific chat quietly became "resume", so the next question could continue a
+  chat the tab was never in. On a failed read the intent is now left exactly as it was. This was
+  the one remaining place an intent changed without anyone deciding it should.
+- **Deleting a chat while an answer was in flight** briefly showed an exchange from a deleted
+  conversation. The chat controls are now held while an answer is coming, matching how "New chat"
+  already behaved — one rule in one place rather than teaching the reply path about dead chats.
+
+**Worth knowing rather than fixing:** opening the Assistant *screen* picks up your most recent
+real conversation even if you had just started a blank one in the sheet. The sheet's blank is a
+fact about the browser; the page asks the server what your latest chat is. Nothing is misfiled —
+the screen and the target always agree — so this is documented in MANUAL.md rather than papered
+over.

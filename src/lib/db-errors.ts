@@ -51,6 +51,18 @@ const BY_CONSTRAINT: Record<string, string> = {
     "This transfer was logged before directions were recorded — log an opposite transfer to cancel it out.",
   transfer_legs_incomplete:
     "One half of this transfer is missing, so it can't be removed as a pair. Check both accounts on the Money screen.",
+  // Assistant memory (migration 0041). None of these should ever reach Alan in
+  // normal use — the server action checks the same things first — but a
+  // constraint with no sentence here is a constraint that shows him Postgres'
+  // voice the first time it fires, which is the whole point of this file.
+  assistant_messages_content_length:
+    "That message is too long to keep in the chat. It was answered, but it hasn't been saved to the conversation.",
+  assistant_messages_content_not_empty: "There was nothing to save.",
+  assistant_messages_role_valid:
+    "That message couldn't be saved. Reload the assistant and try again.",
+  assistant_messages_conversation_fkey: "That chat has been deleted. Start a new one.",
+  assistant_conversations_title_length:
+    "That chat's name is too long. Start a new chat with a shorter first question.",
 };
 
 // Fallbacks by SQLSTATE class, used when the constraint isn't one we named.

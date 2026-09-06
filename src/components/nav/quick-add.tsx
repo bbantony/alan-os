@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, Mic, Plus, Square, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import {
   Dialog,
@@ -15,12 +15,16 @@ import { Button } from "@/components/ui/button";
 import { Segmented, type SegmentedOption } from "@/components/ui/segmented";
 import { Micro } from "@/components/ui/tag";
 import { toast } from "@/components/ui/toast";
-import { cn } from "@/lib/utils";
 import { MECHANICAL } from "@/lib/motion";
-import { speechSupported, startDictation, type Dictation } from "@/lib/speech";
 import type { ModuleAccess } from "@/lib/permissions";
+import type { UsageSummary } from "@/lib/ai/usage";
 import type { Receipt } from "@/lib/finance/types";
 import { getCaptureData, type CaptureData } from "@/app/(app)/capture-actions";
+import {
+  AssistantChat,
+  assistantAnswerInFlight,
+  stopAssistantDictation,
+} from "@/app/(app)/assistant/assistant-chat";
 import { QuickLogForm } from "@/app/(app)/money/quick-log-form";
 import { ReceiptScanButton } from "@/app/(app)/money/receipt-scan-button";
 import { ReceiptReviewDialog } from "@/app/(app)/money/receipt-review-dialog";
@@ -31,6 +35,13 @@ import { CaptureShoppingForm } from "./capture-shopping-form";
  * The capture sheet: the one control on every screen that takes a thought out
  * of your head and puts it in the app, WITHOUT going anywhere.
  *
+ * As of 6 Sep 2026 that "without going anywhere" is finally true of the box at
+ * the top too. It used to hand what you typed to /assistant in the query
+ * string and navigate there — one tap to capture, and a page change to read
+ * the answer. Now the assistant IS this sheet: the real chat component is
+ * mounted below, so you ask, read the reply, and ask again over whatever
+ * screen you were already on. Nothing here navigates any more.
+ *
  * What this replaces, and why. The old "+" was a menu of doors: five rows that
  * each navigated somewhere else, so the fastest possible expense was tap, wait
  * for a page, then start typing. A menu of links behind a button is just the
@@ -39,13 +50,35 @@ import { CaptureShoppingForm } from "./capture-shopping-form";
  *
  * The order of the sheet is the order of intent:
  *
- *   1. A box you can type or talk into, focused the moment it opens. Most
- *      captures are a sentence ("spent 40 at Superstore"), and the Assistant
- *      already knows how to turn a sentence into the right row in the right
- *      table. This box is the front door to that; it hands the sentence over
- *      to /assistant, which asks it on arrival.
+ *   1. A conversation you can type or talk into, focused the moment it opens.
+ *      Most captures are a sentence ("spent 40 at Superstore"), and the
+ *      assistant already knows how to turn a sentence into the right row in
+ *      the right table. It remembers, too: the sheet opens on the thread you
+ *      were last in, from any screen in the app.
  *   2. Then the exact forms, for when you'd rather tap than talk: an expense,
  *      a task, a shopping item, a receipt photo. Picking one opens it here.
+ *
+ * BOTH jobs have to survive on a phone with the keyboard up, which is why the
+ * chat opens COMPACT — one line saying which chat you're in, the box, and the
+ * running cost. The four chips stay on screen where they have always been, and
+ * the transcript opens out on a tap or the moment you ask something. A sheet
+ * where logging an expense costs tap-dismiss-scroll-tap-scroll is not a
+ * capture sheet any more.
+ *
+ * THE CHAT IS NOT A COPY. It is assistant-chat.tsx, the same component the
+ * /assistant screen renders, in its `sheet` frame — one implementation, two
+ * places, so the two can never drift apart. It also owns the box, the
+ * microphone and the send button, which is why none of those live here any
+ * more: this component used to keep a second textarea and a second dictation
+ * session, and two of either being alive at once is how speech ends up in the
+ * wrong box.
+ *
+ * AND IT IS LEFT OUT ON /assistant. That screen already has the chat, and
+ * mounting a second one here put two composers, two microphones and two
+ * independent copies of one conversation on the same screen — with dictation
+ * started on the page still typing into the box hidden behind this sheet. On
+ * /assistant this sheet is the forms and nothing else; the chat is right
+ * behind it.
  *
  * Only what the account can actually use is offered, on the same ModuleAccess
  * grid the nav and route guard use. The Assistant has no module of its own but
@@ -59,6 +92,7 @@ type CaptureMode = "expense" | "task" | "shopping" | "receipt";
 
 export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<CaptureMode | null>(null);
   /**
@@ -78,12 +112,23 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
    * failed refetch turning a working sheet into an error message.
    */
   const staleRef = useRef<CaptureData | null>(null);
-  /** Numbers each handover to the Assistant so two asks are never confused. */
-  const askSeqRef = useRef(0);
+  /**
+   * The last AI spend figure the chat saw.
+   *
+   * The chat is unmounted when the sheet closes, so it is re-seeded from
+   * `getCaptureData` on the next open — and that copy is only as fresh as the
+   * last fetch. Questions asked in between would make the caption read low
+   * until something else invalidated the cache. Remembering the newest figure
+   * here, in a component that lives as long as the tab, costs one small state.
+   *
+   * STATE, not a ref: this value is rendered (it seeds the chat's cost line),
+   * and a ref read during render is both a React rule violation and a real
+   * bug — a ref changing does not re-render, so the caption could sit on a
+   * stale figure until something unrelated redrew the sheet.
+   */
+  const [latestUsage, setLatestUsage] = useState<UsageSummary | null>(null);
   const [data, setData] = useState<CaptureData | null>(null);
   const [loadingData, setLoadingData] = useState(false);
-  const [text, setText] = useState("");
-  const [notice, setNotice] = useState<string | null>(null);
   /**
    * Receipts photographed here and not yet dealt with, oldest first — the head
    * of the queue is the one on screen.
@@ -98,23 +143,35 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
    */
   const [receiptQueue, setReceiptQueue] = useState<Receipt[]>([]);
   const reviewingReceipt = receiptQueue[0] ?? null;
+  /**
+   * The chat's composer, so the cursor can start there when the sheet opens.
+   *
+   * Owned here and handed DOWN rather than owned by the chat, because
+   * `initialFocus` is a prop of the dialog and the dialog is this component's.
+   * It is the chat's only textarea — this sheet no longer has one of its own.
+   */
   const askRef = useRef<HTMLTextAreaElement>(null);
-
-  // Whether this browser can hear you is a CLIENT-ONLY fact: reading it while
-  // rendering would differ between the server pass and the client one and
-  // produce a hydration mismatch. Same guard, same reasons, as the Assistant's
-  // composer — see the long note in assistant-chat.tsx.
-  const canDictate = useSyncExternalStore(
-    () => () => {},
-    () => speechSupported(),
-    () => false
-  );
-  const [listening, setListening] = useState(false);
-  const dictationRef = useRef<Dictation | null>(null);
-  /** What was already typed before the mic opened, so speech appends. */
-  const beforeSpeechRef = useRef("");
+  /**
+   * Whether anything was asked while this sheet was open.
+   *
+   * The Assistant can CHANGE things, and the answer is written to the database
+   * — so the screen underneath, and the /assistant page held in the router's
+   * client cache, are both potentially one exchange out of date. Browser-Back
+   * to /assistant was serving a transcript that predated a question asked
+   * here, invisible until a hard reload. One `router.refresh()` on close fixes
+   * both, and costs nothing when nothing was asked.
+   */
+  const askedSomethingRef = useRef(false);
 
   const canAsk = moduleAccess.tasks;
+  /**
+   * ONE chat, ever. On /assistant the page's own chat is already mounted a
+   * layer below this sheet, so this one is left out entirely — see the note at
+   * the top of this file and the header of assistant-chat.tsx. The forms still
+   * work there, which is the only reason the "+" still opens at all.
+   */
+  const onAssistant = pathname === "/assistant" || pathname.startsWith("/assistant/");
+  const showChat = canAsk && !onAssistant;
   // Typed to allow "" so the strip can render with NOTHING chosen — the sheet
   // opens on the text box, and a form that is already open under it would be
   // making a choice on your behalf.
@@ -125,8 +182,9 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
     ...(moduleAccess.money ? [{ value: "receipt" as const, label: "Receipt" }] : []),
   ];
 
-  // An account that can neither ask nor log anything shouldn't see the control.
-  if (!canAsk && modes.length === 0) return null;
+  // Nothing to ask and nothing to fill in — including on /assistant, where the
+  // sheet is the forms and nothing else.
+  if (!showChat && modes.length === 0) return null;
 
   async function loadData() {
     if (cacheRef.current) {
@@ -165,78 +223,43 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
   function handleOpenChange(next: boolean) {
     setOpen(next);
     if (next) {
+      // The microphone stops when this sheet opens. On /assistant the box
+      // being dictated into belongs to the page's chat, which this sheet is
+      // now covering — and speech carrying on into a composer nobody can see
+      // is how you come back later to half a sentence you had forgotten
+      // about. Nothing is thrown away: the words already transcribed stay in
+      // that box, and the mic button there stops looking like it is
+      // listening. Anywhere else there is no live session and this does
+      // nothing, because the only other chat is the one inside this sheet.
+      stopAssistantDictation();
       // Lazily, on the tap — not when the app shell mounts. The text box needs
       // none of this and is usable while it's still in the air.
       void loadData();
       return;
     }
-    // A half-finished mic session must not keep listening to a closed sheet.
-    dictationRef.current?.stop();
+    // The chat unmounts with the sheet, which is what stops its microphone and
+    // what makes the next open read the thread back from the database rather
+    // than from a copy this component was holding. An answer still in the air
+    // is NOT lost with it — assistant-chat.tsx parks it outside React, so
+    // reopening the sheet shows the question, the "Looking…" and then the
+    // reply. This says so out loud, because the alternative is asking (and
+    // paying) twice.
+    // `showChat` matters: on /assistant an answer in flight belongs to the
+    // page's chat, which is still on screen and saying so itself.
+    if (showChat && assistantAnswerInFlight()) {
+      toast("Still thinking — open this again in a moment to read the answer.");
+    }
     setMode(null);
-    setNotice(null);
+    // Something was asked in here, so what's underneath — and the /assistant
+    // page sitting in the router's cache — may be a step behind.
+    if (askedSomethingRef.current) {
+      askedSomethingRef.current = false;
+      router.refresh();
+    }
   }
 
   function closeSheet() {
     handleOpenChange(false);
-  }
-
-  function toggleDictation() {
-    if (listening) {
-      dictationRef.current?.stop();
-      return;
-    }
-    beforeSpeechRef.current = text ? `${text.trim()} ` : "";
-    const session = startDictation({
-      onText: (spoken) => setText(beforeSpeechRef.current + spoken),
-      onDone: (error) => {
-        setListening(false);
-        dictationRef.current = null;
-        if (error === "not-allowed" || error === "service-not-allowed") {
-          setNotice("Microphone access is blocked. Allow it in your browser settings to talk to it.");
-        } else if (error) {
-          setNotice("The microphone stopped working. Type it instead.");
-        }
-        askRef.current?.focus();
-      },
-    });
-    if (!session) {
-      setNotice("Dictation isn't available in this browser. Type it instead.");
-      return;
-    }
-    dictationRef.current = session;
-    setNotice(null);
-    setListening(true);
-  }
-
-  /**
-   * Hands what was typed to the Assistant, which asks it the moment that
-   * screen opens (see `?q=` in assistant/page.tsx). A full conversation
-   * inside the sheet is a later job; this already means one tap, one
-   * sentence, done.
-   *
-   * `?t=` is a one-shot token identifying THIS handover. Opening the sheet
-   * again while already on the Assistant is a soft navigation, so that screen
-   * re-renders rather than remounting and has to be able to tell a second
-   * question from the first — which the words alone cannot do, since "add
-   * milk" asked twice an hour apart is two real asks. Without a token the
-   * second sentence was swallowed in silence, and the sheet had already
-   * cleared the box by then, so it was simply gone.
-   */
-  function ask() {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    dictationRef.current?.stop();
-    setText("");
-    closeSheet();
-    // A plain counter, not a clock or a uuid: the token only has to differ
-    // from the one before it so the Assistant can tell two asks apart, and a
-    // counter cannot collide with itself inside the same millisecond. Both
-    // this component and the Assistant live as long as the app shell, so the
-    // numbering and the "already asked" guard reset together on a full load.
-    askSeqRef.current += 1;
-    router.push(
-      `/assistant?q=${encodeURIComponent(trimmed)}&t=${askSeqRef.current}`
-    );
   }
 
   /** Something was saved from one of the inline forms. */
@@ -362,8 +385,9 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
         <DialogContent
           side="bottom"
           showCloseButton={false}
-          // The box is what the sheet is FOR, so the cursor starts in it.
-          initialFocus={canAsk ? askRef : undefined}
+          // The box is what the sheet is FOR, so the cursor starts in it —
+          // unless there is no box here, which is the case on /assistant.
+          initialFocus={showChat ? askRef : undefined}
           className="gap-0 p-0"
         >
           {/* ---------------- Header ---------------- */}
@@ -371,14 +395,16 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
             <div className="min-w-0">
               <DialogTitle>Add</DialogTitle>
               <DialogDescription className="mt-1 text-xs">
-                {/* This used to promise that "nothing here leaves this
-                    screen" directly above a box whose entire job is to hand
-                    what you typed to the Assistant, which IS another screen.
-                    The forms below are the part that stays put, so that is
-                    what it says now. */}
-                {canAsk
-                  ? "Type it or say it and the assistant takes it from there. Or fill one in below without leaving this screen."
-                  : "Fill one in below without leaving this screen."}
+                {/* It can honestly say "without leaving this screen" about the
+                    whole sheet: the chat below stays here now instead of
+                    sending you to /assistant with your sentence in the URL.
+                    On /assistant itself there is no chat here — the real one
+                    is on the screen behind this. */}
+                {showChat
+                  ? "Ask it, tell it, or fill one in — without leaving this screen."
+                  : onAssistant
+                    ? "Fill one in — the chat is on the screen behind this."
+                    : "Fill one in below without leaving this screen."}
               </DialogDescription>
             </div>
             <button
@@ -391,77 +417,37 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
             </button>
           </div>
 
-          {/* ---------------- Say it / type it ---------------- */}
-          {canAsk && (
-            <div className="border-b-2 border-rule p-3">
-              <div className="flex items-end gap-2 border-2 border-rule bg-surface p-2 shadow-[var(--shadow-hard-sm)]">
-                <textarea
-                  ref={askRef}
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Enter sends, Shift+Enter makes a new line — same as the
-                    // Assistant's own composer.
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      ask();
-                    }
-                  }}
-                  rows={2}
-                  aria-label="Ask or tell it anything"
-                  placeholder={
-                    listening ? "Listening…" : "Spent $40 at Superstore…"
-                  }
-                  className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-1.5 text-base outline-none placeholder:text-muted-foreground md:text-sm"
-                />
-                {canDictate && (
-                  <button
-                    type="button"
-                    onClick={toggleDictation}
-                    aria-label={listening ? "Stop listening" : "Talk to it"}
-                    aria-pressed={listening}
-                    className={cn(
-                      "press-hard tap-reach flex size-9 shrink-0 items-center justify-center border-2 border-rule",
-                      listening
-                        ? "bg-destructive text-destructive-foreground"
-                        : "bg-surface text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {listening ? (
-                      <Square className="size-3.5" strokeWidth={3} />
-                    ) : (
-                      <Mic className="size-4" strokeWidth={2.5} />
-                    )}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={ask}
-                  disabled={!text.trim()}
-                  aria-label="Send to the assistant"
-                  className="press-hard tap-reach flex size-9 shrink-0 items-center justify-center border-2 border-rule bg-primary text-primary-foreground disabled:pointer-events-none disabled:opacity-40"
-                >
-                  <ArrowUp className="size-4" strokeWidth={3} />
-                </button>
-              </div>
-
-              {notice ? (
-                <p className="mt-2 border-2 border-destructive px-2 py-1.5 text-xs text-destructive">
-                  {notice}
-                </p>
-              ) : (
-                <Micro className="mt-2 block text-muted-foreground">
-                  Goes to the assistant, which can log, add and change things
-                </Micro>
-              )}
-            </div>
+          {/* ---------------- The assistant, in full ---------------- */}
+          {/* The real chat, not a shortcut to it. `configured` and the running
+              cost ride down on the same lazy first-open fetch as the forms
+              (capture-actions.ts); until that lands the chat is handed
+              `undefined`, which means "assume it works" — the box has to be
+              typeable the instant the sheet opens, and if the key really is
+              missing the server says so in the conversation itself. */}
+          {showChat && (
+            <AssistantChat
+              variant="sheet"
+              moduleAccess={moduleAccess}
+              inputRef={askRef}
+              configured={data?.assistant?.configured}
+              initialUsage={latestUsage ?? data?.assistant?.usage ?? null}
+              timeZone={data?.assistant?.timeZone}
+              onUsage={(usage) => {
+                setLatestUsage(usage);
+                // A reply came back, so something was asked in here. What is
+                // on the screens outside this sheet may now be stale.
+                askedSomethingRef.current = true;
+              }}
+            />
           )}
 
           {/* ---------------- The exact forms ---------------- */}
           {modes.length > 0 && (
             <div className="p-3">
               <Micro className="mb-2 block text-muted-foreground">
-                Or fill it in yourself
+                {/* "Or" only makes sense when there is something above it to
+                    be an alternative to. */}
+                {showChat ? "Or fill it in yourself" : "What are you adding?"}
               </Micro>
               <Segmented
                 options={modes}

@@ -6,6 +6,7 @@ import { callGeminiWithTools, isAiConfigured, type GeminiContent, type GeminiPar
 import { declarationsFor, toolsFor, type AiTool, type ToolContext } from "./tools";
 import { getUsageSummary } from "./usage";
 import { aiFeatureEnabled } from "./feature-flags";
+import { historyWindow, type AssistantMessage } from "./history";
 
 /**
  * The assistant loop.
@@ -19,22 +20,22 @@ import { aiFeatureEnabled } from "./feature-flags";
  *
  *   - MAX_STEPS caps a single question at four model calls, so a confused
  *     loop costs four calls, not four hundred;
- *   - the conversation sent each turn is trimmed to the last MAX_HISTORY
- *     messages, so a long chat doesn't re-send its whole history at the input
- *     price every single turn;
+ *   - the conversation sent each turn is trimmed by `historyWindow` to the
+ *     last MAX_HISTORY messages AND a character budget, so a long chat doesn't
+ *     re-send its whole history at the input price every single turn;
  *   - the monthly budget in usage.ts is checked inside `callGeminiWithTools`
  *     itself, so nothing here can route around it.
+ *
+ * Migration 0041 gave conversations memory — every message is now stored and
+ * reloaded instead of dying with the browser tab. That changed NOTHING here on
+ * purpose. The trimming below is the only thing that decides what is paid for,
+ * and it still sends at most twelve messages; the difference is only that
+ * those twelve now survive navigating away. See lib/ai/history.ts.
  */
 
 const MAX_STEPS = 4;
-const MAX_HISTORY = 12;
 
-export interface AssistantMessage {
-  role: "user" | "assistant";
-  content: string;
-  /** Names of the writes performed while answering, for the "what I did" line. */
-  actions?: string[];
-}
+export type { AssistantMessage } from "./history";
 
 export interface AssistantReply {
   text: string;
@@ -153,7 +154,7 @@ export async function askAssistant(input: {
   const toolByName = new Map(tools.map((t) => [t.name, t]));
 
   const contents: GeminiContent[] = [
-    ...input.history.slice(-MAX_HISTORY).map<GeminiContent>((m) => ({
+    ...historyWindow(input.history).map<GeminiContent>((m) => ({
       role: m.role === "user" ? "user" : "model",
       parts: [{ text: m.content }],
     })),
