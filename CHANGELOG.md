@@ -5862,3 +5862,42 @@ be unkind:
 2. **Budget "spent so far" is still a separate rule in two files, and neither pages**, so a
    category with more than a thousand transactions in one budget period under-reports on both
    screens. They agree with each other, so it isn't a disagreement — it's a shared blind spot.
+
+## 74. Two commits describe less than they contain (6 Sep 2026)
+
+**Not asked for — a correction to the record, written the moment it was noticed.**
+
+Commit `7e8709e` says it contains the fixes for three `unit-reviewer` failures. It does, but it
+also contains **eight files' worth of work this session did not write and cannot take credit for**,
+swept in by a `git add -A` at the end. The same is likely true in smaller part of `fa73b93`.
+
+**What was written by this session** (and is what the two commit messages describe): the comment
+corrections in `tools.ts`, `period.ts` and `report-queries.ts`; the `canAccessPath` check in
+`assistant/actions.ts`; the new `ALL_TOOLS` registration test; and the documentation —
+`CHANGELOG.md`, `PROGRESS.md`, `NEXT-SESSION.md`, `HANDOFF.md`, `.gitignore`.
+
+**What arrived from somewhere else**, and is genuinely good work that deserves its own record:
+`src/lib/supabase/profile.ts`, `src/app/(app)/timeline/timeline-view.tsx`, and further changes to
+`timeline/actions.ts`, `today/outlook-actions.ts`, `lib/routines/parse.ts`,
+`lib/finance/report-queries.ts`, `tests/money-and-units.test.mts` and
+`tests/streaks-and-recurrence.test.mts`. The test suite grew from 166 to 174 and only one of those
+eight is this session's.
+
+**The one worth reading, because it is a security fix and it is not written up anywhere:**
+`getCurrentProfile` used to default a missing or unreadable profile row to `role: "owner"`. An
+account the database had never heard of — or one whose profile read simply errored — was handed the
+owner's everything: every module, the admin link, and the assistant that spends Alan's AI budget.
+It now defaults to `workout_member` and logs the error instead of throwing. Its own comment explains
+why this cannot lock Alan out (`profiles.role` has defaulted to `workout_member` since migration
+0005, so a real owner always has a row saying so in writing, and `is_admin()` in 0018 has always
+failed closed on exactly this question) and why "closed" here is degraded rather than locked
+(`/today` and `/settings` are not module-gated, so the account can still sign out and be fixed, and
+a transient error heals on the next request). **This is a better fix than the one in entry 71** —
+entry 71 closed one door by name; this closes the corridor.
+
+**Why this entry exists rather than a quiet fix.** The rule in CLAUDE.md is that a future session
+should be able to open this repo cold and reconstruct why the code looks the way it does. Two
+commits whose messages omit half their diff break that, and the omission is invisible from the log.
+It is written down here instead. Whoever picks this up should be aware that `git log` for
+`fa73b93..7e8709e` is not a reliable guide to who did what, and should read the diffs rather than
+the messages.
