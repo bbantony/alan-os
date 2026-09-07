@@ -8,6 +8,8 @@ import { findBestMatch } from "@/lib/finance/fuzzy-match";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import type { AccountType, Category } from "@/lib/finance/types";
 import { friendlyDbError } from "@/lib/db-errors";
+import { getCurrentProfile } from "@/lib/supabase/profile";
+import { canAccessPath } from "@/lib/permissions";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -16,6 +18,12 @@ async function requireUser() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
   return { supabase, user };
+}
+
+/** Is Money switched on for whoever is calling? See the long note in receipt-actions.ts. */
+async function moneyIsAvailable(): Promise<boolean> {
+  const profile = await getCurrentProfile();
+  return profile !== null && canAccessPath(profile, "/money");
 }
 
 export interface CsvCandidateRow {
@@ -45,6 +53,14 @@ export async function buildCsvCandidates(input: { rows: RawCsvRow[] }): Promise<
   error?: string;
 }> {
   const { supabase, user } = await requireUser();
+  // Same rule as `uploadReceipt`, and here for the same reason rather than
+  // because anything was seen going wrong: this action ends in a batched
+  // Gemini call, so an account that can post to it can spend the owner's
+  // credit. Today the production build registers it on `settings/money` only —
+  // a page the proxy already blocks — so this is not a hole that is open, it
+  // is one import away from being open, and the import is the kind of change
+  // nobody would think to re-check the permissions for.
+  if (!(await moneyIsAvailable())) return { error: "Money isn't switched on for this account." };
   if (input.rows.length === 0) return { error: "No rows to import." };
   if (input.rows.length > 500) return { error: "That's a lot of rows at once — try a smaller export." };
 

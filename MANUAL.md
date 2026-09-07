@@ -1820,3 +1820,81 @@ A few things worth knowing:
 
 **It costs you no more than before.** It still only sends the last dozen messages to the AI, and
 now caps their size too — so the expensive case is actually cheaper than it was.
+
+## Money changes now ask you first
+
+The assistant can log an expense, correct one, set a budget and put money into a goal. From now on
+it doesn't just do those four things — it says what it's about to do and puts a button under its
+answer.
+
+Ask it to log a $40 shop and you'll get something like:
+
+> I can log that for you — tap below.
+>
+> **[ Log $40.00 at Safeway (Groceries) ]**
+
+Nothing has happened to your money until you tap. If you don't tap, nothing was logged.
+
+**Everything else still just happens.** Adding a task, adding to the shopping list, ticking
+something off, logging a workout, planning tomorrow — all of that runs straight away, exactly as
+before. Only the four money ones stop and ask. That's deliberate: if every little thing needed
+confirming you'd stop reading the buttons, and then they'd protect nothing. A wrong task costs you
+one tap to undo. A wrong expense quietly bends your safe-to-spend for the rest of the month.
+
+Some things worth knowing:
+
+- **The words on the button are built from what it's actually about to do**, not written by the AI.
+  The button can't say one thing and do another.
+- **It can't say "done" about something you haven't tapped.** It's told, in as many words, that the
+  change hasn't happened.
+- **Tapping twice does it once.** The app claims the button before it does the work.
+- **If it doesn't work** — a category that doesn't exist yet, say — the button comes back so you
+  can fix the problem and try again.
+- **The buttons are still there after a reload.** They're saved with the answer.
+
+**You can change how cautious it is.** Settings → AI & cost → how bold the AI should be:
+
+- **Act** — nothing asks first. Everything runs immediately, the way it used to.
+- **Suggest** — what's described above, and what you're set to now. Money asks; nothing else does.
+- **Notice** — *everything* it could change asks first, including tasks and the shopping list.
+
+## Planning tomorrow out loud
+
+The evening ritual on Today — three things to focus on tomorrow, and a line about how today went —
+can now be done by talking instead of tapping.
+
+- **"What am I meant to be doing today?"** reads back the three things you picked, which of them
+  you've done, and what you wrote last night.
+- **"Tomorrow I want to finish the deck, call the dentist, and get to the gym"** sets them.
+- **"Today went well, got the big thing off my plate"** saves that against today, so it's there to
+  read tomorrow morning.
+
+If you name something that's already a task, it links the two up — so ticking the task off makes
+the goal show as done, the same as if you'd picked it from the list on screen.
+
+If you never planned anything, asking what you're meant to be doing doesn't say "nothing". It
+tells you what's overdue and what's due today, which is what the screen would have shown you.
+
+## Nobody else can spend your AI budget
+
+Anyone you've invited for workouts can't use the assistant — that was already true if they tried to
+open it. Underneath, there were four more ways in that didn't go through the front door, and one of
+them was real: sending a receipt photo. Someone with a workout-only account could have had your AI
+read a receipt and charged it to you, from a screen they're perfectly entitled to be on.
+
+All of them are shut now, and it was tested rather than assumed — with a real spare account, signed
+in for real, checking that your AI bill didn't move. (And then checked the other way round, by
+switching the account's access back on and confirming the bill *did* move, so the first result
+meant something.)
+
+Nothing changes for you. This is only about accounts that aren't yours.
+
+## Saying a time still buzzes your phone
+
+You were asked which way this should go, and you chose the buzz. So when you tell the assistant
+"water the plants every 3 days at 7pm", 7pm is a reminder on your phone, not just a time printed on
+the card.
+
+Worth knowing that the routine dialog on the **Plan** screen works the other way — add a routine by
+tapping and the phone nudge starts off, and you switch it on yourself. That's not a bug: saying a
+time out loud is taken as asking to be reminded of it, while typing one into a form isn't.

@@ -396,7 +396,11 @@ export function customRangeProblem(
   }
   const days = daysBetweenDateStrings(startDate, lastDate) + 1; // both ends counted
   if (days > MAX_CUSTOM_RANGE_DAYS) {
-    return `That's ${days} days. Reports cover about five years at a time — try a shorter range.`;
+    // Says nothing about WHERE the range was asked for. `list_transactions`
+    // reuses this function, so a sentence naming the Reports screen was being
+    // shown to somebody who had just typed a question at the assistant. The
+    // limit is the same wherever the range comes from; the wording now is too.
+    return `That's ${days} days. About five years at a time is the limit — try a shorter range.`;
   }
   if (today && startDate > today) {
     return "That range hasn't started yet, so there's nothing to show.";

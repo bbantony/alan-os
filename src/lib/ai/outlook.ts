@@ -3,7 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { formatCents } from "@/lib/finance/money";
 import { resolvePreferences } from "@/lib/preferences";
-import type { ModuleAccess } from "@/lib/permissions";
+import { canAccessPath, type ModuleAccess, type PermissionProfile } from "@/lib/permissions";
 import { callGeminiJson, isAiConfigured } from "./gemini";
 import type { SuggestedAction } from "./insights";
 import { sanitiseProposedActions } from "./suggestable";
@@ -215,9 +215,47 @@ export async function ensureDailyOutlook(facts: OutlookFacts): Promise<DailyOutl
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("preferences")
+    .select("preferences, role, module_access")
     .eq("id", user.id)
     .maybeSingle();
+
+  // --- Can this account spend the owner's credit? --------------------------
+  //
+  // THE SECOND DOOR. `ask()` in the assistant's actions was gated on 6 Sep
+  // against exactly this — a crew account billing the owner for model calls —
+  // but this is the other way in, and the worse one: /today is deliberately NOT
+  // module-gated (everyone gets a dashboard), so a workout-only account lands
+  // here on every single page load. The assistant hole cost money when someone
+  // chose to type a question; this one costs money on a schedule, unprompted,
+  // once a day forever, for an account that cannot open a single one of the
+  // modules the briefing is written about.
+  //
+  // The gate is HERE and not at the Today page's call site on purpose. The
+  // page already has the profile in scope and the one-line check would have
+  // been cheaper to write there — but then the guard lives with one caller
+  // rather than with the spending, and the second caller (an evening version,
+  // a cron warm-up) is written by someone who never sees this comment. The
+  // rule is: whatever calls the model carries its own permission check.
+  //
+  // Asked of `canAccessPath("/assistant")` rather than reading `tasks` off
+  // module_access directly, for the same reason `ask()` does — see the long
+  // note there. Both features are gated on Tasks, both are "AI spends money",
+  // and they must never drift apart.
+  //
+  // Placed before `isAiConfigured()` and before the something-to-say check so
+  // that a blocked account costs exactly one profile read and writes nothing.
+  if (
+    !canAccessPath(
+      {
+        role: (profile?.role as PermissionProfile["role"]) ?? "full_user",
+        moduleAccess: profile?.module_access as PermissionProfile["moduleAccess"],
+      },
+      "/assistant",
+    )
+  ) {
+    return null;
+  }
+
   if (!resolvePreferences(profile?.preferences).aiDailyOutlook) return null;
   if (!isAiConfigured()) return null;
 

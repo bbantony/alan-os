@@ -7,6 +7,12 @@ import { declarationsFor, toolsFor, type AiTool, type ToolContext } from "./tool
 import { getUsageSummary } from "./usage";
 import { aiFeatureEnabled } from "./feature-flags";
 import { historyWindow, type AssistantMessage } from "./history";
+import {
+  needsConfirmation,
+  proposalLabel,
+  type AssistantProposal,
+} from "./boldness";
+import type { AiBoldness } from "@/lib/preferences";
 
 /**
  * The assistant loop.
@@ -40,11 +46,17 @@ export type { AssistantMessage } from "./history";
 export interface AssistantReply {
   text: string;
   actions: string[];
+  /**
+   * Writes this turn decided NOT to make, waiting on a tap — see lib/ai/boldness.ts.
+   * Always present so no caller has to handle the missing case; empty at the
+   * `act` setting, and empty for any turn that only read things.
+   */
+  proposals: AssistantProposal[];
   /** Set when nothing could be done — a missing key, or the budget being spent. */
   unavailable?: string;
 }
 
-function systemPrompt(displayName: string | null, access: ModuleAccess): string {
+function systemPrompt(displayName: string | null, access: ModuleAccess, boldness: AiBoldness): string {
   const now = new Date();
   const modules = Object.entries(access)
     .filter(([, allowed]) => allowed)
@@ -104,7 +116,25 @@ HOW TO SPEAK
 - Answer the question that was asked, then stop. Don't offer a menu of things
   you could do next unless asked.
 - If something is empty ("no transactions this month"), say that clearly
-  rather than filling the space.`;
+  rather than filling the space.${
+    boldness === "act"
+      ? ""
+      : `
+
+WHEN A CHANGE NEEDS CONFIRMING
+Some of what you can do stops and waits for this person to tap a button. You
+will know because the tool answers with "NOT DONE" instead of a result. When
+that happens:
+- Say what you are PROPOSING, in the future tense, and that there is a button
+  under your reply to confirm it. "I can log $40 at Safeway — tap below and
+  I'll do it."
+- NEVER say you have done it, or use "done", "logged", "saved", "added" or
+  "updated" about it. It has not happened.
+- Do not call the tool a second time. Calling it again does not push it
+  through, and it puts a second identical button on the screen.
+- Everything else you did in the same reply DID happen. Be clear about which
+  is which.`
+  }`;
 }
 
 async function runTool(
@@ -127,11 +157,18 @@ export async function askAssistant(input: {
   moduleAccess: ModuleAccess;
   history: AssistantMessage[];
   question: string;
+  /**
+   * From Settings → AI & cost. Decides which writes stop and ask; see
+   * lib/ai/boldness.ts for which ones and why. Required rather than defaulted,
+   * so a new caller has to think about it instead of silently getting `act`.
+   */
+  boldness: AiBoldness;
 }): Promise<AssistantReply> {
   if (!isAiConfigured()) {
     return {
       text: "",
       actions: [],
+      proposals: [],
       unavailable:
         "The assistant needs a Google AI key before it can do anything. It's free — see the Manual's Phase 5 section for the five steps.",
     };
@@ -141,6 +178,7 @@ export async function askAssistant(input: {
     return {
       text: "",
       actions: [],
+      proposals: [],
       unavailable:
         "The assistant is switched off in Settings → AI & cost. Turn it back on there whenever you want it.",
     };
@@ -151,6 +189,7 @@ export async function askAssistant(input: {
     return {
       text: "",
       actions: [],
+      proposals: [],
       unavailable: `This month's AI budget (${usage.label}) is used up. It resets on the 1st. Everything else in the app works as normal.`,
     };
   }
@@ -168,6 +207,7 @@ export async function askAssistant(input: {
   ];
 
   const actions: string[] = [];
+  const proposals: AssistantProposal[] = [];
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const reply = await callGeminiWithTools({
@@ -176,7 +216,7 @@ export async function askAssistant(input: {
       thinking: "low",
       feature: "assistant",
       tier: "standard",
-      systemPrompt: systemPrompt(input.displayName, input.moduleAccess),
+      systemPrompt: systemPrompt(input.displayName, input.moduleAccess, input.boldness),
       contents,
       tools: declarations,
     });
@@ -185,6 +225,7 @@ export async function askAssistant(input: {
       return {
         text: "",
         actions,
+        proposals,
         unavailable: "The assistant couldn't be reached just now. Try again in a moment.",
       };
     }
@@ -195,6 +236,7 @@ export async function askAssistant(input: {
       return {
         text: text || "I couldn't work that one out. Try asking it a different way.",
         actions,
+        proposals,
       };
     }
 
@@ -212,7 +254,48 @@ export async function askAssistant(input: {
         });
         continue;
       }
-      const result = await runTool(tool, input.ctx, call.args ?? {});
+      const args = call.args ?? {};
+
+      // --- Propose, or do? ---------------------------------------------------
+      //
+      // The one place the "how bold should the AI be" setting reaches the
+      // assistant. `needsConfirmation` is pure and lives in boldness.ts with
+      // the reasoning; all that happens here is that a stopped write is
+      // RECORDED INSTEAD OF RUN, and the model is told plainly that it did not
+      // happen.
+      //
+      // TELLING THE MODEL MATTERS AS MUCH AS NOT RUNNING IT. Left to infer, it
+      // writes "Done — I've logged $40 at Safeway" above a button that has not
+      // been pressed, and the person believes the first sentence and never
+      // presses it. The functionResponse below is worded to be impossible to
+      // misread, and the system prompt says the same thing again.
+      //
+      // The label is built from these exact `args` (see `proposalLabel`) — the
+      // model does not get to write the words on a button that runs something
+      // else.
+      if (needsConfirmation(input.boldness, tool)) {
+        proposals.push({
+          label: proposalLabel(tool.name, args),
+          tool: tool.name,
+          args,
+          actedAt: null,
+        });
+        responseParts.push({
+          functionResponse: {
+            name: call.name,
+            response: {
+              result: {
+                not_done_yet: true,
+                message:
+                  "NOT DONE. This needs the person to confirm it first, and a button offering exactly this is already shown under your reply. Tell them what you are proposing and that they can tap to confirm. Do NOT say you have done it, and do NOT call this tool again.",
+              },
+            },
+          },
+        });
+        continue;
+      }
+
+      const result = await runTool(tool, input.ctx, args);
       if (tool.writes && !(result as { error?: string })?.error) {
         actions.push(tool.name);
       }
@@ -227,5 +310,6 @@ export async function askAssistant(input: {
   return {
     text: "That turned into more digging than I can do in one go. Try asking for one thing at a time.",
     actions,
+    proposals,
   };
 }

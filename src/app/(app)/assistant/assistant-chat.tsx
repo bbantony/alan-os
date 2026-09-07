@@ -10,7 +10,9 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import {
+  AlertCircle,
   ArrowUp,
+  Check,
   ChevronDown,
   History,
   Mic,
@@ -31,11 +33,13 @@ import type { UsageSummary } from "@/lib/ai/usage";
 import type { ModuleAccess } from "@/lib/permissions";
 import { APP_TIMEZONE, formatInAppTimezone } from "@/lib/time";
 import { speechSupported, startDictation, type Dictation } from "@/lib/speech";
+import type { AssistantProposal } from "@/lib/ai/boldness";
 import {
   ask,
   deleteConversation,
   getConversation,
   listConversations,
+  runAssistantProposal,
   startConversation,
   type ConversationSummary,
   type StoredAssistantMessage,
@@ -92,6 +96,14 @@ interface ChatMessage extends AssistantMessage {
    * and captioning only the reply implied the question had survived.
    */
   unsaved?: boolean;
+  /**
+   * The row this reply is stored as. Null on an exchange that could not be
+   * saved — and in that case `proposals` is empty, because a button that posts
+   * a message id nothing can look up would fail every time it was pressed.
+   */
+  messageId?: string | null;
+  /** Writes this reply offered but did not make. See lib/ai/boldness.ts. */
+  proposals?: AssistantProposal[];
 }
 
 /** What `ask` gives back, whoever is (or isn't) still on screen to receive it. */
@@ -315,12 +327,106 @@ function suggestionsFor(access: ModuleAccess): string[] {
   return all.filter((s) => s.module === null || access[s.module]).map((s) => s.text).slice(0, 4);
 }
 
+/**
+ * The buttons under a reply that offered to change something.
+ *
+ * Alan's "how bold should the AI be" setting is `suggest`, which means the
+ * assistant does not log an expense, move a transaction, set a budget or touch
+ * a savings goal on its own — it says what it would do and puts this under the
+ * sentence. Everything else it can do still just happens; see
+ * lib/ai/boldness.ts for why money is the line and nothing else is.
+ *
+ * THE LABEL IS BUILT ON THE SERVER FROM THE ARGUMENTS THAT WILL RUN, never by
+ * the model, so the words on the button and the thing the button does cannot
+ * disagree. Do not "improve" this by rendering something the model wrote.
+ *
+ * The tap sends a message id and a POSITION and nothing else — no tool name,
+ * no arguments. That is what stops this being a general-purpose write endpoint
+ * anyone signed in could post to, and it is why a taken proposal is marked
+ * rather than removed: the position has to keep meaning the same thing.
+ */
+function ProposalButtons({
+  messageId,
+  proposals,
+}: {
+  messageId: string | null | undefined;
+  proposals: AssistantProposal[] | undefined;
+}) {
+  // Optimistic done-state layered on top of the server's own `actedAt`, exactly
+  // as the Today outlook does it: the server never reorders or shortens the
+  // list, so an index means the same proposal before and after a revalidate.
+  // This only covers the gap between the action returning and fresh props.
+  const [done, setDone] = useState<number[]>([]);
+  const [busy, setBusy] = useState<number | null>(null);
+
+  if (!messageId || !proposals || proposals.length === 0) return null;
+  // Nothing left to offer. The reply's own words already said what happened,
+  // so a row of "Done" ticks under an old message is noise — but a proposal
+  // taken in THIS session keeps its tick, so the tap has a visible result.
+  if (proposals.every((p) => p.actedAt) && done.length === 0) return null;
+
+  async function act(index: number) {
+    setBusy(index);
+    const result = await runAssistantProposal({ messageId: messageId!, index });
+    setBusy(null);
+    if (result.error) {
+      toast.error(result.error);
+      return;
+    }
+    setDone((d) => [...d, index]);
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 border-t border-hairline pt-2">
+      {proposals.map((p, i) =>
+        p.actedAt || done.includes(i) ? (
+          // Always the label, never a bare "Done". After a reload the server's
+          // own `actedAt` is what marks it, and a row of anonymous ticks under
+          // an old answer tells you something happened without telling you what.
+          //
+          // The tick is for things that HAPPENED. An entry the app could no
+          // longer read is stamped so that nothing offers it (see
+          // `sanitiseProposals`), but it did not succeed, and a green tick
+          // beside "This one can't be read any more." says the opposite of
+          // what that sentence says.
+          //
+          // Recognised by its empty tool name rather than by importing the
+          // sentinel, so `boldness.ts` stays a type-only import here and no
+          // runtime module crosses into the browser bundle for one icon. An
+          // empty `tool` is exactly what `sanitiseProposals` guarantees for an
+          // unreadable entry and nothing else, and a test pins that.
+          <Micro key={i} className="flex items-center gap-1.5 py-1">
+            {!p.tool ? (
+              <AlertCircle className="size-3.5 text-muted-foreground" strokeWidth={2.5} />
+            ) : (
+              <Check className="size-3.5 text-ok" strokeWidth={3} />
+            )}
+            {p.label}
+          </Micro>
+        ) : (
+          <Button
+            key={i}
+            type="button"
+            variant="outline"
+            disabled={busy !== null}
+            onClick={() => act(i)}
+          >
+            {busy === i ? "Working…" : p.label}
+          </Button>
+        )
+      )}
+    </div>
+  );
+}
+
 function toChatMessages(conversation: StoredConversation): ChatMessage[] {
   return conversation.messages.map((m) => ({
     key: m.id,
     role: m.role,
     content: m.content,
     actions: m.actions ?? [],
+    messageId: m.id,
+    proposals: m.proposals,
   }));
 }
 
@@ -1023,6 +1129,8 @@ export function AssistantChat({
       content: reply.text,
       actions: reply.actions,
       unsaved: !reply.persisted,
+      messageId: reply.messageId,
+      proposals: reply.proposals,
     };
       setMessages((previous) => withExchange(previous, asked, answered));
       setLiveExchange(null);
@@ -1569,6 +1677,11 @@ export function AssistantChat({
                           Done — the app has been updated
                         </Micro>
                       )}
+                      {/* Things it did NOT do, waiting on a tap. Sits below the
+                          "done" line on purpose: a reply can both have changed
+                          something and be offering to change something else,
+                          and the order says which is which. */}
+                      <ProposalButtons messageId={m.messageId} proposals={m.proposals} />
                       {/* The PAIR is marked, not just the reply: neither half
                           of an unsaved exchange will be here next time. */}
                       {m.unsaved &&

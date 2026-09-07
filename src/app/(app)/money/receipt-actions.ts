@@ -11,6 +11,32 @@ import { resolvePreferences } from "@/lib/preferences";
 import { balanceDeltaCents } from "@/lib/finance/balance";
 import type { AccountType, Category, Receipt, ReceiptLineItem, Transaction } from "@/lib/finance/types";
 import { friendlyDbError } from "@/lib/db-errors";
+import { getCurrentProfile } from "@/lib/supabase/profile";
+import { canAccessPath } from "@/lib/permissions";
+
+/**
+ * Is Money switched on for whoever is calling?
+ *
+ * THE THIRD DOOR, and the expensive one. `/money` is gated by ADDRESS, but a
+ * server action posts to whatever page you are already on — and `uploadReceipt`
+ * is registered on twenty-six pages in the production build, `/today` and
+ * `/workout` among them. So a workout-only crew account could POST a photo
+ * from a page it is entitled to be on and (proved live on 6 Sep 2026, against
+ * the real database, at a real cost of 0.12 cents) spend the owner's Gemini
+ * credit on vision, write a `receipts` row it has no module access to, and
+ * put a file in the owner's private Storage bucket.
+ *
+ * Found by the `qa` agent while proving the assistant and outlook gates, not
+ * by reading — which is the argument for the structural test in
+ * `tests/billing-gate.test.mts` rather than for being more careful next time.
+ */
+async function moneyIsAvailable(): Promise<boolean> {
+  const profile = await getCurrentProfile();
+  return profile !== null && canAccessPath(profile, "/money");
+}
+
+/** The one sentence a blocked account is told, so the two call sites can't drift. */
+const MONEY_UNAVAILABLE = "Money isn't switched on for this account.";
 
 async function requireUser() {
   const supabase = await createClient();
@@ -68,6 +94,10 @@ export async function getPendingReceipts(): Promise<Receipt[]> {
 // entry if not (SPEC.md Part F's graceful-failure path, not an error state).
 export async function uploadReceipt(formData: FormData): Promise<{ receiptId?: string; error?: string }> {
   const { supabase, user } = await requireUser();
+  // Refused before the upload and long before `extractReceiptData`, so a
+  // blocked account costs one profile read and leaves nothing behind — no
+  // model call, no `ai_usage` row, no `receipts` row, no file in Storage.
+  if (!(await moneyIsAvailable())) return { error: MONEY_UNAVAILABLE };
 
   const file = formData.get("file");
   if (!(file instanceof File)) return { error: "No photo was attached." };

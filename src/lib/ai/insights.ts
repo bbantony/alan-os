@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatCents } from "@/lib/finance/money";
 import { resolvePreferences } from "@/lib/preferences";
 import { startOfWeek } from "@/lib/streaks";
+import { canAccessPath, type PermissionProfile } from "@/lib/permissions";
 import { addDaysToDateString, todayInAppTimezone } from "@/lib/time";
 import { getLedger, groupByDay, type LedgerEvent } from "@/lib/ledger";
 import { callGeminiJson, isAiConfigured } from "./gemini";
@@ -170,9 +171,29 @@ export async function ensureWeeklyInsight(): Promise<Insight | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("preferences, timezone")
+    .select("preferences, timezone, role, module_access")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Whatever calls the model carries its own permission check — the rule
+  // written down in ai/outlook.ts, applied here for the same reason. This
+  // one's only caller is /timeline, which IS address-gated on Tasks, so
+  // nothing is open today; it is gated anyway because "safe because of who
+  // happens to call it" stops being true the moment somebody adds a second
+  // caller, and the receipt upload found on 6 Sep 2026 is exactly that story
+  // with the ending already written.
+  if (
+    !canAccessPath(
+      {
+        role: (profile?.role as PermissionProfile["role"]) ?? "full_user",
+        moduleAccess: profile?.module_access as PermissionProfile["moduleAccess"],
+      },
+      "/timeline",
+    )
+  ) {
+    return null;
+  }
+
   const prefs = resolvePreferences(profile?.preferences);
   if (!prefs.aiWeeklyPatterns || !isAiConfigured()) return null;
 

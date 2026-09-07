@@ -67,10 +67,10 @@ import type { FunctionDeclaration, ToolParameterSchema } from "./gemini";
  * WRITES ARE ENUMERATED, NOT NARROW — keep this list honest. Every tool with
  * `writes: true` is one Alan asked for out loud, and the set has grown well
  * past the "small and reversible" line it started on. As of 6 Sep 2026 there
- * are twelve: `create_task`, `complete_task`, `update_task`, `log_expense`,
+ * are thirteen: `create_task`, `complete_task`, `update_task`, `log_expense`,
  * `update_transaction`, `add_shopping_items`, `manage_shopping_item`,
  * `log_workout`, `manage_budget`, `manage_goal`, `complete_routine`,
- * `create_routine`.
+ * `create_routine`, `plan_tomorrow`.
  *
  * So the honest statement of the boundary is no longer "it cannot touch
  * budgets and goals" — it can, and `manage_*` and `update_transaction` can
@@ -148,16 +148,24 @@ function asNumber(value: unknown): number | null {
  */
 async function toolPeriodContext(
   ctx: ToolContext
-): Promise<{ today: string; weekStart: WeekStart }> {
+): Promise<{ today: string; weekStart: WeekStart; timezone: string | undefined }> {
   const { data } = await ctx.supabase
     .from("profiles")
     .select("preferences, timezone")
     .eq("id", ctx.userId)
     .maybeSingle();
+  // `undefined`, not null, so `todayInAppTimezone` and `zonedTimeToUtc` each
+  // apply their own default.
+  const timezone = (data?.timezone as string) || undefined;
   return {
-    // `undefined`, not null, so `todayInAppTimezone` applies its own default.
-    today: todayInAppTimezone((data?.timezone as string) || undefined),
+    today: todayInAppTimezone(timezone),
     weekStart: resolvePreferences(data?.preferences).weekStart,
+    // Handed out as well as used, because "today" is only half the answer.
+    // Turning a date into the instant it STARTS needs the zone too, and a tool
+    // that reads the profile for the date and then falls back to hardcoded
+    // Winnipeg for midnight has done the hard part and dropped it — the
+    // overdue cut-off is then up to an hour out for a travelling account.
+    timezone,
   };
 }
 
@@ -1362,7 +1370,12 @@ const manageBudget: AiTool = {
   parameters: obj(
     {
       category: str("Category name, e.g. Groceries."),
-      amount: num("The limit in dollars. Omit to remove the budget."),
+      // NOT "omit to remove". The code below removes only on `remove: true`;
+      // an omitted amount falls through to "How much a month?". The old
+      // wording invited the model to make a call that could not succeed —
+      // and, once proposals existed, to put a button on Alan's screen reading
+      // "Remove the Groceries budget" that removed nothing when he tapped it.
+      amount: num("The limit in dollars. Required unless `remove` is true."),
       period: {
         type: "STRING",
         description: "How often it resets. Defaults to monthly.",
@@ -1936,6 +1949,235 @@ const createRoutine: AiTool = {
 // The registry
 // ---------------------------------------------------------------------------
 
+/** A `day_plans` row as these two tools read it. Migration 0011, plus 0032's AI columns. */
+interface DayPlanRow {
+  plan_date: string;
+  top_goals: { taskId: string | null; title: string }[] | null;
+  evening_reflection: string | null;
+}
+
+/** The columns the auto-focus fallback needs off an open task. */
+interface OpenTaskRow {
+  id: string;
+  title: string;
+  horizon: string | null;
+  due_at: string | null;
+}
+
+/**
+ * The evening ritual, by voice — the two verbs that were missing.
+ *
+ * The day-planner ritual (`day_plans`, migration 0011) is the one part of the
+ * app the assistant could see nothing of. It could list tasks and tick them
+ * off, but "what am I meant to be focused on today" and "here's what tomorrow
+ * looks like" lived only behind the Today screen's evening card. Alan asked
+ * for the assistant to be able to run that ritual out loud.
+ *
+ * THE TABLE'S SHAPE IS THE WHOLE TRICK, and it is not obvious: a `day_plans`
+ * row is dated by the day it is ABOUT, not the day it was written. So the
+ * evening ritual writes to TWO different rows in one breath — tomorrow's
+ * `top_goals` and today's `evening_reflection` — and reading it back also
+ * spans two days, because the reflection you want shown in the morning is
+ * YESTERDAY's. Both tools below inherit that asymmetry from
+ * `calendar/actions.ts`; they are not free to simplify it.
+ *
+ * WHY THESE DON'T CALL `getTodayFocus`/`planTomorrow`. Same reason
+ * `create_routine` doesn't call the routines action, spelled out at length
+ * above: those are `"use server"` actions that build their own client and call
+ * `revalidatePath`, and every tool in this file writes through `ctx.supabase`
+ * so RLS does the security work. The one thing that is NOT re-derived is the
+ * day: the actions use bare `todayInAppTimezone()`, which falls back to a
+ * hardcoded Winnipeg, and these use `toolToday(ctx)`, which reads the
+ * profile's real zone — and `get_day_plan` carries that zone on into
+ * `zonedTimeToUtc` for the overdue cut-off, so both halves of "when did today
+ * start" agree. Where the tool and the screen disagree — Alan abroad — the
+ * tool is the one that is right. A test in `money-and-units.test.mts` fails
+ * the build if a tool in this file ever reaches for the bare version.
+ */
+const getDayPlan: AiTool = {
+  name: "get_day_plan",
+  description:
+    "What the person planned to focus on today, and what they wrote in last night's reflection. Use for 'what am I meant to be doing today', 'what did I say yesterday', or before helping them plan tomorrow.",
+  module: "tasks",
+  writes: false,
+  parameters: NO_ARGS,
+  async run(ctx) {
+    const { today, timezone } = await toolPeriodContext(ctx);
+    const yesterday = addDaysToDateString(today, -1);
+
+    // Both day rows in one round trip. Two separate `.eq("plan_date", ...)`
+    // queries was the obvious way to write this and would double the reads on
+    // a table already keyed exactly right for `in`.
+    const { data: plans } = await ctx.supabase
+      .from("day_plans")
+      .select("plan_date, top_goals, evening_reflection")
+      .eq("user_id", ctx.userId)
+      .in("plan_date", [today, yesterday]);
+
+    const rows = (plans as DayPlanRow[] | null) ?? [];
+    const todayRow = rows.find((r) => r.plan_date === today);
+    const yesterdayRow = rows.find((r) => r.plan_date === yesterday);
+    const planned = todayRow?.top_goals ?? [];
+
+    // A goal picked from a task can be checked off; a free-typed one cannot,
+    // and reports `done: false` forever. That is the screen's behaviour too
+    // (see the comment on `getTodayFocus`) — an accepted limitation, repeated
+    // here deliberately so the two never disagree about what "done" means.
+    let done = new Set<string>();
+    const taskIds = planned.map((g) => g.taskId).filter((id): id is string => Boolean(id));
+    if (taskIds.length > 0) {
+      const { data: completed } = await ctx.supabase
+        .from("tasks")
+        .select("id")
+        .eq("user_id", ctx.userId)
+        .in("id", taskIds)
+        .not("completed_at", "is", null);
+      done = new Set(((completed as { id: string }[] | null) ?? []).map((t) => t.id));
+    }
+
+    if (planned.length > 0) {
+      return {
+        today,
+        source: "planned",
+        goals: planned.map((g) => ({
+          title: g.title,
+          done: g.taskId ? done.has(g.taskId) : false,
+        })),
+        yesterdays_reflection: yesterdayRow?.evening_reflection ?? null,
+      };
+    }
+
+    // Nothing was planned, so say what the screen would have shown instead —
+    // overdue first, then today's horizon, three at most. Returning an empty
+    // list here would be true of the TABLE and false of the person's day, and
+    // the model would go on to tell them they have nothing to do.
+    const { data: open } = await ctx.supabase
+      .from("tasks")
+      .select("id, title, horizon, due_at")
+      .eq("user_id", ctx.userId)
+      .is("completed_at", null)
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .limit(60);
+
+    const [y, m, d] = today.split("-").map(Number);
+    // The profile's zone, not the app's.
+    //
+    // THREE OTHER CALLS IN THIS FILE STILL PASS NO ZONE and inherit Winnipeg:
+    // `listTasks` (line ~223), `createTask` (~294) and `updateTask` (~1173).
+    // That is a real, small, pre-existing wrong-hour bug for a travelling
+    // account, recorded in CHANGELOG 75 as its own pass rather than fixed in
+    // passing — the fix is one argument each, plus a profile read for the two
+    // that don't already do one. **Do `createTask` and `updateTask` first:**
+    // those two STORE the instant they compute (`tasks.due_at`), so a wrong
+    // hour is written down and nudges at the wrong time forever, while
+    // `listTasks` and this one only filter a read and are wrong until the
+    // next query.
+    const todayStartUtc = zonedTimeToUtc(
+      { year: y, month: m, day: d, hour: 0, minute: 0, second: 0 },
+      timezone
+    );
+    const tasks = (open as OpenTaskRow[] | null) ?? [];
+    const overdue = tasks.filter((t) => t.due_at && new Date(t.due_at) < todayStartUtc);
+    const overdueIds = new Set(overdue.map((t) => t.id));
+    const dueToday = tasks.filter(
+      (t) => !overdueIds.has(t.id) && (t.horizon === "now" || t.horizon === "today")
+    );
+
+    return {
+      today,
+      source: "auto",
+      goals: [...overdue, ...dueToday].slice(0, 3).map((t) => ({ title: t.title, done: false })),
+      yesterdays_reflection: yesterdayRow?.evening_reflection ?? null,
+    };
+  },
+};
+
+const planTomorrowTool: AiTool = {
+  name: "plan_tomorrow",
+  description:
+    "Set up to three things to focus on tomorrow, and optionally save a reflection on how today went. Use for 'plan tomorrow', 'tomorrow I want to...', or when the person is winding the day up. The reflection is saved against today, the goals against tomorrow.",
+  module: "tasks",
+  writes: true,
+  parameters: obj({
+    goals: {
+      type: "ARRAY",
+      description:
+        "Up to three things to focus on tomorrow, in the person's own words. Leave out entirely if they only want to record a reflection.",
+      items: { type: "STRING" },
+    },
+    reflection: str("How today went, in the person's own words. Leave out if they didn't say."),
+  }),
+  async run(ctx, args) {
+    const today = await toolToday(ctx);
+    const tomorrow = addDaysToDateString(today, 1);
+
+    const titles = Array.isArray(args.goals)
+      ? args.goals
+          .map((g) => asString(g)?.trim() ?? "")
+          .filter((t): t is string => t.length > 0)
+      : [];
+    const reflection = asString(args.reflection)?.trim() || null;
+    if (titles.length === 0 && !reflection) {
+      return { error: "Nothing to save — give me some goals for tomorrow, or how today went." };
+    }
+
+    // Match each goal back to a real open task where one exists. The screen
+    // lets you PICK from your tasks, and a goal carrying a `taskId` is the
+    // only kind that can ever show as done — a free-typed one reads as
+    // unfinished forever. A spoken goal is usually the person saying a task's
+    // name out loud, so matching turns "finish the deck tomorrow" into the
+    // checkable version rather than a look-alike sitting next to it.
+    let goals: { taskId: string | null; title: string }[] = titles
+      .slice(0, 3)
+      .map((title) => ({ taskId: null, title }));
+    if (goals.length > 0) {
+      const { data: open } = await ctx.supabase
+        .from("tasks")
+        .select("id, title")
+        .eq("user_id", ctx.userId)
+        .is("completed_at", null)
+        .limit(100);
+      const candidates = (open as { id: string; title: string }[] | null) ?? [];
+      goals = goals.map((g) => {
+        const match = matchByName(candidates, g.title, (t) => t.title);
+        return match ? { taskId: match.id, title: match.title } : g;
+      });
+    }
+
+    if (goals.length > 0) {
+      const { error } = await ctx.supabase
+        .from("day_plans")
+        .upsert(
+          { user_id: ctx.userId, plan_date: tomorrow, top_goals: goals },
+          { onConflict: "user_id,plan_date" }
+        );
+      // Stop before the reflection if the goals didn't land. One clear failure
+      // the person can repeat whole beats a half-saved ritual they then have
+      // to work out the state of — the same call `planTomorrow` makes.
+      if (error) return { error: friendlyDbError(error) ?? "That didn't save." };
+    }
+
+    if (reflection) {
+      // Today's row, not tomorrow's. Upserting only this column leaves
+      // whatever is already on today's row — goals, the cached AI briefing —
+      // exactly where it was.
+      const { error } = await ctx.supabase
+        .from("day_plans")
+        .upsert(
+          { user_id: ctx.userId, plan_date: today, evening_reflection: reflection },
+          { onConflict: "user_id,plan_date" }
+        );
+      if (error) return { error: friendlyDbError(error) ?? "That didn't save." };
+    }
+
+    return {
+      planned_for: tomorrow,
+      goals: goals.map((g) => g.title),
+      reflection_saved: reflection !== null,
+    };
+  },
+};
+
 export const ALL_TOOLS: AiTool[] = [
   listTasks,
   createTask,
@@ -1960,6 +2202,10 @@ export const ALL_TOOLS: AiTool[] = [
   manageBudget,
   manageGoal,
   updateTransaction,
+  // The evening ritual, added 6 Sep 2026 — the last screen the assistant
+  // could not see.
+  getDayPlan,
+  planTomorrowTool,
 ];
 
 /** Only the tools this account is allowed to use — see the note at the top. */

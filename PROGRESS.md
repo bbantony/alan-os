@@ -1099,24 +1099,53 @@ and spend the owner's AI credit. The route guard works by address and a server a
 whatever page you're on, so the guard never sees it. No data leaks — tools are filtered per
 account. The fix is a module check inside the action.
 
-**Wave 2B is HALF LANDED and NOT signed off. The running notes are in `NEXT-SESSION.md`; read that
-before picking it up.** Landed on 6 Sep but deliberately not marked complete here, because it has
-had the live-database check its security fix needs: `create_routine` with the loose-language parser
-behind it, custom report date ranges (`customRangeFor` / `customRangeProblem` and the shared
-`lib/finance/report-queries.ts`, so the Reports screen and the assistant run the same queries),
-the `get_money_report` tool, an allowlist (`lib/ai/suggestable.ts`) that stops an AI suggestion chip
-from ever proposing anything but "add a task" or "add to the shopping list", and the module check
-that closes the crew-account billing hole recorded just above. CHANGELOG 68–72. Lint, build and
-166 tests pass (`test-runner`), and `unit-reviewer` passed 10 of 13 items — the three it failed were
-the checks not having been shown to it, two files missing from the CHANGELOG, and a comment
-overreaching; all three are addressed in CHANGELOG 73.
+**Wave 2B is COMPLETE (6 Sep 2026).** CHANGELOG 68–75. `NEXT-SESSION.md` — the note the half-landed
+state was handed over in — is deleted, and `HANDOFF.md`'s pointer now names this file instead; it
+was a note between sessions, not documentation.
 
-**Still to do, in order:** prove the billing fix leaves no `ai_usage` row (the assertion that
-actually shows the spending is closed); the evening-ritual verbs `get_day_plan` and `plan_tomorrow`;
-and propose-then-confirm, reusing the outlook's one-tap pattern. Two further billing paths the
-review turned up are logged in `NEXT-SESSION.md` — the assistant's other actions are still ungated,
-and `/today` calls `ensureDailyOutlook` for any account that can reach it, so "the crew billing hole
-is closed" is true only of `ask()`.
+**How it got signed off, because the order matters.** `test-runner` passed. `unit-reviewer` then
+**failed** the unit twice before passing it: first on a `manage_budget` button that would have read
+"Remove the Groceries budget" and removed nothing, plus two files missing from the CHANGELOG; then,
+after those were fixed, on a `HANDOFF.md` pointer left dangling by the `NEXT-SESSION.md` deletion
+and a deferred-work note that named two of three call sites. All are fixed above and in CHANGELOG
+75. Both reports were shown to Alan.
+
+What the second half added on top of `create_routine`, custom report ranges and `suggestable.ts`:
+
+- **The crew billing hole is closed for real, and proved rather than asserted.** `ask()` was gated
+  in the first half; this half gated the other four assistant actions (`getConversation` was a
+  fourth nobody had listed), `ensureDailyOutlook`, `ensureWeeklyInsight`, `buildCsvCandidates`, and
+  — the one that mattered — **`uploadReceipt`**, which the `qa` agent proved live: a workout-only
+  crew account POSTing a photo to `/today` spent Alan's Gemini credit, wrote a `receipts` row and
+  put a file in private Storage. It is registered as a server action on twenty-six pages in the
+  production build. The proof is a real throwaway account under real authentication, `/today` loaded
+  twice with `ai_usage` unchanged, **and a control run with Tasks switched on that did add a usage
+  row** — without the control, "no usage row" proves nothing.
+- **The evening ritual by voice** — `get_day_plan` and `plan_tomorrow`, the last screen the
+  assistant could not see. Thirteen write tools now, not twelve.
+- **Propose-then-confirm** — the `aiBoldness` setting finally reaches the assistant. At Alan's
+  `suggest` the four money-writing tools stop and offer a button instead of running; everything else
+  still runs, because every non-money write has one-tap undo and two taps on "add milk to the list"
+  is how a confirm step becomes something people tap through without reading. Migration 0043
+  (`assistant_messages.proposals`), applied. `runAssistantProposal` reuses `runOutlookSuggestion`'s
+  four invariants, including marking a taken proposal rather than removing it.
+
+**Checks:** `npm run lint`, `npm run build` and `npm test` pass — the suite is now **198 tests**,
+up from 174, with two new files (`tests/billing-gate.test.mts`, `tests/assistant-proposals.test.mts`).
+
+**Deliberately left for its own pass, not forgotten** — two items, both small, both recorded here
+because `HANDOFF.md` now sends every cold session to this section first:
+
+1. **`approveReceipt`, `discardReceipt` and `importCsvTransactions`** still check only that somebody
+   is signed in. They spend no AI credit and RLS confines every row to its own account, so nothing
+   leaks and nothing costs money — but they are the same one-line fix as the four gated above.
+2. **Three calls in `src/lib/ai/tools.ts` still work out midnight in hardcoded Winnipeg** —
+   `list_tasks` (~line 223), `create_task` (~294) and `update_task` (~1173) hand `zonedTimeToUtc` no
+   timezone, so a travelling account gets the wrong hour. **Do `create_task` and `update_task`
+   first:** they STORE the instant into `tasks.due_at`, so the nudge fires at the wrong time
+   forever, while `list_tasks` only mis-sorts a read. One argument each, plus a profile read for the
+   two that don't already do one — `toolPeriodContext` now hands the zone out, so the plumbing is
+   already there. CHANGELOG 75 has the full note.
 
 Note from the Wave 2 scout: a receipt is a photo, and tools carry text only, so "here's a
 photo" stays a button rather than becoming a verb. Then **Wave 3** — Fold two-pane layouts,

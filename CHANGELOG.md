@@ -5901,3 +5901,245 @@ commits whose messages omit half their diff break that, and the omission is invi
 It is written down here instead. Whoever picks this up should be aware that `git log` for
 `fa73b93..7e8709e` is not a reliable guide to who did what, and should read the diffs rather than
 the messages.
+
+## 75. Wave 2B, second half: the billing hole actually closed, the evening ritual by voice, and money changes that ask first (6 Sep 2026)
+
+**What Alan asked for.** "Read CLAUDE.md, then NEXT-SESSION.md. Pick up at Job 1 and keep going
+through the jobs in order." Four jobs were listed there. All four are done, and one of them turned
+out to be bigger than the note said.
+
+Alan was also asked the one question the last review left open — whether "water the plants every 3
+days at 7pm" should buzz his phone or just show a time on the card. **He chose buzz my phone**, so
+`create_routine`'s existing default (nudge ON when a time is given) stays exactly as it is. No code
+changed; the disagreement with the on-screen routine dialog, which defaults it off, is now a
+deliberate difference rather than an accident. Saying a time out loud is taken as asking to be
+reminded of it.
+
+### Job 1 — the crew billing hole, finished and proved
+
+The last session gated `ask()` and correctly refused to claim the hole was shut. It listed two more
+doors. A live test found a third, and the third was the expensive one.
+
+- **`ensureDailyOutlook` (`src/lib/ai/outlook.ts`)** now reads `role` and `module_access` alongside
+  `preferences` and returns null via `canAccessPath(..., "/assistant")` before `isAiConfigured()`
+  and before any model call. `/today` is deliberately not module-gated, so a workout-only crew
+  account landed here on every page load — spending on a schedule rather than on a tap. The gate is
+  in `outlook.ts` and not at the Today page's call site on purpose, and the comment says why: the
+  page already had the profile in scope and the check would have been cheaper to write there, but
+  then the guard lives with one caller instead of with the spending, and the second caller is
+  written by somebody who never sees the note.
+- **Every exported action in `src/app/(app)/assistant/actions.ts`** — `ask`, `getConversation`,
+  `listConversations`, `startConversation`, `deleteConversation` — now asks the same question
+  before doing anything. The three that had no profile in scope go through one new
+  `assistantIsAvailable()` helper; `ask` (and later `runAssistantProposal`) call
+  `canAccessPath(profile, "/assistant")` directly, because they already hold the profile and must
+  return their own refusal shape. The structural test enforces "every exported action asks" and
+  accepts either form rather than pinning one spelling. NEXT-SESSION listed three; `getConversation` was a fourth nobody
+  had noticed. It only ever reads the caller's own rows and RLS already guaranteed that, so it is
+  gated for consistency, and the comment says so: "all but this one, because it happens to be
+  harmless" is a rule that decays. The refusal sentence is now a single `ASSISTANT_UNAVAILABLE`
+  constant rather than five literals. (`runAssistantProposal`, added in Job 3 below, makes six —
+  it is gated the same way, and the test enforces the rule over whatever the file contains rather
+  than over a remembered count.)
+- **`uploadReceipt` (`src/app/(app)/money/receipt-actions.ts`) — the door nobody had looked at.**
+  Found by the `qa` agent, not by reading. It calls `requireUser()` and nothing else, and the
+  production build registers it as a server action on **twenty-six pages**, including `/today` and
+  `/workout`. Reproduced live against the real database as a workout-only crew account: a multipart
+  POST to `/today` with a 1×1 JPEG spent 0.12 cents of Alan's Gemini credit on vision, wrote a
+  `receipts` row for an account with no money access, and put a file in the private Storage bucket.
+  Now gated on `canAccessPath(..., "/money")` before the upload and long before
+  `extractReceiptData`, so a blocked account costs one profile read and leaves nothing behind.
+- **`buildCsvCandidates` (`money/csv-actions.ts`)** and **`ensureWeeklyInsight`
+  (`lib/ai/insights.ts`)** gated the same way. Neither is currently reachable — the build registers
+  the CSV action on one blocked page, and the insight's only caller is address-gated — so these are
+  not open holes; they are one accidental import away from being the receipt story again.
+
+**The proof, which is the part the last session could not give.** The `qa` agent created a real
+throwaway account, made it workout-only with the outlook switched on, signed in through real
+authentication, and loaded `/today` twice: 200 both times, no outlook panel, and `ai_usage`
+unchanged at 14 rows. It then ran the control — the same account with Tasks switched on — and
+`ai_usage` gained exactly one row (`feature: "outlook"`, 754 micros), which is what makes the first
+result mean something. It extracted the real server-action ids and POSTed all five assistant
+actions, each of which returned the refusal shape and created nothing. It confirmed the account
+cannot escalate itself (`profiles` updates rejected `42501`). Every row and the auth user were
+deleted afterwards and the totals verified back to baseline.
+
+**`tests/billing-gate.test.mts` (new, 8 tests)** holds the rule and, more usefully, the structure:
+every exported action in the assistant file must carry the gate, so one written next year fails on
+the day it is written; every file that reaches a Gemini call must name a permission check; and in
+both AI libraries the check must appear *before* the model call, because a guard placed after it
+returns the right refusal and still spends the money.
+
+### Job 2 — the evening ritual, by voice
+
+Two new tools in `src/lib/ai/tools.ts`, the last screen the assistant could not see:
+
+- **`get_day_plan`** (read) — today's focus with each goal's done state, plus last night's
+  reflection. Both day rows in one `in` query. When nothing was planned it falls back to what the
+  screen would have shown (overdue first, then today's horizon, three at most) rather than
+  reporting an empty table as an empty day.
+- **`plan_tomorrow`** (write) — up to three goals onto **tomorrow's** row and a reflection onto
+  **today's**, which is the asymmetry the `day_plans` table has always had. Spoken goals are matched
+  back to real open tasks via `matchByName`, because a goal carrying a `taskId` is the only kind
+  that can ever show as done — a free-typed one reads as unfinished forever.
+
+Neither calls the existing `calendar/actions.ts` server actions, for the reason `create_routine`
+already documents: those build their own client and call `revalidatePath`. The one thing they do
+*not* re-derive is the day — the actions use bare `todayInAppTimezone()` (hardcoded Winnipeg) and
+these use `toolToday(ctx)` (the profile's real zone), so where the two disagree the tool is right.
+The `tools.ts` header's enumerated write list is updated from twelve to thirteen, and there is now
+a test that fails when that list and the tools with `writes: true` drift apart — it has been wrong
+before.
+
+### Job 3 — propose-then-confirm
+
+The "how bold should the AI be" setting in Settings → AI & cost has existed since Phase 5 and only
+ever changed whether the weekly insight offered chips. It now means something in the one place the
+AI can change Alan's data.
+
+- **`src/lib/ai/boldness.ts` (new, pure)** — `needsConfirmation` is the whole matrix: `act` runs
+  everything; `suggest` (Alan's setting) stops the four money writes and lets everything else
+  through; `notice` stops every write. Money is the line on purpose, and the comment argues it:
+  every non-money write lands on a screen with one-tap undo, so getting one wrong costs a tap, while
+  a wrong money write survives, compounds into safe-to-spend, and is found weeks later as a number
+  that is quietly wrong. Putting two taps on "add milk to the list" is how a confirm step becomes
+  something people learn to tap through without reading. The file also states plainly that this is
+  **not a security boundary** — the tool list, the module gate and RLS do that work identically at
+  all three settings.
+- **`proposalLabel`** builds the words on the button from the same arguments that will execute.
+  The model writes the sentence above the button; it does not get to write the button. A label and
+  an action that disagree is the worst thing this feature could do, and deriving one from the other
+  makes it impossible rather than unlikely. **The first version of it got exactly this wrong and
+  `unit-reviewer` caught it:** `manage_budget`'s parameter description said "omit the amount to
+  remove the budget", so the label treated a missing amount as removal — but the tool's *code*
+  removes only on `remove: true`, and otherwise answers "How much a month?". The button would have
+  read **"Remove the Groceries budget"** and removed nothing when tapped, which is precisely the
+  failure this function exists to prevent, reached by trusting a doc string over the code beneath
+  it. Both ends are fixed: the description in `tools.ts` now says the amount is required unless
+  `remove` is true, and the label says "Remove" only for a call that removes. A test asserts the
+  word can never appear on a call that removes nothing.
+- **`sanitiseProposals` never drops an entry**, and that is the subtle part. The obvious version
+  filters malformed entries out — and filtering renumbers, so the browser would index into the
+  cleaned array while the database claim (`proposals->N->>actedAt`) indexes into the raw column.
+  With `log_expense` and `update_transaction` in this list that means the wrong amount logged or the
+  wrong transaction deleted. An unreadable entry keeps its slot and comes back already stamped, so
+  every existing "still offerable?" check ignores it with no new branch. One consequence worth
+  writing down: the claim and release paths write the *sanitised* array back, so a malformed entry
+  is permanently replaced by that placeholder. It is AI intent data rather than evidence, and the
+  length is preserved, so this is a normalisation and not a loss.
+- **The model-facing history read deliberately does not select `proposals`.** An unpressed button
+  from four turns ago is not context — it is tokens, and worse, an invitation to propose again
+  something already on screen. Only the read that feeds the SCREEN asks for the column.
+- **Migration `0043_assistant_proposals.sql`** adds `proposals jsonb not null default '[]'` beside
+  `actions` on `assistant_messages`, with a check constraint that it is an array under 16 000
+  characters. On the message, not in a table of its own, so 0041's retention triggers and cascade
+  clean it up with no second rule to forget. The migration explicitly records that the 0041/0042
+  EXECUTE lesson was *checked for and does not apply* — it creates no function — and what a future
+  migration adding a claim RPC would have to get right. **Applied to the live database.**
+- **`runAssistantProposal`** copies `runOutlookSuggestion`'s four invariants almost line for line:
+  the client sends only a message id and an index, never `{tool, args}`; the proposal is re-read
+  from the database; the tool is re-looked-up in `ALL_TOOLS` and its module re-checked; and a taken
+  proposal is marked, never removed. It claims atomically with `.is("proposals->N->>actedAt", null)`
+  plus `.select()` before running anything, so a double tap cannot log the same money twice. It
+  differs from the outlook in one way, deliberately: it is *not* held to `suggestable.ts`'s two-name
+  allowlist, because the entire point is that the money writes come here. What replaces the
+  allowlist is a check that the tool actually writes — a proposal naming a read tool would be a
+  button that shows nothing and marks itself done. The same honest jsonb-column gap the outlook
+  documents is documented here too rather than papered over.
+- **The model is told, in words it cannot misread**, that a stopped write did not happen: the tool
+  answers `NOT DONE` and the system prompt gains a section forbidding "done", "logged", "saved" and
+  a second call. Left to infer, it writes "Done — I've logged $40 at Safeway" above a button nobody
+  has pressed, and the person believes the sentence.
+- **A proposal that could not be saved is not offered.** If the exchange failed to persist there is
+  no message id, so `ask()` returns an empty proposal list rather than a button that would fail
+  every time it was pressed. Nothing was changed, which is the safe direction.
+- **The buttons** render under the reply in `assistant-chat.tsx`, below the "Done — the app has been
+  updated" line so the order says which is which, and survive a reload because they are read back
+  off the message row. A taken proposal keeps showing its own label rather than a bare "Done" — a
+  row of anonymous ticks under an old answer says something happened without saying what. A delete
+  proposal names the date when the model gave one, because confirming a deletion you cannot
+  identify is not confirming it.
+
+### Job 4 — verify and document
+
+- **`tests/assistant-proposals.test.mts` (new, 16 tests)** — the nine-cell boldness matrix; index
+  stability across sanitising and marking; the labels, including the budget-removal trap and that no
+  argument shape can produce an empty label; that every name in `MONEY_WRITE_TOOLS` is a real tool
+  that really writes; that the two day-plan tools are registered and only one of them writes; that
+  the header's write list matches reality; and that a bad report range gets one answer from
+  `customRangeProblem` rather than a second set of rules.
+- **Open finding fixed while there:** `customRangeProblem`'s too-long-range message said "Reports
+  cover about five years at a time" — a sentence about a screen, shown to somebody who had just
+  typed a question at the assistant. It now says "About five years at a time is the limit", which is
+  true wherever the range came from. A test asserts the message never names the Reports screen again.
+- **Open finding already fixed, recorded so nobody hunts for it:** NEXT-SESSION's first open finding
+  said ten call sites in `tools.ts` still used bare `todayInAppTimezone()`. They do not — the
+  review-fix commit `7e8709e` had already dealt with it, and `money-and-units.test.mts` fails the
+  build if one comes back. The triage list was stale.
+
+### Every file this change touched
+
+Listed one by one, because the last two reviews both failed on files that were in the diff and not
+in the entry.
+
+**New:** `src/lib/ai/boldness.ts`, `supabase/migrations/0043_assistant_proposals.sql` (applied),
+`tests/billing-gate.test.mts`, `tests/assistant-proposals.test.mts`.
+
+**Changed:** `src/lib/ai/tools.ts` (two new tools, the write-list header, `manage_budget`'s amount
+description, `toolPeriodContext` now also returns the timezone); `src/lib/ai/assistant.ts`
+(proposals on the reply, the propose-or-do branch, the system-prompt section);
+`src/app/(app)/assistant/actions.ts` (the gate helper, five actions gated, proposals persisted and
+returned, `runAssistantProposal`); `src/app/(app)/assistant/assistant-chat.tsx` (the buttons);
+`src/lib/ai/outlook.ts`, `src/lib/ai/insights.ts`, `src/app/(app)/money/receipt-actions.ts`,
+`src/app/(app)/money/csv-actions.ts` (permission gates); `src/lib/finance/period.ts` (the range
+message no longer names the Reports screen).
+
+**Documentation:** this `CHANGELOG.md` entry; **`PROGRESS.md`** — Wave 2B rewritten from "half
+landed and not signed off" to complete, with the check results and the deliberately-deferred work;
+**`MANUAL.md`** — three new plain-English sections ("Money changes now ask you first", "Planning
+tomorrow out loud", "Nobody else can spend your AI budget") and one on the 7pm nudge decision;
+**`NEXT-SESSION.md` deleted**, which is what that file's own header instructed once Wave 2B was
+finished and recorded in `PROGRESS.md`; and **`HANDOFF.md`**, whose bold warning at the top told
+every cold-start session to read `NEXT-SESSION.md` first — it now points at the tail of
+`PROGRESS.md` and the newest CHANGELOG entries, with a parenthesis recording what the deleted file
+was so the removal is not a mystery. `unit-reviewer` caught that dangling pointer: deleting a file
+that the repo's own cold-start guide names in bold is worse than leaving the stale note. On the
+third pass it also noticed the **build-lock rule** had gone with that file — the one saying a
+"Another next build process is already running" refusal has two causes wanting opposite responses,
+so you check for node processes before you delete the diagnostics flag. It is not tied to any one
+wave, so it now lives in `HANDOFF.md` beside the pointer. And `PROGRESS.md`'s deferred-work list,
+which is the first thing a cold session is now sent to, gained the three wrong-timezone call sites
+it was missing.
+
+### What the review caught, and what it took on trust
+
+`unit-reviewer` ran all three checks itself (198 tests, lint clean, build clean) and **failed the
+unit on two items**, both fixed above: the `manage_budget` button that said "Remove" and removed
+nothing, and two changed files missing from this entry. It also found that a comment here claimed
+more than the code did about travelling accounts — `get_day_plan` read the day from the profile and
+then worked out when that day *started* using the hardcoded Winnipeg zone. `toolPeriodContext` now
+hands out the timezone as well and `get_day_plan` uses it, so both halves agree.
+
+**Three other calls in `tools.ts` still do the old thing** — `list_tasks`, `create_task` and
+`update_task` all hand `zonedTimeToUtc` no zone and inherit Winnipeg. Pre-existing, unchanged here,
+left as its own small pass; the fix is one argument each, plus a profile read for the two that don't
+already do one. **`create_task` and `update_task` are the ones to do first:** they STORE the instant
+they compute (`tasks.due_at`), so a travelling account gets a task that nudges at the wrong hour
+forever, while `list_tasks` only mis-sorts a read until the next query. The first draft of this
+entry named two of the three and `unit-reviewer` caught it — a backlog short by one is how somebody
+fixes two, ticks the item off, and leaves the third.
+
+Two things nobody has proved and nobody should claim: **no one has tapped a real proposal button
+against the real database yet.** The claim mechanism is the same `.is(...->N->>actedAt, null)` shape
+already shipped and working in `runOutlookSuggestion`, but that is precedent, not evidence. And the
+defence against the model proposing the same write twice in one turn is prompt-only — two identical
+buttons would be two independently runnable proposals.
+
+### Still open, and Alan's call
+
+**The plain money actions are not gated.** `approveReceipt`, `discardReceipt` and
+`importCsvTransactions` in the money module still check only that somebody is signed in. They spend
+no AI credit and RLS keeps every row to its own account, so nothing leaks and nothing costs money —
+a workout-only account could only ever write money data to itself, and it has no screen to see it
+on. It is the same one-line fix as the three above and was deliberately left out of this session's
+scope, which was the billing hole. Worth doing as its own small pass.

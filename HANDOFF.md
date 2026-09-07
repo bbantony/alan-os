@@ -4,12 +4,30 @@
 Everything below was verified against the tree on 30 Aug – 2 Sep 2026, not recalled from a
 conversation. Where something is unverified, it says so.
 
-> **⚠ Read `NEXT-SESSION.md` first if you are the next session.** This file is the durable
+> **⚠ Read the tail of `PROGRESS.md` first if you are the next session.** This file is the durable
 > cold-start guide — the project, the rules, the audit, the device — and it is still accurate on
-> all of that. But it is dated **2 Sep**, and Waves 1B, 1C, 2A and half of 2B have shipped since.
+> all of that. But it is dated **2 Sep**, and Waves 1B, 1C, 2A and 2B have all shipped since.
 > Its "what Alan is asking for now" (section 3) and its recommended first unit are **superseded**:
-> section 2's four data-losing findings were closed in the Wave 1 work, and the current job queue
-> is in `NEXT-SESSION.md`. Treat sections 0–2 here as reference and section 3 onward as history.
+> section 2's four data-losing findings were closed in the Wave 1 work, and the current state is
+> the last section of `PROGRESS.md`, with the reasoning behind it in the newest `CHANGELOG.md`
+> entries. Treat sections 0–2 here as reference and section 3 onward as history.
+>
+> *(A `NEXT-SESSION.md` used to be named here. It was a note between sessions covering the
+> half-landed Wave 2B and was deleted on 6 Sep 2026 when that work finished and was recorded in
+> `PROGRESS.md` — which is what its own header instructed. If a future session leaves another
+> such note, name it here again and delete this parenthesis with it.)*
+
+> **The build lock — read all of this before deleting anything.** `npm run build` refusing with
+> *"Another next build process is already running"* has **two** causes wanting opposite responses.
+> **(1) A build really is running** — usually two `test-runner` agents with overlapping lifetimes.
+> `tasklist | grep -i node` shows them; a live build is a node process north of 1 GB. **Wait.**
+> Deleting the lock here starts a second build writing into the same `.next`, which is how you get
+> genuinely corrupt output. **(2) Nothing is running and a killed build left the flag set** —
+> `.next/diagnostics/build-diagnostics.json` still reads `"buildStage": "static-generation"` and
+> every later build believes it. Deleting that one file is the whole fix. **So: check for node
+> processes FIRST, and only delete the file if there are none. Never run two `test-runner` agents
+> at once.** (This rule lived in `NEXT-SESSION.md` until that file was deleted on 6 Sep 2026; it is
+> here now because it is not tied to any one wave.)
 
 ---
 
