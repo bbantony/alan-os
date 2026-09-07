@@ -7,7 +7,15 @@
   "display": "standalone",
   "background_color": "#FAF7F2",
   "theme_color": "#004225",
-  "orientation": "portrait-primary",
+  "share_target": {
+    "action": "/assistant",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "shared",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "/icons/icon-192.png",

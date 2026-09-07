@@ -266,6 +266,19 @@
   --rule-w: 2px;
   --hairline-w: 1px;
 
+  /* The assistant dock's column width (components/nav/assistant-dock.tsx).
+     Two elements have to agree on this exactly — the dock itself, and the
+     floating "+" in quick-add.tsx, which steps left by this much so it stops
+     sitting on top of the dock's send button. Hence one variable rather than
+     two arbitrary values.
+
+     32vw, NOT 32%: the "+" is `position: fixed`, so a percentage there would
+     resolve against the viewport while the dock's own resolved against its
+     flex parent. They are the same box today and would drift the moment either
+     gained a margin. Whether the dock is on screen at all is decided in
+     JavaScript, not here — see lib/use-wide-screen.ts. */
+  --dock-w: clamp(280px, 32vw, 420px);
+
   --font-scale: 1;
   --density-scale: 1;
 

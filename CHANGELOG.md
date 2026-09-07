@@ -6143,3 +6143,220 @@ no AI credit and RLS keeps every row to its own account, so nothing leaks and no
 a workout-only account could only ever write money data to itself, and it has no screen to see it
 on. It is the same one-line fix as the three above and was deliberately left out of this session's
 scope, which was the billing hole. Worth doing as its own small pass.
+
+## 76. Wave 3: the unfolded screen, sideways, and sharing into the app (7 Sep 2026)
+
+**What Alan asked for.** After Wave 2B went live he asked what was next, and picked the agreed
+order: Fold layouts. Asked what should fill the extra space when the phone unfolds, he chose **the
+assistant, permanently docked on the right** — over a list/detail split and over simply widening the
+column. His stated top desire for this app has always been to talk to it in one place and have it do
+things; unfolded, it is now never more than a glance away.
+
+### The problem, measured
+
+`codebase-scout` put a number on it: **the entire codebase contained one `lg:` class, and it was a
+button height variant.** Every screen is capped at `max-w-2xl`. So the ~8" inner display rendered
+the same narrow phone column with dead margins either side. Wave 3 is the first responsive work this
+app has ever had.
+
+### 1. The assistant dock
+
+- **`src/lib/use-wide-screen.ts` (new)** owns **one number** — `(min-width: 820px) and
+  600px of screen height — two separate tests, and deliberately not one media query; see the bullet
+  below — and says so in a banner comment, now with a floor: the left pane is
+  `viewport − 224 − max(280px, 32vw)`, so 820 gives 316px (already the narrowest this app is
+  designed for), 780 gives 276px and 700 gives 196px. Shrink `--dock-w` before lowering the width. It is deliberately NOT a Tailwind breakpoint, because it
+  describes one device's hinge rather than the app's responsive scale. **The height clause is
+  load-bearing:** the Fold's *cover* screen held sideways is comfortably wider than 820px and barely
+  any height, and a width-only test would put a dock on it.
+- **But the height must NOT come from the viewport, and the first version took it from there.**
+  `layout.tsx` sets `interactiveWidget: "resizes-content"`, so the Android keyboard deliberately
+  shrinks the viewport — which means a `(min-height: 600px)` media clause unmounted the dock *while
+  Alan was typing in it*, took the half-written question with it, closed the keyboard, and brought
+  the dock back empty. The worst possible moment for it to vanish, on the one screen this wave
+  exists for. It now reads `window.screen.height`, which the keyboard does not move but orientation
+  does — the only thing this guard has to know. Because a fold can change the width without crossing
+  820, the hook subscribes to `resize` and `orientationchange` as well as the media query.
+- **Unsent typing now survives the hinge.** The composer's text was ordinary component state, and
+  unfolding remounts the dock — so folding mid-sentence lost it. It is parked in the same
+  module-scope store that already carries the in-flight question, the queue and the chat's intent,
+  cleared on send directly rather than only through the mirror effect (fold in the same commit as
+  the send and the effect never runs). Shared across all three frames deliberately: one chat in
+  three frames, and a per-frame draft would lose words on "open full screen" instead — the same
+  defect through a different door.
+- **The dock's running-cost caption was reading stale.** Its cached data was filled once per tab and
+  never updated when a reply landed, so a trip to the full-screen assistant and back showed the
+  figure from whenever the tab was opened. `quick-add.tsx` had already hit this exact bug and solved
+  it with a `latestUsage` state; the lesson is now carried over, with the one shape difference
+  written down — the sheet outlives its chat and can hold it in component state, while the dock and
+  its chat unmount together, so the surviving copy is module-scope with state seeded from it.
+- **`src/components/nav/assistant-dock.tsx` (new)** renders the chat as a third column in
+  `AppShell`, sticky, full height, its own scroll.
+- **THE ONE CHAT rule now has three candidates instead of two**, and that is the whole risk of this
+  feature. `assistant-chat.tsx`'s header explains why two mounted chats gave two composers, two
+  microphones, two copies of one conversation, and dictation typing into a hidden box. The /assistant
+  page, the capture sheet and the dock are kept apart by a single shared function,
+  `useAssistantDockLive` — `wide && !onAssistant && moduleAccess.tasks` — called by the dock AND by
+  `quick-add.tsx`, so the two cannot disagree. The sheet's `showChat` gained `&& !dockLive` and keeps
+  its four forms, exactly the arrangement it has always had on /assistant.
+- **Conditionally rendered, never CSS-hidden.** `hidden md:flex` would leave a live textarea and a
+  live dictation session mounted inside a box nobody can see — the exact bug the rule exists for. So
+  the width test is real JavaScript, hydration-safe through `useSyncExternalStore` with a server
+  snapshot of `false`, so the HTML carries no dock and it appears a beat after hydration rather than
+  mismatching.
+- **A `"dock"` variant** was added to `AssistantChat`. The single `sheet` boolean became three named
+  ones — `framed = sheet || dock`, `collapsible = sheet`, `sheet` — and **all ten** branches were
+  re-decided rather than assumed. The load-bearing one was scroll-to-newest: the dock must use
+  `list.scrollTo`, not `scrollIntoView`, which walks up ancestors and would drag the whole page.
+  Behaviour — memory, dictation, the queue, the cost line — is untouched and still shared.
+
+### 2. What the dock exposed, which was worse than the dock
+
+Squeezing the left pane to ~330px broke things that had never been narrow before, because every
+utility in the app keys off the **viewport** and the viewport is now much wider than the pane the
+content sits in. Found by the agent that built the dock, and fixed rather than shipped:
+
+- **`StatStrip` / `Stat`** would have put three ~100px cells under 30px money figures on Money and
+  Today — clipped numbers, on the two screens most worth unfolding for. Now a container query: the
+  strip measures **itself**, not the window. A census confirmed **all 25 `<Stat>` call sites across
+  eight files are direct children of a `StatStrip`**, so one wrapper covers every one; that was
+  checked rather than assumed, because a standalone `Stat` would have kept the old behaviour and
+  looked fixed.
+- **Settings was worse.** Its `md:flex` rail is 224px plus a 40px gap; at a 377px pane that left
+  **81 pixels** of actual page. The layout, the shell and the index page now share one condition
+  (window wide AND pane ≥32rem) so the rail, the masthead, the back link and the "pick a section"
+  placeholder cannot disagree about whether there is room.
+- **Reports'** Month/Week switch is a fixed 176px on a `sm:flex-row`, which left ~57px for the month
+  name. Now container-keyed too.
+- Deliberately left: the tile grids in `routines/routine-section.tsx` and
+  `settings/appearance/appearance-editor.tsx` are cramped at that width but wrap rather than clip.
+
+The general lesson, worth more than the fixes: **once content can be narrower than the window, every
+`sm:`/`md:` utility inside it is asking the wrong question.** Container queries are the answer and
+Tailwind v4 has them built in — no plugin, no config file (this project has none; it is all `@theme`
+in `globals.css`).
+
+### 3. Sideways, and sharing into the app
+
+- **`public/manifest.json` lost `"orientation": "portrait-primary"`.** Omitted rather than set to
+  `"any"` on purpose: omitting means "no preference", so the app follows the phone's own rotation
+  setting, and Alan's system rotation lock still wins. `"any"` would have forced rotation on him.
+- **A `share_target`** now puts Alan OS in Android's share sheet. Sharing a link, a page or a
+  selection from any other app opens the assistant with those words **in the box, unsent**. No new
+  route, no service-worker POST handling, no new page.
+- **AND THAT "UNSENT" IS A SAFETY FIX, NOT A PREFERENCE — the first version got it wrong.** The
+  manifest originally mapped the shared text onto `?q=`, the parameter `/assistant` has always
+  treated as *already asked* and sends on mount. At Alan's `suggest` setting only money writes become
+  proposals; every other write — a task, a shopping item, a workout — runs the moment the model calls
+  it. So sharing a web page could have let text written by a stranger, that Alan had read none of,
+  reach a write tool. `unit-reviewer` found it. The share now has its own parameter (`?shared=`) and
+  a new `initialDraft` prop that seeds the composer and stops there, while `?q=` keeps its old
+  meaning for launcher shortcuts and bookmarks. `share-target.ts` had actually written down the right
+  rule at the time — that guessing an instruction here would be the app acting on an intent nobody
+  expressed (that wording has since been rewritten, so don't go looking for it) — and
+  the page sent it anyway; a correct comment above incorrect code is worth exactly nothing.
+- **`src/app/(app)/assistant/page.tsx` also got its `typeof` guards back.** Next hands back an ARRAY
+  for a repeated query parameter (`?q=a&q=b`), and calling `.trim()` on one throws and takes the
+  whole page down. That guard existed before this wave, was lost in the first draft of the share
+  wiring, and now covers all four parameters — three of which arrive from outside the app entirely.
+- **`src/lib/share-target.ts` (new)** merges the three fields the share sheet sends, because no two
+  apps agree on which one a link goes in: Chrome fills `title` and `url`, most Android apps put the
+  URL in `text` because that is what `EXTRA_TEXT` has always been, a selection has `text` only, and
+  some send all three with the address duplicated. Pure, so
+  `tests/share-target.test.mts` covers the real shapes — including that a link arriving twice is
+  asked once, and that an empty share is `null` rather than `""` (an empty string would be handed to
+  the chat as a question that was asked, and paid for).
+- **`public/sw.js` bumped to `alan-os-shell-v4`** — and the first version of this entry, and of the
+  comment in that file, **overstated what the bump does.** `unit-reviewer` caught it. The claim was
+  that without the bump the phone keeps serving a stale manifest from the cache; it does not, because
+  the fetch handler is network-first and the precached copy is only an offline fallback. What the
+  bump really buys: changing a byte of `sw.js` is what makes the browser install a new worker at all,
+  and the activate handler then drops every stale cache so the offline manifest matches the online
+  one. Worth doing on any manifest change; not the mechanism.
+  **What actually gates this on the device is Chrome**, which bakes `orientation`, `share_target` and
+  `shortcuts` into the installed PWA and only rebuilds it when it next notices the manifest differs —
+  roughly a day, plus a launch or two, or a reinstall. MANUAL.md said this correctly from the start;
+  the developer-facing docs did not.
+
+### 4. Tests
+
+**Also changed, listed because two reviews in a row have failed on files missing from an entry:**
+`src/app/globals.css` gained `--dock-w`, the single figure the dock's width and the floating **+**'s
+offset both read, so they cannot drift; `quick-add.tsx` moves that **+** left by exactly that amount
+while the dock is live, and its header comment gained the sheet's new arrangement.
+
+`tests/one-chat.test.mts` (new, 5 tests) enforces the rule instead of remembering it: that the sheet
+and the dock ask the *same function* whether the dock is live, that the sheet suppresses its chat
+when it is, that the dock returns `null` rather than being CSS-hidden, that the media query still
+is a width media query plus a `screen.height` guard — never a `min-height` media clause, which is
+what the keyboard tripped — and fails closed on the server, and a **census of the three legal
+mount points** — so a fourth has to come and argue with this file. `tests/share-target.test.mts`
+(new, 8 tests) covers the merge — and its last test is the interesting one: it reads
+`manifest.json` and fails if any share field is ever wired back onto `q`, which is a mistake that
+was actually made rather than a hypothetical one.
+
+### Not done, and why
+
+**Sharing a PHOTO into the receipt scanner is not built.** It was in the plan put to Alan and it is
+honest to say it was dropped rather than quietly delivered as text-only sharing. The reason is that
+it is a genuinely different job: a file share must be `method: "POST"`, and `uploadReceipt` is a
+Server Action with a **1 MB body limit** that the browser normally stays under only because
+`lib/images.ts` shrinks the photo *client-side* first. A shared photo skips that shrink and arrives
+at 3–8 MB. The correct shape is the standard PWA one — the service worker intercepts the POST
+(its fetch handler currently returns early on any non-GET), stashes the file in Cache Storage,
+redirects to
+a GET page, and that page runs the existing shrink and the existing `uploadReceipt` exactly as the
+scan button does. That reuses everything and adds no new limits. It is perhaps 120 lines across
+`sw.js` and one page, it cannot be tested end to end without a real Android share, and bolting a
+half version onto this wave would have meant either raising a body limit that exists for a reason or
+sending full-resolution photos to vision at several times the token cost. Written down here so the
+next session does not have to rediscover the shape.
+
+### Documentation
+
+**`MANUAL.md`** gained four new plain-English sections — the dock ("Unfold the phone and the
+assistant is just there"), rotation, sharing into the app, and what to do if the dock never appears.
+**`PROGRESS.md`** gained the Wave 3 completion block, the check results, and two more entries on its
+deliberately-deferred list (photo sharing, and the two cramped tile grids). **`HANDOFF.md`** is
+unchanged this wave — its warning box already points a cold session at the tail of `PROGRESS.md`,
+which is where Wave 3 is recorded.
+
+### Known and left, so nothing is hidden
+
+Three things `unit-reviewer` turned up that are written down rather than fixed, none of which costs
+money or changes data:
+
+- **The cost caption still lags for questions asked on the full-screen assistant.** That page passes
+  no `onUsage`, so spend from it doesn't reach the dock's cached figure. The capture sheet has had
+  the identical blind spot since it shipped. `ai_usage` is written server-side either way and the
+  monthly ceiling is enforced from the database — this is a display lag, and the comment in
+  `assistant-dock.tsx` now says so rather than implying the class of bug is closed.
+- **Share parameters are never wiped from the address bar** (only `?q=` is). Send a shared link,
+  pull to refresh, and the same words reappear in the box — unsent, and costing nothing.
+- **A share while logged out is thrown away.** `/assistant` redirects to `/login` and the words do
+  not survive it.
+
+And one that needs a URL nothing in the app generates: with `?q=` AND `?shared=` on the same address
+AND no AI key configured, the share wins the seed and the `?q=` question is silently dropped.
+
+### The three rounds this took
+
+Worth recording, because the pattern is now consistent. `test-runner` passed every time. The unit
+was failed by `unit-reviewer` twice: first on four blocking issues — the auto-asked share, the false
+service-worker claim, a "remounted in exactly two cases" comment that was already untrue, and the
+dock's stale cost caption — and then on three more, all of them **sentences in `MANUAL.md`,
+`PROGRESS.md` and this file still describing behaviour the fixes had removed.** The code passed that
+second round; only the prose failed.
+
+That is twice in two waves that documentation has been the thing that failed a unit, and it is the
+same failure both times: a fix lands and the paragraph explaining the old behaviour survives it.
+The Manual is the one that matters — it told Alan a share would be "already asked" three paragraphs
+above a sentence saying it lands unsent, and he is the one person who cannot read the code to check.
+
+### What has not been seen on the real device
+
+Nobody has looked at any of this on a Fold. The 820/600 threshold, whether the floating **+** clears
+the dock's composer, and whether the left pane reads well at ~330px are all estimates — and the
+device's actual CSS width is not written down anywhere in this repo, which was true before this wave
+and is still true. Alan is the test. If the dock does not appear when he unfolds, one number in
+`src/lib/use-wide-screen.ts` changes and nothing else does.

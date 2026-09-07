@@ -245,47 +245,55 @@ export function ReportsView() {
           side once there is room. The navigator stays one ruled strip with the
           arrows in their own cells, so it reads as a single control rather than
           three loose pieces. */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-        <Segmented
-          className="sm:w-44 sm:shrink-0"
-          options={[
-            { value: "month", label: "Month" },
-            { value: "week", label: "Week" },
-          ]}
-          value={unit}
-          onChange={changeUnit}
-        />
+      {/* Side by side only when THIS ROW has the room, not when the window
+          does (7 Sep 2026). With the assistant dock open the Money screen is
+          about 330px wide on a 884px display, and a viewport `sm:` put a fixed
+          176px Month/Week switch beside the period navigator with ~57px left
+          for the month name. `@container` here rather than higher up the tree
+          so it stays a fact about this one control. */}
+      <div className="@container">
+        <div className="flex flex-col gap-2 @md:flex-row @md:items-stretch">
+          <Segmented
+            className="@md:w-44 @md:shrink-0"
+            options={[
+              { value: "month", label: "Month" },
+              { value: "week", label: "Week" },
+            ]}
+            value={unit}
+            onChange={changeUnit}
+          />
 
-        <div
-          className="flex flex-1 items-stretch border-2 border-rule bg-surface"
-          aria-busy={loading}
-        >
-          <button
-            type="button"
-            onClick={() => setOffset((o) => o - 1)}
-            className="tap-press flex w-11 shrink-0 items-center justify-center border-r border-hairline transition-colors hover:bg-muted"
-            aria-label={`Previous ${unitWord}`}
+          <div
+            className="flex flex-1 items-stretch border-2 border-rule bg-surface"
+            aria-busy={loading}
           >
-            <ChevronLeft className="size-4" strokeWidth={2.5} />
-          </button>
-          <span
-            aria-live="polite"
-            className={cn(
-              "micro flex flex-1 items-center justify-center px-2 py-2.5 text-center transition-opacity duration-150",
-              loading && "opacity-50"
-            )}
-          >
-            {range ? range.longLabel : loading ? "Loading…" : "Couldn't load"}
-          </span>
-          <button
-            type="button"
-            onClick={() => setOffset((o) => Math.min(0, o + 1))}
-            disabled={offset === 0}
-            className="tap-press flex w-11 shrink-0 items-center justify-center border-l border-hairline transition-colors hover:bg-muted disabled:opacity-30"
-            aria-label={`Next ${unitWord}`}
-          >
-            <ChevronRight className="size-4" strokeWidth={2.5} />
-          </button>
+            <button
+              type="button"
+              onClick={() => setOffset((o) => o - 1)}
+              className="tap-press flex w-11 shrink-0 items-center justify-center border-r border-hairline transition-colors hover:bg-muted"
+              aria-label={`Previous ${unitWord}`}
+            >
+              <ChevronLeft className="size-4" strokeWidth={2.5} />
+            </button>
+            <span
+              aria-live="polite"
+              className={cn(
+                "micro flex flex-1 items-center justify-center px-2 py-2.5 text-center transition-opacity duration-150",
+                loading && "opacity-50"
+              )}
+            >
+              {range ? range.longLabel : loading ? "Loading…" : "Couldn't load"}
+            </span>
+            <button
+              type="button"
+              onClick={() => setOffset((o) => Math.min(0, o + 1))}
+              disabled={offset === 0}
+              className="tap-press flex w-11 shrink-0 items-center justify-center border-l border-hairline transition-colors hover:bg-muted disabled:opacity-30"
+              aria-label={`Next ${unitWord}`}
+            >
+              <ChevronRight className="size-4" strokeWidth={2.5} />
+            </button>
+          </div>
         </div>
       </div>
 

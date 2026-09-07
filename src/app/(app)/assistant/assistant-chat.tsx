@@ -49,14 +49,24 @@ import {
 /**
  * THE ONE CHAT. There is no second one.
  *
- * This component is rendered in two places — full screen at /assistant, and
- * inside the global capture sheet (components/nav/quick-add.tsx) — but never
- * in both AT ONCE. The sheet leaves the chat out entirely while you are
- * standing on /assistant (it keeps its forms), because mounting it there gave
- * you two composers, two microphones and two copies of one conversation, and
- * dictation started on the page kept typing into the box hidden behind the
- * sheet. One chat alive at a time is not a nicety here; it is what makes the
- * shared state below safe.
+ * This component is rendered in three places — full screen at /assistant,
+ * inside the global capture sheet (components/nav/quick-add.tsx), and docked
+ * down the right-hand side on a wide screen (components/nav/assistant-dock.tsx)
+ * — but never in more than one AT ONCE. Two chats alive gave you two composers,
+ * two microphones and two copies of one conversation, and dictation started in
+ * one kept typing into the box hidden behind the other. One chat alive at a
+ * time is not a nicety here; it is what makes the shared state below safe.
+ *
+ * The three are kept apart by two rules, both enforced with real conditional
+ * rendering and never by CSS (a chat hidden with `hidden` is still mounted,
+ * still owns a textarea, and still catches dictation):
+ *
+ *   - Nothing but the page's own chat is mounted on /assistant. The sheet and
+ *     the dock both test the route and leave their chat out; the sheet keeps
+ *     its forms, which is why the "+" still opens there.
+ *   - When the dock is live, the sheet leaves its chat out everywhere. The dock
+ *     is on screen behind the sheet, which is the same situation /assistant was
+ *     always in.
  *
  * `variant` changes the FRAME and nothing else: how tall the transcript is
  * allowed to get, whether it starts collapsed, whether the composer sticks to
@@ -177,9 +187,10 @@ type ChatIntent =
  *              closing the sheet with words waiting silently threw them away —
  *              the exact loss the queue exists to prevent.
  *   intent     which chat this tab is in, including "deliberately none".
+ *   draft      what is HALF-TYPED in the box and has not been sent.
  *
  * One object, one subscriber list, one `useSyncExternalStore` call in the
- * component. Deliberately not three stores: three would be three places to
+ * component. Deliberately not four stores: four would be four places to
  * forget, which is how the intent got lost twice already. Safe precisely
  * BECAUSE only one chat is ever alive (see the header at the top of the file).
  */
@@ -187,6 +198,7 @@ type SharedChatState = {
   exchange: LiveExchange | null;
   queue: string[];
   intent: ChatIntent;
+  draft: string;
 };
 
 /** Also the server snapshot: nothing is in flight, queued or remembered there. */
@@ -194,6 +206,7 @@ const INITIAL_SHARED: SharedChatState = {
   exchange: null,
   queue: [],
   intent: { mode: "resume" },
+  draft: "",
 };
 
 let shared: SharedChatState = INITIAL_SHARED;
@@ -266,6 +279,45 @@ function intentConversationId(intent: ChatIntent): string | null {
 function intentArgument(intent: ChatIntent): string | null | undefined {
   if (intent.mode === "specific") return intent.id;
   return intent.mode === "fresh" ? null : undefined;
+}
+
+// ---- The draft: words typed and not yet sent ----
+//
+// THE HINGE MADE THIS MATTER. The box has always been ordinary component
+// state, and it has always died with the mount — closing the capture sheet
+// threw away whatever was half-typed in it. That was survivable while the only
+// way to unmount a chat was to deliberately close one. The assistant dock is
+// mounted on a width test, so FOLDING THE PHONE unmounts it, and folding a
+// phone is not a decision to discard anything: it is something done mid-
+// sentence, without thinking, on the one device this whole feature exists for.
+// "Type half a message, fold, lose it" is what would be remembered about the
+// dock. So the draft joins the other three things that outlive a mount.
+//
+// SHARED ACROSS ALL THREE FRAMES, on purpose. A draft started in the dock is
+// in the box on /assistant and in the capture sheet as well. That follows from
+// where it is kept, but it is also the right answer: it is ONE chat in three
+// frames (see the header), the queue and the in-flight question already behave
+// exactly this way, and the alternative — a per-frame draft — means tapping
+// "open full screen" beside a half-written question loses it, which is the
+// same defect this is fixing with a different trigger.
+//
+// WRITTEN WITHOUT NOTIFYING THE WATCHERS, unlike everything else in the store.
+// Nothing renders from this value: the live box is component state, because a
+// textarea's value has to be, and this is read exactly once, when a chat
+// mounts. Publishing it would re-render the chat on every keystroke to deliver
+// a value it is already holding.
+
+function rememberDraft(text: string) {
+  shared.draft = text;
+}
+
+function readDraft(): string {
+  return shared.draft;
+}
+
+/** Deliberately forget it — the words went out, so they are not a draft. */
+function clearDraft() {
+  shared.draft = "";
 }
 
 /**
@@ -487,6 +539,7 @@ export function AssistantChat({
   initialUsage = null,
   moduleAccess,
   initialQuestion = null,
+  initialDraft = null,
   questionKey = null,
   initialConversation,
   variant = "page",
@@ -512,6 +565,18 @@ export function AssistantChat({
    */
   initialQuestion?: string | null;
   /**
+   * Words to put IN THE BOX, unsent — what a share from another app arrives as.
+   *
+   * The difference from `initialQuestion` is the whole point and is a safety
+   * rule: `initialQuestion` is a question somebody already asked, and it is
+   * sent on mount. A share is not a question. Alan chose to share a page; he
+   * did not ask for anything to be done with it, and at his `suggest` setting
+   * a non-money write runs the moment the model calls it — so text he has read
+   * none of must not be able to reach a tool without him pressing send. See
+   * lib/share-target.ts, which explains how this was got wrong first.
+   */
+  initialDraft?: string | null;
+  /**
    * A token unique to each handover. Identifies the ASK, not the words — so
    * the same sentence sent twice is asked twice.
    */
@@ -523,8 +588,13 @@ export function AssistantChat({
    * fetched here on mount instead.
    */
   initialConversation?: { conversation: StoredConversation | null; error?: string };
-  /** `page` is the full screen; `sheet` is inside the capture sheet. */
-  variant?: "page" | "sheet";
+  /**
+   * `page` is the full screen; `sheet` is inside the capture sheet; `dock` is
+   * the permanent right-hand column on a wide screen. FRAME ONLY — see the
+   * header of this file, and the three derived booleans just below, which are
+   * what every branch in here actually tests.
+   */
+  variant?: "page" | "sheet" | "dock";
   /**
    * The sheet's `initialFocus` target. Handed in rather than owned here so the
    * sheet can put the cursor in this box on open WITHOUT keeping a second
@@ -538,7 +608,32 @@ export function AssistantChat({
   onUsage?: (usage: UsageSummary) => void;
 }) {
   const aiBlocked = configured === false;
+  /**
+   * THE FRAME, as three questions rather than one variant name.
+   *
+   * Adding `dock` to a file whose every branch read `sheet ? … : …` would have
+   * silently handed the dock the PAGE's frame everywhere — a transcript with no
+   * scroll box of its own, a composer stuck to the viewport instead of to the
+   * bottom of the column, and `scrollIntoView` walking up and scrolling the
+   * whole document to keep the newest line visible. So each branch was gone
+   * through and re-asked in terms of what it actually cares about:
+   *
+   *   framed       this chat is inside a box someone else drew, so its own
+   *                outer edges are redundant, the transcript scrolls in a box
+   *                of its own, and the composer sits at the bottom of THAT box
+   *                rather than sticking to the viewport. True in the sheet and
+   *                in the dock; false on the page, which IS the viewport.
+   *   collapsible  this chat opens compact and grows on a tap. Only the sheet:
+   *                it has the four capture chips underneath to protect. The
+   *                dock is a permanent column with nothing under it, so it is
+   *                always open, exactly like the page.
+   *   sheet        genuinely sheet-only — the 32dvh cap on the transcript,
+   *                which exists to keep those chips above the fold.
+   */
   const sheet = variant === "sheet";
+  const dock = variant === "dock";
+  const framed = sheet || dock;
+  const collapsible = sheet;
 
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     initialConversation?.conversation ? toChatMessages(initialConversation.conversation) : []
@@ -590,7 +685,32 @@ export function AssistantChat({
   // there once the key is added. Seeded here rather than set from an effect:
   // the value is known at first render, and setting state inside an effect
   // would paint an empty box first.
-  const [input, setInput] = useState(aiBlocked && initialQuestion ? initialQuestion : "");
+  // A share seeds the box and stops there. `initialQuestion` only seeds it
+  // when the AI is blocked, because otherwise it is about to be sent anyway.
+  //
+  // AND IT STARTS FROM WHATEVER WAS LEFT IN IT. See the draft notes near the
+  // top of this file: half-typed words now outlive the mount, because folding
+  // the phone unmounts the dock and folding a phone is not a decision to throw
+  // anything away. A seed arriving on top of a parked draft is APPENDED, never
+  // substituted — the shape `returnToComposer` uses, for the same reason — and
+  // a seed already sitting in the parked draft is not added twice, which is
+  // what a remount on the same shared URL would otherwise do.
+  const [input, setInput] = useState(() => {
+    const seed = initialDraft || (aiBlocked && initialQuestion ? initialQuestion : "");
+    const parked = readDraft();
+    if (!seed) return parked;
+    if (!parked) return seed;
+    if (parked.includes(seed)) return parked;
+    return `${parked.trimEnd()}${NEWLINE}${seed}`;
+  });
+  // Park every change, so the box survives this component being thrown away.
+  // An effect rather than a wrapper around `setInput`: every call site below
+  // stays exactly as it was, several of them updater functions, and an updater
+  // that also wrote to module scope would be an impure one. Cheap —
+  // `rememberDraft` notifies no watchers, so this triggers no re-render.
+  useEffect(() => {
+    rememberDraft(input);
+  }, [input]);
   // ...and again for every handover after the first. Seeding initial state
   // only covers the case where this screen MOUNTS with a question; arriving
   // with a second one is a soft navigation, so this component re-renders with
@@ -992,6 +1112,14 @@ export function AssistantChat({
     // half-typed, and wiping it would be the last remaining way for words to
     // go missing on this screen.
     setInput((current) => (current.trim() === trimmed ? "" : current));
+    // AND FORGET THE PARKED COPY, here rather than only through the mirror
+    // effect above. A question that has gone out is not a draft: left parked,
+    // the next mount would put it back in the box underneath its own answer,
+    // ready to be sent — and paid for — a second time. The effect alone is not
+    // enough, because an unmount in the same commit as the clear above (fold
+    // the phone the instant you hit send) never runs it. Same rule as the line
+    // above: only when the box is what went out.
+    if (readDraft().trim() === trimmed) clearDraft();
 
     // Busy, or not yet sure which thread this is. Either way the words wait
     // rather than being lost or filed into the wrong conversation.
@@ -1490,26 +1618,29 @@ export function AssistantChat({
    * something to show. On the page it is always open.
    */
   const showTranscript =
-    !sheet ||
+    !collapsible ||
     expanded ||
     historyOpen ||
     live !== null ||
     pendingAsks.length > 0 ||
     notice !== null;
 
-  // Keep the newest line in view — inside the transcript's OWN box in the
-  // sheet. `scrollIntoView` walks every scrollable ancestor, so there it moved
-  // the sheet as well as the transcript and the two fought each other.
+  // Keep the newest line in view — inside the transcript's OWN box whenever
+  // there is one. `scrollIntoView` walks every scrollable ancestor, so in the
+  // sheet it moved the sheet as well as the transcript and the two fought each
+  // other; in the dock it would scroll the whole page sideways-in-time to keep
+  // a line in a fixed-height column visible. Only the page, which IS the
+  // scrolling document, wants the ancestor walk.
   useEffect(() => {
     if (!showTranscript) return;
-    if (sheet) {
+    if (framed) {
       const list = listRef.current;
       if (!list) return;
       list.scrollTo({ top: list.scrollHeight, behavior: "smooth" });
       return;
     }
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, live, pendingAsks, sheet, showTranscript]);
+  }, [messages, live, pendingAsks, framed, showTranscript]);
 
   const barLabel = historyOpen
     ? "Past chats"
@@ -1522,13 +1653,18 @@ export function AssistantChat({
       <div
         className={cn(
           "flex flex-col",
-          sheet ? "min-w-0 border-b-2 border-rule" : "min-h-[60vh] gap-4"
+          sheet && "min-w-0 border-b-2 border-rule",
+          // The dock's own column draws the frame, so this fills it exactly:
+          // `min-h-0` is what lets the transcript below actually shrink and
+          // scroll instead of pushing the composer off the bottom.
+          dock && "min-h-0 min-w-0 flex-1",
+          !framed && "min-h-[60vh] gap-4"
         )}
       >
         {aiBlocked && (
           <Panel
-            tone={sheet ? "default" : "raised"}
-            className={cn(sheet && "border-x-0 border-t-0")}
+            tone={framed ? "default" : "raised"}
+            className={cn(framed && "border-x-0 border-t-0")}
           >
             <p className="px-3 py-3 text-sm">
               The assistant needs a free Google AI key before it can do anything.
@@ -1542,10 +1678,10 @@ export function AssistantChat({
         <div
           className={cn(
             "flex min-h-11 items-center justify-between gap-2 border-2 border-rule bg-surface px-3 py-1.5",
-            sheet && "border-x-0 border-t-0"
+            framed && "border-x-0 border-t-0"
           )}
         >
-          {sheet ? (
+          {collapsible ? (
             // In the sheet this line is also the handle. The compact state
             // exists so the capture chips stay on screen, so opening the
             // transcript over the top of them is a deliberate tap.
@@ -1604,8 +1740,16 @@ export function AssistantChat({
             className={cn(
               "flex flex-col gap-3",
               // `overscroll-contain`: reaching the end of the transcript must
-              // not hand the scroll on to the sheet behind it.
-              sheet ? cn(SHEET_LIST_HEIGHT, "overflow-y-auto overscroll-contain p-3") : "flex-1"
+              // not hand the scroll on to whatever is behind it — the sheet, or
+              // in the dock's case the page in the left-hand pane, which would
+              // otherwise jump every time you reached the top of the chat.
+              sheet && cn(SHEET_LIST_HEIGHT, "overflow-y-auto overscroll-contain p-3"),
+              // The dock takes all the room the column has left over, no more:
+              // `min-h-0` is the half of that pair people forget, and without
+              // it a long transcript grows the flex item instead of scrolling
+              // inside it and the composer walks off the bottom of the screen.
+              dock && "min-h-0 flex-1 overflow-y-auto overscroll-contain p-3",
+              !framed && "flex-1"
             )}
           >
             {historyOpen ? (
@@ -1760,7 +1904,12 @@ export function AssistantChat({
         <div
           className={cn(
             "flex flex-col gap-1.5",
-            sheet ? "border-t-2 border-rule p-3" : "sticky bottom-0 bg-background pt-2 pb-1"
+            // Framed: the composer is the last row of a box we own, pinned
+            // there by the flex column above it. Only the PAGE needs to stick
+            // to the viewport, because on the page the viewport is the box.
+            framed
+              ? "shrink-0 border-t-2 border-rule p-3"
+              : "sticky bottom-0 bg-background pt-2 pb-1"
           )}
         >
           <div className="flex items-end gap-2 border-2 border-rule bg-surface p-2 shadow-[var(--shadow-hard-sm)]">
@@ -1776,7 +1925,7 @@ export function AssistantChat({
                   void send(input);
                 }
               }}
-              rows={sheet ? 2 : 1}
+              rows={framed ? 2 : 1}
               aria-label="Ask or tell it anything"
               placeholder={
                 listening

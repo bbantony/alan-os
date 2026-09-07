@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { BottomNav } from "./bottom-nav";
 import { SidebarNav } from "./sidebar-nav";
 import { QuickAdd } from "./quick-add";
+import { AssistantDock } from "./assistant-dock";
 import { PageTransition } from "./page-transition";
 import type { ModuleAccess } from "@/lib/permissions";
 
@@ -22,6 +23,17 @@ import type { ModuleAccess } from "@/lib/permissions";
 // on that one route, so there is never a second chat alive beside the page's.
 // That decision lives in quick-add.tsx, next to the component it affects,
 // rather than as a route test up here.
+//
+// THE THIRD COLUMN (7 Sep 2026). On a screen wide AND tall enough — the Fold's
+// unfolded inner display, a laptop — the assistant is docked permanently down
+// the right instead of living behind the "+". Narrow screens are untouched:
+// AssistantDock renders literally nothing there. It is the same one chat
+// component; whether it or the capture sheet owns it is decided in exactly one
+// place, `useAssistantDockLive` in assistant-dock.tsx, which quick-add.tsx also
+// calls. See the header of assistant-chat.tsx for why two would be a bug.
+//
+// The row is sidebar / page / dock, and the middle one keeps `min-w-0` so the
+// page shrinks to fit rather than pushing the dock off the edge.
 export function AppShell({
   moduleAccess,
   children,
@@ -37,6 +49,7 @@ export function AppShell({
           <PageTransition>{children}</PageTransition>
         </main>
       </div>
+      <AssistantDock moduleAccess={moduleAccess} />
       <BottomNav moduleAccess={moduleAccess} />
       <QuickAdd moduleAccess={moduleAccess} />
     </div>

@@ -54,7 +54,12 @@ export function Stat({
         <span
           className={cn(
             "stat",
-            size === "lg" ? "text-4xl md:text-5xl" : "text-2xl md:text-3xl",
+            // CONTAINER query, not a viewport one — @md is 28rem of the
+            // StatStrip around this cell, not 768px of the window. See the
+            // note on StatStrip below for why; the short version is that since
+            // the assistant dock exists, a wide window no longer implies a wide
+            // strip, and a 30px money figure in a 109px cell is clipped.
+            size === "lg" ? "text-4xl @md:text-5xl" : "text-2xl @md:text-3xl",
             tone === "alert" && "text-destructive",
             tone === "ok" && "text-ok"
           )}
@@ -144,16 +149,44 @@ export function StatStrip({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "grid gap-px border-2 border-rule bg-hairline",
-        columns === 2 && "grid-cols-2",
-        columns === 3 && "grid-cols-2 sm:grid-cols-3",
-        columns === 4 && "grid-cols-2 sm:grid-cols-4",
-        className
-      )}
-    >
-      {children}
+    // THE STRIP MEASURES ITSELF, NOT THE WINDOW (7 Sep 2026).
+    //
+    // These were `sm:grid-cols-3` / `md:text-3xl` — viewport breakpoints — and
+    // that held right up until the assistant dock (components/nav/assistant-
+    // dock.tsx) started taking a column off the right of a wide screen. On the
+    // Fold's unfolded inner display the window is ~884px, so every `sm:` and
+    // `md:` utility fires, but the page itself is only ~377px wide: three
+    // columns of ~109px each, holding a 30px "$1,234.56". Clipped. Unfolding
+    // the phone made the Money and Today screens worse, which would have made
+    // the whole dock a net loss.
+    //
+    // An element cannot query its own width, hence the wrapper: it carries
+    // `container-type: inline-size` so both the grid below and the `Stat`
+    // cells inside it size themselves against the space they were actually
+    // given. Safe as a container because nothing inside a Stat is absolutely
+    // or fixed-positioned — `container-type` also makes an element a
+    // containing block for those, which is the trap with putting it higher up
+    // the tree.
+    //
+    // 28rem for BOTH thresholds, deliberately the same number: below it two
+    // columns at the smaller type, above it the full strip. Every real width
+    // the app renders at today is unchanged — a phone (343px of strip) still
+    // gets two columns and 24px figures, every desktop width (496–624px)
+    // still gets the full strip and 30px figures. The one band that moves is a
+    // 480–767px window, which now matches what a strip of that width already
+    // did on desktop instead of disagreeing with it.
+    <div className="@container">
+      <div
+        className={cn(
+          "grid gap-px border-2 border-rule bg-hairline",
+          columns === 2 && "grid-cols-2",
+          columns === 3 && "grid-cols-2 @md:grid-cols-3",
+          columns === 4 && "grid-cols-2 @md:grid-cols-4",
+          className
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }

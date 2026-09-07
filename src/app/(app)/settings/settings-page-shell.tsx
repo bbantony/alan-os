@@ -22,17 +22,23 @@ export function SettingsPageShell({
   eyebrow?: string;
   children: ReactNode;
 }) {
+  // Every `md:` here is really asking "is the settings rail showing?", and
+  // since 7 Sep 2026 that is not the same question as "is the window wide?" —
+  // see the long note in settings/layout.tsx, which owns the `settings`
+  // container these query. They must flip on EXACTLY the same condition as the
+  // rail does: get it wrong and the assistant dock leaves you on a settings
+  // sub-page with no rail, no masthead and no way back.
   return (
     <div>
-      <div className="md:hidden">
+      <div className="md:@lg/settings:hidden">
         <PageHeader eyebrow={eyebrow} title={title} backHref="/settings" />
       </div>
 
       {/* Desktop keeps a quieter title so the column still has a heading, just
           not a full masthead competing with the rail. */}
-      <h1 className="display-sm mb-4 hidden md:block">{title}</h1>
+      <h1 className="display-sm mb-4 hidden md:@lg/settings:block">{title}</h1>
 
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4 md:mx-0 md:max-w-none md:px-0 md:py-0">
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4 md:@lg/settings:mx-0 md:@lg/settings:max-w-none md:@lg/settings:px-0 md:@lg/settings:py-0">
         {children}
       </div>
     </div>

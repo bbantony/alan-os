@@ -1898,3 +1898,48 @@ the card.
 Worth knowing that the routine dialog on the **Plan** screen works the other way — add a routine by
 tapping and the phone nudge starts off, and you switch it on yourself. That's not a bug: saying a
 time out loud is taken as asking to be reminded of it, while typing one into a form isn't.
+
+## Unfold the phone and the assistant is just there
+
+Open the Fold and the app stops pretending to be a phone. Your screen stays on the left; the
+assistant sits down the right-hand side, always open, always the same conversation. You don't tap
+anything to get to it and you don't lose your place to use it — look at Money and ask about Money at
+the same time.
+
+- **Folded, nothing changes at all.** Same app you had yesterday.
+- **It's the same one chat** you get from the **+** button and from the Assistant screen — same
+  history, same thread. There is only ever one, wherever you're talking to it from.
+- **On the Assistant screen itself** the dock isn't there, because that whole screen is already the
+  chat.
+- **The + button still works** while the dock is open. It gives you the four quick forms — expense,
+  task, shopping, receipt — without the chat, since the chat is already beside it.
+
+**If it doesn't appear when you unfold, tell me.** Nobody ever wrote down how wide your Fold's inner
+screen actually is, so I've built to an estimate. It's one number and I change one line.
+
+## It turns sideways now
+
+The app was locked to upright. It isn't any more — it follows your phone's own rotation setting, so
+if you have rotation locked in Android it still stays put. Nothing to switch on.
+
+**You may need to reinstall it to get both of these.** Rotation and the sharing below both live in
+the app's settings file, and Android bakes that into the installed app when you add it to your home
+screen. Chrome does notice the change on its own, but it takes about a day and a couple of launches.
+If you don't want to wait: remove Alan OS from your home screen and add it again.
+
+## Share anything into the app
+
+Alan OS now shows up in Android's share sheet. Reading an article, looking at a page, or with some
+text selected — hit share, pick Alan OS, and the assistant opens with it sitting in the message box.
+
+**It lands in the message box, unsent.** Nothing is asked and nothing happens until you read it and
+press send — add your own sentence in front of it first if you want. That is deliberate: sharing a
+page isn't asking for anything to be done with it, and the assistant can add tasks and shopping items
+without stopping to ask, so words off a web page you haven't read must never reach it on their own.
+
+Useful for: "what do I make of this", pasting in something you want turned into a task, or sending
+yourself a link with a question attached.
+
+**Photos don't work this way yet** — sharing a receipt photo into the scanner is a different and
+bigger job, and I'd rather build it properly than half-do it. Use the Receipt button on the **+**
+panel as you do now.

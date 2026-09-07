@@ -1,7 +1,29 @@
-// Bumped to v3 when launcher shortcuts were added to the manifest — the
-// activate handler below deletes any cache whose name doesn't match, so a
-// version change is what makes existing installs pick up the new shell list.
-const CACHE_NAME = "alan-os-shell-v3";
+// Bumped to v4 on 7 Sep 2026, when the manifest lost its portrait lock and
+// gained a `share_target`.
+//
+// BE HONEST ABOUT WHAT THIS BUMP DOES, because the first version of this
+// comment was not, and `unit-reviewer` caught it. It claimed the phone would
+// otherwise keep serving a stale `/manifest.json` from the cache. It would
+// not: the fetch handler below is NETWORK-FIRST — it always tries the network
+// and only falls back to the cache when that fails — so the precached manifest
+// is an offline fallback, never what an online phone is served.
+//
+// What the bump actually buys is two things, both real but both smaller:
+// changing any byte of this file is what makes the browser fetch and install a
+// new worker at all, and the activate handler below then deletes every cache
+// whose name isn't this one, so the OFFLINE copy of the manifest matches the
+// online one. Worth doing whenever `public/manifest.json` changes. Not worth
+// claiming more than that.
+//
+// AND IT IS NOT WHAT GETS A NEW MANIFEST ONTO AN INSTALLED APP. On Android,
+// `orientation`, `share_target` and `shortcuts` are baked into the installed
+// PWA when Chrome installs it, and only change when Chrome next notices the
+// manifest differs and rebuilds the app — roughly a day, plus a launch or two.
+// Reinstalling from the home screen is the only way to see them immediately.
+// MANUAL.md tells Alan this; nothing here should imply otherwise.
+//
+// (v3 was the launcher shortcuts. Same lesson about bumping, learned then.)
+const CACHE_NAME = "alan-os-shell-v4";
 const SHELL_URLS = [
   "/",
   "/manifest.json",

@@ -1148,5 +1148,56 @@ because `HANDOFF.md` now sends every cold session to this section first:
    already there. CHANGELOG 75 has the full note.
 
 Note from the Wave 2 scout: a receipt is a photo, and tools carry text only, so "here's a
-photo" stays a button rather than becoming a verb. Then **Wave 3** — Fold two-pane layouts,
-unlocked orientation, share_target.
+photo" stays a button rather than becoming a verb.
+
+---
+
+**Wave 3 is COMPLETE (7 Sep 2026).** CHANGELOG 76. The last of the three waves Alan agreed on
+5 Sep; the roadmap now moves to the new modules (plants → albums → AI reports → Gemini research).
+
+- **The assistant dock.** Asked what should fill the space when the phone unfolds, Alan chose the
+  assistant permanently docked on the right, over a list/detail split and over simply widening the
+  column. `src/lib/use-wide-screen.ts` owns **the one number** — 820px of width, tested with a media
+  query, plus a screen at least 600px tall, which stops the cover screen held sideways getting a
+  dock. The height is read from `window.screen.height` and deliberately NOT from a `min-height`
+  media clause: the Android keyboard shrinks the viewport on purpose (`interactiveWidget:
+  "resizes-content"`), so a media clause unmounted the dock mid-sentence and took the typing with it. THE ONE CHAT rule now has three candidates rather than two, kept apart by a single shared
+  `useAssistantDockLive` that both the dock and the capture sheet call, and the dock is
+  conditionally rendered rather than CSS-hidden because a hidden chat is still a live microphone.
+- **What the dock exposed was worse than the dock.** A ~330px left pane broke `StatStrip` (clipped
+  money figures on Money and Today) and Settings (81 pixels of page beside its rail), because every
+  utility in this app keys off the viewport and the viewport is now much wider than the pane. Fixed
+  with container queries — Tailwind v4 has them built in. **The general rule, worth remembering:
+  once content can be narrower than the window, every `sm:`/`md:` utility inside it is asking the
+  wrong question.**
+- **Sideways** — the manifest's portrait lock is gone, omitted rather than set to `"any"` so the
+  phone's own rotation setting still wins.
+- **Sharing into the app** — Alan OS is in Android's share sheet; a shared link, page or selection
+  opens the assistant with those words **in the box, unsent**, under a parameter of its own. The
+  first version mapped the share onto `?q=`, which `/assistant` sends on mount — so a shared web page
+  could have reached a write tool with nobody having read it. `unit-reviewer` caught that; there is
+  now a test that fails if any share field is ever pointed at `q` again.
+- **`sw.js` bumped to v4** — worth doing on any manifest change, but it is NOT what puts the new
+  manifest on the phone. Chrome bakes `orientation`/`share_target`/`shortcuts` into the installed PWA
+  and rebuilds it only when it next notices a difference (about a day, or a reinstall). The first
+  draft of this claimed the cache was the blocker; it isn't — the fetch handler is network-first.
+
+**Checks:** `npm run lint`, `npm run build` and `npm test` pass — **211 tests**, up from 198, with
+two new files (`tests/one-chat.test.mts`, `tests/share-target.test.mts`).
+
+**Nobody has seen any of this on the real device.** The 820/600 threshold, whether the + button
+clears the dock's composer, and whether the left pane reads well at ~330px are estimates — the
+Fold's actual CSS width is written down nowhere in this repo. If the dock does not appear when Alan
+unfolds, one number in `src/lib/use-wide-screen.ts` changes and nothing else does.
+
+**Deliberately left for its own pass, added to the two items above:**
+
+3. **Sharing a PHOTO into the receipt scanner.** Text and links work; files do not. A file share
+   must be `POST`, and `uploadReceipt` is a Server Action under a 1 MB body limit that the browser
+   only stays under because `lib/images.ts` shrinks the photo client-side first. The correct shape —
+   service worker intercepts the POST, stashes the file in Cache Storage, redirects to a GET page
+   that runs the existing shrink and the existing upload — is written out in CHANGELOG 76. About
+   120 lines, and untestable without a real Android share.
+4. **Two cramped-but-not-broken tile grids** at dock width: `routines/routine-section.tsx` and
+   `settings/appearance/appearance-editor.tsx`. They wrap rather than clip; container queries would
+   tidy them.

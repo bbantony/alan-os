@@ -22,12 +22,19 @@ export default async function SettingsPage() {
     <div>
       {/* The masthead is mobile-only: on desktop the settings layout already
           puts a persistent rail on the left, and a second page title above it
-          would just be the word "Settings" twice. */}
-      <div className="md:hidden">
+          would just be the word "Settings" twice.
+
+          Every `md:@lg/settings:` on this page means "the rail is showing",
+          which since the assistant dock is NOT the same as "the window is
+          wide" — see the note in settings/layout.tsx, which owns that
+          container. All four must agree with the rail exactly: on their own,
+          the plain `md:` versions left this page showing "Pick a section from
+          the left" beside no rail and with the list of sections hidden. */}
+      <div className="md:@lg/settings:hidden">
         <PageHeader eyebrow="Alan OS" title="Settings" />
       </div>
 
-      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4 md:mx-0 md:max-w-none md:px-0 md:py-0">
+      <div className="mx-auto flex max-w-2xl flex-col gap-4 px-4 py-4 md:@lg/settings:mx-0 md:@lg/settings:max-w-none md:@lg/settings:px-0 md:@lg/settings:py-0">
         {profile && (
           <Panel>
             <div className="flex items-center gap-3 p-3">
@@ -58,10 +65,10 @@ export default async function SettingsPage() {
           accountLinks={accountLinks}
           moduleLinks={moduleLinks}
           adminLink={adminLink}
-          className="md:hidden"
+          className="md:@lg/settings:hidden"
         />
 
-        <div className="hatch hidden border-2 border-rule p-8 text-center md:block">
+        <div className="hatch hidden border-2 border-rule p-8 text-center md:@lg/settings:block">
           <p className="micro text-muted-foreground">Pick a section from the left</p>
         </div>
 

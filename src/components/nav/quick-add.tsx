@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented, type SegmentedOption } from "@/components/ui/segmented";
 import { Micro } from "@/components/ui/tag";
 import { toast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 import { MECHANICAL } from "@/lib/motion";
 import type { ModuleAccess } from "@/lib/permissions";
 import type { UsageSummary } from "@/lib/ai/usage";
@@ -25,6 +26,7 @@ import {
   assistantAnswerInFlight,
   stopAssistantDictation,
 } from "@/app/(app)/assistant/assistant-chat";
+import { useAssistantDockLive } from "./assistant-dock";
 import { QuickLogForm } from "@/app/(app)/money/quick-log-form";
 import { ReceiptScanButton } from "@/app/(app)/money/receipt-scan-button";
 import { ReceiptReviewDialog } from "@/app/(app)/money/receipt-review-dialog";
@@ -73,12 +75,18 @@ import { CaptureShoppingForm } from "./capture-shopping-form";
  * session, and two of either being alive at once is how speech ends up in the
  * wrong box.
  *
- * AND IT IS LEFT OUT ON /assistant. That screen already has the chat, and
- * mounting a second one here put two composers, two microphones and two
+ * AND IT IS LEFT OUT WHENEVER THE REAL CHAT IS ALREADY ON SCREEN. That is two
+ * cases now, not one:
+ *
+ *   - /assistant, which is the chat.
+ *   - Any screen wide enough for the assistant dock (7 Sep 2026), which puts
+ *     the chat permanently down the right-hand side.
+ *
+ * Mounting a second one here put two composers, two microphones and two
  * independent copies of one conversation on the same screen — with dictation
- * started on the page still typing into the box hidden behind this sheet. On
- * /assistant this sheet is the forms and nothing else; the chat is right
- * behind it.
+ * started on the page still typing into the box hidden behind this sheet. In
+ * both cases this sheet is the forms and nothing else, and the real chat is
+ * behind it or beside it.
  *
  * Only what the account can actually use is offered, on the same ModuleAccess
  * grid the nav and route guard use. The Assistant has no module of its own but
@@ -165,13 +173,24 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
 
   const canAsk = moduleAccess.tasks;
   /**
-   * ONE chat, ever. On /assistant the page's own chat is already mounted a
-   * layer below this sheet, so this one is left out entirely — see the note at
-   * the top of this file and the header of assistant-chat.tsx. The forms still
-   * work there, which is the only reason the "+" still opens at all.
+   * ONE chat, ever. Two screens already have the real one mounted underneath
+   * this sheet, and on both of them this sheet's chat is left out entirely —
+   * see the note at the top of this file and the header of assistant-chat.tsx.
+   * The forms still work in both cases, which is the only reason the "+" still
+   * opens at all.
+   *
+   *   onAssistant   the page IS the chat.
+   *   dockLive      the screen is wide enough that the chat is docked down the
+   *                 right-hand side. That test lives in assistant-dock.tsx, in
+   *                 one function called by both files, so this sheet and the
+   *                 dock can never both decide they own the chat.
+   *
+   * A CONDITION, not a CSS class: a chat hidden with `hidden` is still mounted,
+   * still owns a textarea and still catches dictation, which is the whole bug.
    */
   const onAssistant = pathname === "/assistant" || pathname.startsWith("/assistant/");
-  const showChat = canAsk && !onAssistant;
+  const dockLive = useAssistantDockLive(moduleAccess);
+  const showChat = canAsk && !onAssistant && !dockLive;
   // Typed to allow "" so the strip can render with NOTHING chosen — the sheet
   // opens on the text box, and a form that is already open under it would be
   // making a choice on your behalf.
@@ -375,7 +394,16 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
         type="button"
         onClick={() => handleOpenChange(true)}
         aria-label="Add something"
-        className="press-hard tap-target fixed right-4 bottom-24 z-40 flex size-14 items-center justify-center border-2 border-rule bg-primary text-primary-foreground md:bottom-8"
+        className={cn(
+          "press-hard tap-target fixed bottom-24 z-40 flex size-14 items-center justify-center border-2 border-rule bg-primary text-primary-foreground md:bottom-8",
+          // Out from under the dock. This button is fixed to the bottom-right
+          // of the VIEWPORT, and the dock's composer — its send button and its
+          // microphone — is in exactly that corner, so left at `right-4` the
+          // "+" sits on top of the two controls it must never cover. It steps
+          // left by the dock's own width (--dock-w in globals.css, shared so
+          // the two cannot drift) plus the gap it already had.
+          dockLive ? "right-[calc(var(--dock-w)_+_1rem)]" : "right-4"
+        )}
         style={{ marginBottom: "env(safe-area-inset-bottom)" }}
       >
         <Plus className="size-6" strokeWidth={3} />
@@ -404,7 +432,9 @@ export function QuickAdd({ moduleAccess }: { moduleAccess: ModuleAccess }) {
                   ? "Ask it, tell it, or fill one in — without leaving this screen."
                   : onAssistant
                     ? "Fill one in — the chat is on the screen behind this."
-                    : "Fill one in below without leaving this screen."}
+                    : dockLive
+                      ? "Fill one in — the assistant is docked beside this."
+                      : "Fill one in below without leaving this screen."}
               </DialogDescription>
             </div>
             <button
