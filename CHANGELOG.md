@@ -6465,3 +6465,75 @@ cost, and that comments and tests claimed Android behaviour nobody had observed.
 removed rather than narrowed: without a real capture from the phone there was no evidence that
 shape exists, and dropping someone's words is worse than an occasional repeat. If doubling is still
 seen after this, the next step is to log the actual event list on Alan's phone.
+
+## 79. The assistant couldn't say when an account was set up, and blamed the question (15 Sep 2026)
+
+**What Alan asked for.** In the same message as the mic bug: *"look at the last chat request and see
+that it couldn't answer my question."* The fix below was put to him in
+plain English with the option to say "stop"; he had not replied either way when it was built.
+
+### What happened
+
+Read-only look at the database. At 11:55 and 11:56 (Winnipeg) Alan asked, first in his existing chat
+and then in a new one: *"When did I set up my first account in the money section"* and *"When did I
+set up my first Scotiabank account in the money section"*. (The second question and the fact that it was a new chat come from a read-only query earlier in this
+session. When the review re-checked, the database held one chat — it has the first question and its reply, but
+not the second question or its reply — chats
+can be deleted, and that one most likely was.) Both times the reply was *"That turned
+into more digging than I can do in one go. Try asking for one thing at a time."* Each question has
+exactly four `ai_usage` rows with small outputs — the model asking for tools four times, never
+answering. It was not a missing key, the budget, module access or a timeout.
+
+(Chat messages don't store tool calls, so which tools it tried is inferred from the token counts,
+not seen.)
+
+Two causes:
+
+1. **No tool could see the answer.** `get_money_overview` selected `id, name, type, currency,
+   current_balance_cents, is_debt, credit_limit_cents` from `accounts` — no `created_at`, and no
+   `institution`, so the model couldn't even tell which account was the Scotiabank one. No other tool
+   returns an account's bank or set-up date: `log_expense` and `update_transaction` do read
+   `accounts`, but only to find the one the person named, not to report on it. The system prompt tells it "if no tool can, say so plainly", but it kept looking.
+2. **The step limit hid that.** `askAssistant` offered the tools on every one of its `MAX_STEPS` (4)
+   calls. When all four were spent on lookups, it returned a canned line telling Alan his question
+   was too big — when the real problem was something the app couldn't see.
+
+A side finding, for the record: when I first looked at his accounts earlier in this session they
+were "Scotia Chequing" and "Scene+ Visa", created Sun 13 Sep ~4:03/4:04 PM. By the time the chat was
+investigated those rows were gone and "Main Chequing" (12:01 PM) and "Scene+ VISA" (12:02 PM) had
+been created today — both times with zero transactions. So when he asked at 11:55 the Sunday
+accounts still existed and a date *was* there to find; the tool just couldn't see it. Alan has been
+asked whether he deleted and re-added them.
+
+### What changed
+
+- `src/lib/ai/tools.ts`, `get_money_overview`:
+  - now selects `institution` and `created_at` as well, ordered oldest account first;
+  - returns each account's set-up moment as `added_to_app`, formatted with `formatInAppTimezone`
+    (date and time) in the profile's timezone — raw UTC `created_at` is not passed to the model;
+  - uses `toolPeriodContext` instead of `toolToday` so the timezone is in hand (still one profile
+    read);
+  - description now says accounts come with their bank and the date each was added.
+  - `formatInAppTimezone` added to the `@/lib/time` import.
+- `src/lib/ai/gemini.ts`: `RawCallParams` and `ToolCallParams` gain an optional
+  `toolMode: "AUTO" | "NONE"` (default `"AUTO"`, so every other caller is unchanged), passed through
+  to `functionCallingConfig.mode`. With `"NONE"` the tools stay declared — the conversation already
+  contains calls to them — but the model can't call one.
+- `src/lib/ai/assistant.ts`:
+  - the last of the `MAX_STEPS` calls now uses `toolMode: "NONE"`, and before it a short instruction
+    is added to the latest turn: answer from what has been found, or say plainly what couldn't be
+    found, and don't tell the person to ask in smaller pieces. Still at most four calls per question,
+    so the cost reasoning in `usage.ts` is untouched.
+  - the fallback after the loop (now only reachable if the model asks for a tool anyway) says *"I
+    couldn't find the answer to that. It may be something I can't see yet."* instead of the "more
+    digging" line.
+
+Not unit-tested: both changes are a database query and a live model call, which `npm test`
+deliberately doesn't stand up. Tried once against the real model (`gemini-3.6-flash`, from a scratch script
+using the local key, outside the app and so not metered in `ai_usage`): a first call with tools on
+asked for `get_money_overview`; the model's parts were echoed back with a sample result plus the
+"no more lookups" text in the same user turn, and a second call with mode `NONE` returned 200, made
+no tool call, and answered "your Scotiabank account (Scotia Chequing) was added to the app on
+September 13, 2026, at 4:03 p.m." That proves the request shape is accepted; it is not a test of the
+full app path, which is for Alan to see. Remember the Gemini key is still not in Vercel, so on the
+live site the assistant can't answer anything until it is.

@@ -84,6 +84,8 @@ interface RawCallParams {
   systemPrompt: string;
   contents: GeminiContent[];
   tools?: FunctionDeclaration[];
+  /** "NONE" keeps the tools declared but forbids calling them. Defaults to "AUTO". */
+  toolMode?: "AUTO" | "NONE";
   jsonOnly?: boolean;
   maxOutputTokens?: number;
   /** Overrides the tier's default thinking level. */
@@ -118,7 +120,7 @@ async function rawCall(params: RawCallParams, apiKey: string): Promise<RawCallRe
   };
   if (params.tools?.length) {
     body.tools = [{ function_declarations: params.tools }];
-    body.toolConfig = { functionCallingConfig: { mode: "AUTO" } };
+    body.toolConfig = { functionCallingConfig: { mode: params.toolMode ?? "AUTO" } };
   }
 
   try {
@@ -296,6 +298,12 @@ export interface ToolCallParams {
   systemPrompt: string;
   contents: GeminiContent[];
   tools: FunctionDeclaration[];
+  /**
+   * "NONE" makes the model answer in words from what it already has. The tools
+   * stay declared rather than being dropped, because the conversation already
+   * contains calls to them and the API expects those to match a declaration.
+   */
+  toolMode?: "AUTO" | "NONE";
   maxOutputTokens?: number;
   /** Overrides the tier's default thinking level (see models.ts). */
   thinking?: ThinkingLevel;
@@ -323,6 +331,7 @@ export async function callGeminiWithTools(params: ToolCallParams): Promise<ToolC
       systemPrompt: params.systemPrompt,
       contents: params.contents,
       tools: params.tools,
+      toolMode: params.toolMode,
       maxOutputTokens: params.maxOutputTokens ?? 2048,
       thinking: params.thinking,
     },

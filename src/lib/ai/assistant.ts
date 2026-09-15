@@ -210,7 +210,23 @@ export async function askAssistant(input: {
   const proposals: AssistantProposal[] = [];
 
   for (let step = 0; step < MAX_STEPS; step++) {
+    // THE LAST STEP MUST ANSWER. It used to be offered the tools like any
+    // other, so a question no tool could answer ("when did I set up my
+    // account?", before accounts exposed a date) spent all four calls looking
+    // and came back as "more digging than I can do in one go" — which told
+    // Alan his question was too big when the truth was the app couldn't see
+    // it. Now the final call can't reach for another tool: it has to answer
+    // from what it found, or say plainly what it couldn't find. Still at most
+    // MAX_STEPS calls, so the cost ceiling in usage.ts is unchanged.
+    const lastStep = step === MAX_STEPS - 1;
+    if (lastStep && step > 0) {
+      contents[contents.length - 1].parts.push({
+        text: "No more lookups are available for this question. Answer now using only what you have found. If it isn't enough to answer, say plainly what you couldn't find — don't tell them to ask in smaller pieces.",
+      });
+    }
+
     const reply = await callGeminiWithTools({
+      toolMode: lastStep ? "NONE" : "AUTO",
       // Choosing between tools and reading back their results is reasoning, not
       // transcription — worth the ~256 thinking tokens "low" costs per turn.
       thinking: "low",
@@ -306,9 +322,10 @@ export async function askAssistant(input: {
     contents.push({ role: "user", parts: responseParts });
   }
 
-  // Ran out of steps. Better to say so than to keep spending.
+  // Only reachable if the last step still asked for a tool despite being told
+  // it can't. Better to say so than to keep spending — but say it honestly.
   return {
-    text: "That turned into more digging than I can do in one go. Try asking for one thing at a time.",
+    text: "I couldn't find the answer to that. It may be something I can't see yet.",
     actions,
     proposals,
   };

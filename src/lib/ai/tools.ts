@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  formatInAppTimezone,
   todayInAppTimezone,
   addDaysToDateString,
   daysBetweenDateStrings,
@@ -384,17 +385,24 @@ const listRoutines: AiTool = {
 const moneyOverview: AiTool = {
   name: "get_money_overview",
   description:
-    "Accounts and balances, every budget with what's been spent against it, and the safe-to-spend total. Start here for any money question.",
+    "Accounts (with their bank, balance and the date each was added to the app), every budget with what's been spent against it, and the safe-to-spend total. Start here for any money question.",
   module: "money",
   writes: false,
   parameters: NO_ARGS,
   async run(ctx) {
-    const today = await toolToday(ctx);
+    const { today, timezone } = await toolPeriodContext(ctx);
     const [{ data: accounts }, { data: budgets }, { data: categories }] = await Promise.all([
       ctx.supabase
         .from("accounts")
-        .select("id, name, type, currency, current_balance_cents, is_debt, credit_limit_cents")
-        .eq("user_id", ctx.userId),
+        // `institution` and `created_at` were left out, so "when did I set up
+        // my Scotiabank account?" had no tool that could answer it — the model
+        // couldn't tell which account was Scotiabank, let alone when it was
+        // added, and spent every step looking (15 Sep 2026).
+        .select(
+          "id, name, institution, type, currency, current_balance_cents, is_debt, credit_limit_cents, created_at"
+        )
+        .eq("user_id", ctx.userId)
+        .order("created_at"),
       ctx.supabase.from("budgets").select("*").eq("user_id", ctx.userId).eq("is_active", true),
       ctx.supabase.from("categories").select("id, name, kind").eq("user_id", ctx.userId),
     ]);
@@ -448,9 +456,25 @@ const moneyOverview: AiTool = {
     return {
       today,
       note: "All amounts are Canadian dollars unless the account says otherwise.",
-      accounts: ((accounts as { name: string; currency: string; current_balance_cents: number }[]) ?? []).map(
-        (a) => ({ ...a, balance: formatCents(a.current_balance_cents, a.currency as "CAD" | "INR") })
-      ),
+      accounts: (
+        (accounts as {
+          name: string;
+          currency: string;
+          current_balance_cents: number;
+          created_at: string;
+        }[]) ?? []
+      ).map(({ created_at, ...a }) => ({
+        ...a,
+        balance: formatCents(a.current_balance_cents, a.currency as "CAD" | "INR"),
+        // Converted to the account's own timezone here, never shown raw: the
+        // stored value is UTC, and an evening set-up in Winnipeg is already
+        // tomorrow in UTC.
+        added_to_app: formatInAppTimezone(
+          created_at,
+          { dateStyle: "medium", timeStyle: "short" },
+          timezone
+        ),
+      })),
       budgets: budgetRows,
       safe_to_spend: formatCents(safeToSpendCents),
     };
