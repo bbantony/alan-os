@@ -28,8 +28,7 @@ export function ReceiptScanButton({ onUploaded }: { onUploaded: (receipt: Receip
 
   const uploading = progress !== null;
 
-  async function handleFiles(fileList: FileList | null) {
-    const files = Array.from(fileList ?? []);
+  async function handleFiles(files: File[]) {
     if (files.length === 0) return;
 
     setProgress({ done: 0, total: files.length });
@@ -70,7 +69,13 @@ export function ReceiptScanButton({ onUploaded }: { onUploaded: (receipt: Receip
   }
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
+    // Copy the files out BEFORE clearing the input. `e.target.files` is a live
+    // FileList, and Chromium (Android Chrome included) empties that same object
+    // in place when the value is reset — so holding the reference and clearing
+    // first handed handleFiles an empty list, and picking a receipt from the
+    // gallery and tapping Done did nothing at all, with no spinner or error.
+    // The single-file inputs elsewhere dodge this by taking `files[0]` first.
+    const files = Array.from(e.target.files ?? []);
     e.target.value = "";
     await handleFiles(files);
   }

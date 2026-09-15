@@ -6360,3 +6360,52 @@ the dock's composer, and whether the left pane reads well at ~330px are all esti
 device's actual CSS width is not written down anywhere in this repo, which was true before this wave
 and is still true. Alan is the test. If the dock does not appear when he unfolds, one number in
 `src/lib/use-wide-screen.ts` changes and nothing else does.
+
+## 77. Receipt scanner: picking a photo from the gallery did nothing (15 Sep 2026)
+
+**What Alan asked for.** He asked for a read-in on where the project stands, then a look at the
+receipt scanner. The symptom, in his words: *"I select a receipt from my gallery and hit done and
+nothing happens."* No spinner, no error, no review screen.
+
+### The cause
+
+`receipt-scan-button.tsx`'s `handleChange` did this, in this order:
+
+1. kept a reference to `e.target.files`,
+2. set `e.target.value = ""` (so the same photo can be picked again later),
+3. handed the reference on to `handleFiles`.
+
+`e.target.files` is a *live* `FileList`. Chromium — which is what Android Chrome and an installed
+PWA on Android run — empties that same object in place when the input's value is cleared. So by
+step 3 the list was empty, `handleFiles` hit its `files.length === 0` early return, and the button
+silently did nothing. That early return sits before the spinner is set and before any error text,
+which is why there was no feedback of any kind.
+
+The camera input shares `handleChange`, so it was exposed to the same bug. The other file inputs
+in the app (`reconcile-flow.tsx`, `account-settings.tsx`, `csv-import.tsx`) are fine: they read
+`files?.[0]` into a variable *before* clearing, and a `File` survives the reset.
+
+The bug arrived in 9b08ce8 (19 Aug), the same commit that added the "From gallery" button and
+multi-photo support: the `Array.from` copy was put inside `handleFiles`, one step too late to help.
+The original version in 89fc7f0 read `files?.[0]` before clearing and was safe. (The later audit
+commit bd4aa93 only added a `tap-target` class to both buttons here.)
+
+### What changed
+
+- `src/app/(app)/money/receipt-scan-button.tsx`: `handleChange` now copies the files with
+  `Array.from(e.target.files ?? [])` *before* clearing the input, with a comment saying why the
+  order matters.
+- Same file: `handleFiles` now takes a plain `File[]` instead of `FileList | null`, since it is
+  always given the copy.
+
+No database, server action or AI change. Nothing was added to `npm test`: the bug lives in browser
+event handling, not in a pure helper, and that suite is deliberately scoped to pure helpers.
+
+### Still true, and not touched in this request
+
+The "weak spots" found while mapping the scanner are unchanged. Every failed upload shows the same
+"didn't go through, check your signal" message and the real reason is thrown away. An AI failure
+(no key, timeout, cut-off reply) shows up as a blank review form. A HEIC photo the browser can't
+decode is sent at full size and hits the 1 MB server-action limit. Photo shrinking has still never
+been tested with a real phone photo. And the Gemini key is still not in Vercel, so on the live site
+the scanner will upload the photo but the AI can't read it until that key is added.
