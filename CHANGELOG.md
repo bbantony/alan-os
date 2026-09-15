@@ -6409,3 +6409,12 @@ The "weak spots" found while mapping the scanner are unchanged. Every failed upl
 decode is sent at full size and hits the 1 MB server-action limit. Photo shrinking has still never
 been tested with a real phone photo. And the Gemini key is still not in Vercel, so on the live site
 the scanner will upload the photo but the AI can't read it until that key is added.
+
+### Put live (15 Sep 2026)
+
+Alan tried the scanner again before the fix had been deployed and it still did nothing, because the
+fix was only on the laptop. He asked whether it had been pushed; that was taken as the go-ahead.
+Committed as 36abff0 and pushed to `master`; Vercel's production deploy reported success. The
+service worker is network-first, so a fresh launch of the app loads the new code — but a copy
+already open on the phone keeps the old page until the app is fully closed and reopened, which is
+what Alan was told to do.
