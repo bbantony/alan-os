@@ -6418,3 +6418,50 @@ Committed as 36abff0 and pushed to `master`; Vercel's production deploy reported
 service worker is network-first, so a fresh launch of the app loads the new code — but a copy
 already open on the phone keeps the old page until the app is fully closed and reopened, which is
 what Alan was told to do.
+
+## 78. The mic repeated every word twice (15 Sep 2026)
+
+**What Alan asked for.** *"When I hit the mic button, it repeats each word twice. Fix that."* In the
+same message he asked why the assistant couldn't answer his last question; that has its own entry
+(79), written when that work is done.
+
+### The cause
+
+There is one dictation helper, `src/lib/speech.ts`, and one caller, `assistant-chat.tsx`, which is
+placed on the assistant page, in the capture sheet and in the Fold dock. All three had the bug.
+
+`startDictation`'s `onresult` kept a running `finalText` across events and, on every event, appended
+each final result from `event.resultIndex` onwards. That only works if `resultIndex` points at the
+first result not yet seen. Android Chrome with `continuous = true` is reported to leave it at 0, in
+which case every earlier result is appended again on each event — which matches what Alan heard.
+This is the explanation that fits the code and the symptom; nobody has captured the raw events from
+his phone.
+
+The text box itself was never the problem: `assistant-chat.tsx` replaces the box contents with the
+whole transcript on each event rather than adding to it.
+
+### What changed
+
+- `src/lib/speech.ts`: new exported pure function `buildTranscript(results)`. It reads the result
+  list from index 0 on every event and keeps nothing between events, so a result delivered again is
+  counted once. Each piece is trimmed, runs of spaces inside it are collapsed, and pieces are
+  joined with one space. `isFinal` is true when
+  every result in the list is final. (Slight difference from before: the old flag only looked at
+  results from `resultIndex` on, and treated a blank interim result as final. Nothing reads the
+  flag — `assistant-chat.tsx` ignores it — so this changes nothing visible.)
+- Same file: `onresult` now just calls `buildTranscript`. The `finalText` running string is gone.
+- `tests/speech.test.mts` (new): five cases — the re-delivered result that caused the bug, the same
+  list read twice, words genuinely said twice being kept, interim text and `isFinal`, and stray
+  whitespace. The test lists are the documented API shape, not captures from a device.
+
+### The review round this took
+
+`test-runner` passed the first draft, and `unit-reviewer` failed it. The draft also *merged*
+look-alike results (a result starting with the previous one's words replaced it; an exact or
+shorter copy was dropped), meant to handle Android possibly sending a phrase as several growing
+results. The reviewer showed that silently threw away words said twice after a pause ("buy milk",
+then "buy milk and eggs" came out as just "buy milk and eggs"), that this entry had understated that
+cost, and that comments and tests claimed Android behaviour nobody had observed. The merging was
+removed rather than narrowed: without a real capture from the phone there was no evidence that
+shape exists, and dropping someone's words is worse than an occasional repeat. If doubling is still
+seen after this, the next step is to log the actual event list on Alan's phone.

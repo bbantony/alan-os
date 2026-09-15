@@ -63,6 +63,44 @@ export interface Dictation {
 }
 
 /**
+ * Turns the browser's result list into one transcript, rebuilt from scratch
+ * on every event. Pure, so it can be tested without a microphone.
+ *
+ * WHY IT REBUILDS INSTEAD OF APPENDING. The first version kept a running
+ * `finalText` across events and, on each event, appended every final result
+ * from `event.resultIndex` onwards. That relies on `resultIndex` pointing at
+ * the first result not seen before. When it doesn't — reported for Android
+ * Chrome with `continuous` on, where it can stay at 0 — results already added
+ * are added again, which fits what Alan reported: "it repeats each word twice."
+ * Every event carries the whole list, so reading it from index 0 each time and
+ * keeping nothing between events means a re-delivered result is only ever
+ * counted once.
+ *
+ * It deliberately does NOT try to merge results that look alike. A draft of
+ * this fix did ("buy milk" followed by "buy milk and eggs" became one phrase),
+ * and that silently threw away words someone had really said twice. If Android
+ * turns out to send some other duplicated shape, capture a real event list from
+ * the phone before adding a rule for it.
+ *
+ * Pieces are trimmed and joined with one space, so a result that arrives with
+ * or without a leading space reads the same.
+ */
+export function buildTranscript(results: SpeechRecognitionEventLike["results"]): {
+  text: string;
+  isFinal: boolean;
+} {
+  const parts: string[] = [];
+  let isFinal = true;
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (!result.isFinal) isFinal = false;
+    const chunk = (result[0]?.transcript ?? "").replace(/\s+/g, " ").trim();
+    if (chunk) parts.push(chunk);
+  }
+  return { text: parts.join(" "), isFinal };
+}
+
+/**
  * Starts listening. `onText` receives the transcript so far — interim results
  * included, so the words appear as they are said rather than in one lump at
  * the end, which is the difference between feeling responsive and feeling
@@ -83,18 +121,9 @@ export function startDictation(opts: {
   recognition.continuous = true;
   recognition.interimResults = true;
 
-  let finalText = "";
-
   recognition.onresult = (event) => {
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      const chunk = result[0]?.transcript ?? "";
-      if (result.isFinal) finalText += chunk;
-      else interim += chunk;
-    }
-    const combined = (finalText + interim).trim();
-    opts.onText(combined, interim === "");
+    const { text, isFinal } = buildTranscript(event.results);
+    opts.onText(text, isFinal);
   };
 
   recognition.onerror = (event) => {
